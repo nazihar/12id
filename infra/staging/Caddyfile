@@ -95,6 +95,32 @@ smoke-issuer.12id.naziharitsolution.com {
 	reverse_proxy 127.0.0.1:3200
 }
 
+# Phase 2 agent-service: the tenants' public DIDComm endpoint. Only what phones and the
+# mediator need: POST / (DIDComm envelopes) and GET /readyz (health). The internal API is
+# on another port and never proxied.
+agent.12id.naziharitsolution.com {
+	import hardening
+
+	@didcomm {
+		method POST
+		path /
+	}
+	@ready {
+		method GET
+		path /readyz
+	}
+	handle @didcomm {
+		import per_ip_limit agent_per_ip 300
+		reverse_proxy 127.0.0.1:3400
+	}
+	handle @ready {
+		reverse_proxy 127.0.0.1:3400
+	}
+	handle {
+		respond "Not Found" 404
+	}
+}
+
 # DIDComm mediator (W4). Two replicas; WebSocket upgrades are proxied automatically.
 mediator.12id.naziharitsolution.com {
 	import hardening

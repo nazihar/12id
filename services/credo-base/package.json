@@ -1,0 +1,32 @@
+{
+  "name": "@12id/credo-base",
+  "private": true,
+  "type": "module",
+  "description": "Shared Credo 0.7 plumbing for agent-service and endorser-service (7-phase-2.md A0). Import ./bindings.ts before any @credo-ts package.",
+  "exports": {
+    "./*": "./src/*"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --test \"test/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@credo-ts/anoncreds": "0.7.0",
+    "@credo-ts/askar": "0.7.0",
+    "@credo-ts/core": "0.7.0",
+    "@hyperledger/anoncreds-nodejs": "0.4.0",
+    "@hyperledger/indy-vdr-nodejs": "0.3.0",
+    "@openwallet-foundation/askar-nodejs": "0.6.0",
+    "drizzle-orm": "0.45.2",
+    "fastify": "5.12.4",
+    "pg": "8.23.0",
+    "pino": "10.3.1",
+    "reflect-metadata": "0.2.2",
+    "zod": "4.6.4"
+  },
+  "devDependencies": {
+    "@types/node": "22.18.1",
+    "@types/pg": "8.23.1",
+    "typescript": "5.9.2"
+  }
+}

@@ -11,6 +11,16 @@
 | `endorser` | Platform endorser Askar store | The endorser DID becomes unusable; a new endorser NYM is needed |
 | globals | Postgres roles | Recreated by the image; kept for completeness |
 
+Phase 2 adds the agent stack's own Postgres (`agent-postgres`), dumped to `agent-<db>.dump.age` when that stack is running:
+
+| Database | Contents | Loss means |
+|---|---|---|
+| `agent_root` | agent-service root Askar store: every tenant's keys, DIDs, connections, cred def private keys, exchange records | Tenants cannot issue against their published cred defs (private keys gone); all holder connections dead |
+| `agent_service` | tenants, catalogue (both id forms), outbox | Platform loses the mapping from catalogue ids to ledger objects |
+| `endorser_service` | tenant→DID bindings, endorsement audit | The endorser refuses every tenant until bindings are restored; audit trail lost |
+
+Restore of `agent_root` needs `AGENT_ASKAR_STORE_KEY` from `secrets/agent.sops.env`.
+
 Each dump is `pg_dump --format=custom`, piped straight into `age` with the VM's age recipient, so no plaintext dump touches disk. Output goes to `/opt/12id/backups/<UTC timestamp>/` with a `SHA256SUMS` file. Directories older than 7 days are deleted.
 
 **The Askar stores are encrypted twice:** by Askar with their store keys (in `infra/staging/secrets/*.sops.env`), and by age. A restore needs the age key and the matching sops secrets.

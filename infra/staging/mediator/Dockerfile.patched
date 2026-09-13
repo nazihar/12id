@@ -1,0 +1,9 @@
+# Pinned mediator image plus one patched file (Phase 2 findings, A11).
+#
+# packages/transport-queue-postgres: `takeFromQueue({ deleteMessages: true })`, which Credo's
+# pickup-v1 batch handler uses, only SELECTed in the upstream image, so PickUpV1 holders (our
+# native SDK) were re-sent every message on every poll and the queue never drained.
+# patch/TransportQueuePostgres.js is the built file from mediator:375518d with that branch
+# replaced by an atomic DELETE ... RETURNING. Everything else is the pinned image (4-init §12.8).
+FROM ghcr.io/openwallet-foundation/didcomm-mediator-credo/mediator:375518d
+COPY --chown=agent:agent patch/TransportQueuePostgres.js /app/packages/transport-queue-postgres/build/TransportQueuePostgres.js

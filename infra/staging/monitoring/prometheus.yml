@@ -49,6 +49,8 @@ scrape_configs:
           # Answers 202, which http_2xx accepts.
           - https://mediator.12id.naziharitsolution.com/health
           - https://vdr.12id.naziharitsolution.com/genesis
+          # Phase 2 agent-service readiness (503 while draining or when its database is down).
+          - https://agent.12id.naziharitsolution.com/readyz
     relabel_configs: &blackbox-relabel
       - source_labels: [__address__]
         target_label: __param_target

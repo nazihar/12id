@@ -40,6 +40,22 @@ done
 "$DEPLOY" mediator exec -T postgres pg_dumpall -U postgres --globals-only \
   | age -r "$recipient" > "$dest/globals.sql.age"
 
+# Phase 2 agent stack: its own Postgres instance.
+#   agent_root        agent-service root Askar store (tenant wallets: keys, connections, credentials)
+#   agent_service     tenants, catalogue, outbox
+#   endorser_service  tenant bindings, endorsement audit
+# compose.agent.yml interpolates secrets from three files, so deploy.sh needs EXTRA_SECRETS here.
+if [ -f "$ROOT/infra/staging/compose.agent.yml" ] && EXTRA_SECRETS="ledger mediator" "$DEPLOY" agent ps --status running agent-postgres | grep -q agent-postgres; then
+  for db in agent_root agent_service endorser_service; do
+    EXTRA_SECRETS="ledger mediator" "$DEPLOY" agent exec -T agent-postgres pg_dump -U postgres --format=custom "$db" \
+      | age -r "$recipient" > "$dest/agent-$db.dump.age"
+    if [ "$(stat -c %s "$dest/agent-$db.dump.age")" -lt 1024 ]; then
+      echo "backup of agent $db looks empty" >&2
+      exit 1
+    fi
+  done
+fi
+
 (cd "$dest" && sha256sum -- *.age > SHA256SUMS)
 
 find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d -mtime +"$KEEP_DAYS" -exec rm -rf -- {} +

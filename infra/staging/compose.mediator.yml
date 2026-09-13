@@ -9,7 +9,9 @@
 # 127.0.0.1 for Caddy; postgres and valkey are not published at all.
 name: mediator
 
-x-mediator-image: &mediator-image ghcr.io/openwallet-foundation/didcomm-mediator-credo/mediator:375518d
+# Pinned upstream image plus one patched file (mediator/Dockerfile.patched): the Postgres pickup
+# queue never deleted messages handed to pickup-v1 holders (Phase 2 findings, A11).
+x-mediator-image: &mediator-image 12id/mediator:375518d-p1
 
 x-mediator-env: &mediator-env
   LOG_LEVEL: ${MEDIATOR_LOG_LEVEL:-info}
@@ -115,6 +117,9 @@ services:
         condition: service_healthy
 
   mediator-1:
+    build:
+      context: ./mediator
+      dockerfile: Dockerfile.patched
     image: *mediator-image
     restart: unless-stopped
     mem_limit: 512m

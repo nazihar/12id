@@ -1,0 +1,27 @@
+{
+  "name": "@12id/spikes",
+  "private": true,
+  "type": "module",
+  "description": "Phase 2 spikes T1-T3 (12id/7-phase-2.md). Throwaway; results go to 12id/8-phase-2-findings.md.",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@credo-ts/anoncreds": "0.7.0",
+    "@credo-ts/askar": "0.7.0",
+    "@credo-ts/core": "0.7.0",
+    "@credo-ts/didcomm": "0.7.0",
+    "@credo-ts/indy-vdr": "0.7.0",
+    "@credo-ts/node": "0.7.0",
+    "@credo-ts/tenants": "0.7.0",
+    "@hyperledger/anoncreds-nodejs": "0.4.0",
+    "@hyperledger/indy-vdr-nodejs": "0.3.0",
+    "@openwallet-foundation/askar-nodejs": "0.6.0",
+    "express": "5.1.0",
+    "reflect-metadata": "0.2.2"
+  },
+  "devDependencies": {
+    "@types/node": "22.18.1",
+    "typescript": "5.9.2"
+  }
+}

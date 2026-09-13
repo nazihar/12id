@@ -1,0 +1,142 @@
+# Agent stack (Phase 2 A10): agent-postgres, provision jobs, endorser-service, agent-service.
+#
+#   EXTRA_SECRETS="ledger mediator" infra/scripts/deploy.sh agent
+#
+# secrets/agent.sops.env: AGENT_POSTGRES_PASSWORD, AGENT_ASKAR_STORE_KEY, AGENT_INTERNAL_TOKEN.
+# EXTRA_SECRETS adds ENDORSER_ASKAR_STORE_KEY (ledger) and POSTGRES_PASSWORD (mediator stack's
+# Postgres, which holds the endorser store created in Phase 1 W3).
+#
+# Publishing: only 127.0.0.1 (Docker-published ports bypass ufw). Caddy proxies 3400 as
+# agent.<domain>; 3410 (agent internal API) is for operator tooling over SSH only.
+name: agent
+
+x-image: &image 12id/services:phase2
+
+x-ledger-env: &ledger-env
+  INDY_NAMESPACE: twelveid:staging
+  GENESIS_URL: https://genesis.12id.naziharitsolution.com/v1/pool_transactions_genesis
+  GENESIS_SHA256: 6ab9bc1a3ba5ff257454ca8500a41d45756cd02c3db6c280bde51c7b363a835a
+  # Staging platform endorser (6-phase-1-findings W3).
+  ENDORSER_DID: did:indy:twelveid:staging:9WnSruRkr6b3V7XX9zPjka
+  LOG_LEVEL: ${AGENT_LOG_LEVEL:-info}
+
+x-agent-env: &agent-env
+  <<: *ledger-env
+  DIDCOMM_ENDPOINT: https://agent.12id.naziharitsolution.com
+  DIDCOMM_PORT: "3400"
+  INTERNAL_API_HOST: 0.0.0.0
+  INTERNAL_API_PORT: "3410"
+  ASKAR_STORE_ID: agent_root
+  ASKAR_STORE_KEY: ${AGENT_ASKAR_STORE_KEY:?decrypt secrets via deploy.sh}
+  POSTGRES_HOST: agent-postgres:5432
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: ${AGENT_POSTGRES_PASSWORD:?decrypt secrets via deploy.sh}
+  DATABASE_URL: postgresql://postgres:${AGENT_POSTGRES_PASSWORD}@agent-postgres:5432/agent_service
+  ENDORSER_SERVICE_URL: http://endorser-service:3420
+  ENDORSER_SERVICE_TOKEN: ${AGENT_INTERNAL_TOKEN:?decrypt secrets via deploy.sh}
+  DRAIN_DEADLINE_MS: "15000"
+
+x-endorser-env: &endorser-env
+  <<: *ledger-env
+  # The existing endorser store lives in the mediator stack's Postgres (init.sql created it).
+  ASKAR_STORE_ID: endorser
+  ASKAR_STORE_KEY: ${ENDORSER_ASKAR_STORE_KEY:?run with EXTRA_SECRETS="ledger mediator"}
+  POSTGRES_HOST: postgres:5432
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run with EXTRA_SECRETS="ledger mediator"}
+  # Its own tables go to the agent stack's Postgres, under a separate database.
+  DATABASE_URL: postgresql://postgres:${AGENT_POSTGRES_PASSWORD}@agent-postgres:5432/endorser_service
+  INTERNAL_TOKEN: ${AGENT_INTERNAL_TOKEN}
+  HOST: 0.0.0.0
+  PORT: "3420"
+
+services:
+  agent-postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    mem_limit: 1g
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${AGENT_POSTGRES_PASSWORD:?decrypt secrets via deploy.sh}
+    volumes:
+      - agent-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # One-shot: creates the root Askar store (exactly one process may provision, findings W4)
+  # and the agent_service database + migrations.
+  agent-provision:
+    build: ../../services
+    image: *image
+    command: ['agent-service/src/provision.ts']
+    environment: *agent-env
+    mem_limit: 512m
+    depends_on:
+      agent-postgres:
+        condition: service_healthy
+
+  # One-shot: endorser_service database + migrations. Never provisions the endorser store.
+  endorser-provision:
+    image: *image
+    command: ['endorser-service/src/provision.ts']
+    environment: *endorser-env
+    mem_limit: 256m
+    networks: [default, mediator]
+    depends_on:
+      agent-postgres:
+        condition: service_healthy
+
+  endorser-service:
+    image: *image
+    command: ['endorser-service/src/main.ts']
+    restart: unless-stopped
+    mem_limit: 384m
+    environment: *endorser-env
+    # Not published anywhere: reachable only on the agent network (and it also joins the
+    # mediator network to reach the endorser store's Postgres).
+    networks: [default, mediator]
+    healthcheck:
+      test: ['CMD-SHELL', 'node -e "fetch(\"http://127.0.0.1:3420/healthz\").then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    depends_on:
+      endorser-provision:
+        condition: service_completed_successfully
+
+  agent-service:
+    image: *image
+    command: ['agent-service/src/main.ts']
+    restart: unless-stopped
+    mem_limit: 1g
+    # Must exceed DRAIN_DEADLINE_MS plus shutdown time (T3b).
+    stop_grace_period: 30s
+    environment: *agent-env
+    ports:
+      - '127.0.0.1:3400:3400'
+      - '127.0.0.1:3410:3410'
+    healthcheck:
+      test: ['CMD-SHELL', 'node -e "fetch(\"http://127.0.0.1:3410/readyz\").then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    depends_on:
+      agent-provision:
+        condition: service_completed_successfully
+      endorser-service:
+        condition: service_healthy
+
+networks:
+  default:
+    name: 12id-agent
+  mediator:
+    external: true
+    name: 12id-mediator
+
+volumes:
+  agent-pgdata:

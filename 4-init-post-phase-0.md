@@ -1,6 +1,6 @@
 # SSI Platform — System Architecture and Implementation Plan
 
-**Status:** Design handover document — **revised after Phase 0 (Android pass)**
+**Status:** Design handover document — **revised after Phase 0 (Android pass), Phase 1 (staging infrastructure) and Phase 2 (agent services on staging)**
 **Audience:** Implementation engineer / coding agent
 **Stack decision:** Credo-TS 0.7 + DIDComm v1 + AnonCreds + Hyperledger Indy
 **Evidence:** every Phase 0 claim below is backed by a run or a source read recorded in [`../phase0/findings.md`](../phase0/findings.md). The pre-Phase-0 version of this document is kept at [`init.pre-phase0.md`](init.pre-phase0.md).
@@ -28,10 +28,16 @@ Phase 0 ran the stack end to end on Android. Content now falls into these tiers,
 - **End to end over the internet:** a Credo issuer and a Credo holder, and a Credo issuer and **the native Kotlin holder on a phone**. Live, offline and proof, all v1.
 - **Ledger proxy:** `indy-vdr-proxy` read replies that match the pool's reply format.
 
+**Confirmed (Phase 2, staging, run).** Observed with the deployed agent-service and endorser-service (`8-phase-2-findings.md`). Includes:
+- **Multi-tenancy:** two tenants in one Credo 0.7 agent on one Postgres store (profile per tenant), one inbound endpoint routing to the right tenant, events tagged per tenant on the root emitter.
+- **The author/endorser flow** for tenant DIDs, schemas and credential definitions, with a role-less tenant DID and a signing-only endorser.
+- **Tenant issuance and verification over the internet:** a Credo holder behind the staging mediator against `https://agent.<domain>`, v1 only, correlation ids on every state transition.
+- **Crash and shutdown behaviour:** a hard kill leaves both sides permanently desynchronised (nothing retries); a drained shutdown loses nothing; a naive `agent.shutdown()` loses the message being processed.
+
 **Not yet tested.** Stated from documentation or reasoning only. Includes:
 - **everything about the Swift/iOS holder**;
-- multi-tenancy (`@credo-ts/tenants`);
-- issuer/verifier agent wallets on Postgres (only the endorser store is tested);
+- the native Kotlin holder against a **tenant** issuer (it was tested against a single-tenant smoke issuer);
+- multi-tenant throughput: inbound messages are processed one at a time across all tenants by default;
 - mediator replica failover under load, and duplicate webhooks across replicas;
 - restrictive corporate Wi-Fi;
 - production (non-von-network) ledgers and the TAA;
@@ -134,7 +140,7 @@ The tested image is built on **Credo 0.6.0** (`@credo-ts/didcomm@0.6.0`, `@openw
 | `AGENT_PORT` | `3000` (whatever the ingress targets) | **Defaults to `3110`.** `AGENT_ENDPOINTS` only sets what is *advertised*; if the two disagree every inbound connection gets an empty reply while the container looks healthy |
 | `AGENT_ENDPOINTS` | `wss://…,https://…` — **WebSocket first** | Order is load-bearing: the holder does its mediator handshake over the first advertised service. With http first, the mediation grant is sent to a closed session and the holder times out. Must contain at least one `http(s)` URL or the mediator refuses to start. (Tested with `ws`/`http`; TLS variants not yet tested) |
 | `MESSAGE_PICKUP__FORWARDING_STRATEGY` | `QueueAndLiveModeDelivery` | **Default is `DirectDelivery`, which loses every message sent while the wallet is closed** (§2.7.3). Must be set explicitly |
-| `MESSAGE_PICKUP__STORAGE__TYPE` | `postgres` | Queue survives restarts |
+| `MESSAGE_PICKUP__STORAGE__TYPE` | `postgres` | Queue survives restarts. **Needs the Phase 2 patch (§12.8)**: unpatched, pickup-v1 hand-overs are never removed and holders are re-sent everything on every poll |
 | `MESSAGE_PICKUP__STORAGE__HOST` | bare hostname, e.g. `postgres` | **No port allowed and no port key exists** (5432 assumed). `postgres:5432` fails with `ENOTFOUND` |
 | `MESSAGE_PICKUP__STORAGE__{USER,PASSWORD,DATABASE}` | — | Database must exist |
 | `STORAGE__TYPE` / `STORAGE__DIALECT` / `STORAGE__DATABASE_URL` | `drizzle` / `postgres` / `postgresql://…` | Run migrations first (§7.3) |
@@ -665,7 +671,7 @@ Answers:
 
 ### Phase 1 — Infrastructure
 
-Status and evidence: [`5-phase-1.md`](5-phase-1.md) (plan), [`5-phase-1-findings.md`](5-phase-1-findings.md) (results).
+Status and evidence: [`5-phase-1.md`](5-phase-1.md) (plan), [`6-phase-1-findings.md`](6-phase-1-findings.md) (results).
 
 - [—] Decide node count and operators (§12.1): **deferred**; staging is genesis-URL-driven so the switch is a config change
 - [x] Stand up dev Indy pool (`von-network`, explicit host IP)
@@ -688,21 +694,28 @@ Status and evidence: [`5-phase-1.md`](5-phase-1.md) (plan), [`5-phase-1-findings
   - `smoke:credo` passed (v1 only, cross-replica delivery). A Credo holder must use HTTP towards a ws-first mediator (Credo WS client limitation, findings W8).
   - **`smoke:android` passed.** The native Kotlin holder, `PickUpV1` over `wss://` through the staging edge, completed a live credential, a credential offered while the app was force-stopped (collected 4.6 s after reopen) and a proof with `isVerified=true`, all v1. There was one webhook per queued message.
 
-### Phase 2 — Agent services
+### Phase 2 — Agent services — **deployed on staging**
 
-- [ ] Node service that boots a Credo 0.7 agent with Askar/Postgres, AnonCreds, Indy VDR, tenants — native bindings imported first, no `tsx`, custom logger
-- [ ] HTTP inbound + HTTP and **WS** outbound transports, public endpoint reachable from mobile networks, health checks
-- [ ] Tenant provisioning: create tenant → create `did:indy` → endorse NYM
-- [ ] Schema publishing, with the integer expiry attribute in every schema (§4.7)
-- [ ] Credential definition publishing with `supportRevocation: false`; derive and persist qualified **and** unqualified identifiers (§2.7.2)
-- [ ] Register **v1** credential and proof protocols; set `useDidSovPrefixWhereAllowed: true`; configure connection auto-accept or handle `request-received` (§2.7.1)
-- [ ] Offers and proof-request restrictions always use unqualified identifiers; expiry predicate on every proof template
-- [ ] **Event listener** subscribing to `DidCommCredentialStateChanged` / `DidCommProofStateChanged` / connection events, persisting to the platform DB
-- [ ] Correlation IDs threaded through every protocol record so a single credential exchange can be traced across issuer, mediator and support tickets
-- [ ] Wire-level message-type logging at every hop (the Phase 0 wire logger was the tool that localised every stall)
-- [ ] Schema versioning: publish new version, deprecate old, keep both verifiable (§5.1)
-- [ ] Graceful shutdown with signal handlers — close the agent only after in-flight inbound messages finish (Phase 0 scripts produced `Invalid resource handle` errors by shutting down while a final ack was being processed)
-- [ ] Pin each component's Credo version explicitly and maintain an interop test matrix (issuer/verifier ↔ mediator ↔ each holder). "Keep all versions identical" is not achievable with the published mediator image, and DIDComm interoperates across versions (0.7 agents ↔ 0.6 mediator worked in Phase 0)
+Plan: [`7-phase-2.md`](7-phase-2.md); evidence: [`8-phase-2-findings.md`](8-phase-2-findings.md); code: `services/` (`credo-base`, `agent-service`, `endorser-service`), `infra/staging/compose.agent.yml`.
+
+- [x] `agent-service`: one Credo 0.7 root agent, Askar on Postgres with **one profile per tenant** (`ProfilePerWallet`; Credo's default is a database per tenant), AnonCreds, Indy VDR, `@credo-ts/tenants`. Bindings imported first, plain `node`, pino-backed Credo logger, `tsc --noEmit` as a gate. Provisioning is a separate one-shot job (concurrent provisioning races)
+- [x] HTTP inbound + HTTP and WS outbound; public endpoint `https://agent.<domain>` through Caddy (POST `/` and GET `/readyz` only); internal API on a private port for the platform API
+- [x] Tenant provisioning as a resumable state machine: create tenant → tenant creates its `did:indy` key → **endorser-service** signs a role-less NYM → tenant submits → `GET_NYM` check. Tenant DIDs have no ledger role
+- [x] Schema publishing through the author/endorser flow; `expiresAt` is mandatory in every schema and refused otherwise
+- [x] Credential definitions with `supportRevocation: false`; both identifier forms stored; the action-state credential definition is persisted so a retry never regenerates keys (§ findings T2)
+- [x] v1 protocols only, `useDidSovPrefixWhereAllowed: true`, connections auto-accepted, credential/proof steps `ContentApproved`
+- [x] Offers and proof restrictions take unqualified ids only (qualified → 400); every proof request carries an `expiresAt >=` predicate the caller cannot remove; an attribute cannot be both revealed and predicated (AnonCreds rule)
+- [x] Event listener → `outbox` table (connection, credential, proof transitions; thread id; correlation id). Subscribes via Credo's enum constants: the connection event string is `ConnectionStateChanged`, without the `DidComm` prefix
+- [x] Correlation ids on every row of an exchange, including the first event Credo emits inside the API call (announce/consume handshake, findings A5–A7)
+- [~] Wire-level message-type logging: available in the smoke tooling; not enabled in the service (Credo debug logging covers it through pino)
+- [x] Schema versioning: new version = new schema + cred def; deprecation blocks new offers, proofs keep accepting old cred defs
+- [x] Graceful shutdown: readiness 503 → close internal API → wait for in-flight DIDComm messages (deadline) → `agent.shutdown()` **once**. Never stop Credo transports separately. Verified in the container
+- [x] Stuck-exchange reconciliation (a failed send desynchronises both sides permanently and nothing retries): waiting records past a TTL are abandoned with an outbox row
+- [x] Versions pinned per component: agents 0.7.0, mediator image `375518d` (Credo 0.6.0), Kotlin fork commit; interop verified Credo holder ↔ mediator ↔ tenant issuer on staging
+- [x] Restore drill for the agent databases (root store reopened from backup with the real key)
+- [x] `smoke:tenant-android` on the phone against a tenant issuer: live, offline (3.1 s after reopen) and a proof with the expiry predicate, all v1. It exposed a mediator bug (below), now patched
+
+**Also new:** `endorser-service` (§12.10). **Multi-tenant traps** (findings T1): Credo's default cache breaks the second tenant (use `InMemoryLruCache`, never `useCachedStorageService`); inbound messages are processed one at a time across all tenants by default.
 
 ### Phase 3 — Platform API
 
@@ -811,6 +824,16 @@ Status and evidence: [`5-phase-1.md`](5-phase-1.md) (plan), [`5-phase-1-findings
 
 23. **Credo 0.7 API renames.** Class names, transport names, event names and event payload keys all changed; connection auto-accept is configured separately from credential/proof auto-accept. Code copied from pre-0.7 examples compiles poorly or subscribes to events that never fire. See §2.7.1.
 
+24. **The mediator's Postgres queue re-delivers pickup-v1 messages forever** (Phase 2). The first delivery looks perfect, so every earlier smoke passed; the holder then receives the same messages on every poll and answers duplicate proof requests. Patched in `12id/mediator:375518d-p1`; unpatched upstream as of 2026-09-13. See §12.8.
+
+25. **A stuck exchange never recovers by itself** (Phase 2 T3a). A send that fails, or a crash between two protocol steps, leaves the holder and issuer in different states with no retry on either side. The agent-service abandons waiting records after a TTL and the platform must re-offer on a new thread.
+
+26. **The default Credo cache breaks the second tenant** (Phase 2 T1). `SingleContextStorageLruCache` binds to the first agent context; register `InMemoryLruCache`, and never enable `useCachedStorageService` with it (connection records would be cached under keys without a tenant).
+
+27. **The first Credo state event fires inside the API call** (Phase 2). `offer-sent` / `request-sent` are emitted before `offerCredential` / `requestProof` return, so anything stamped onto the record afterwards is missing from the first event. Announce ids before the call and let the listener stamp the record.
+
+28. **An attribute cannot be both revealed and predicated** in one v1 proof request (AnonCreds). With a mandatory `expiresAt` predicate, `expiresAt` can never be disclosed.
+
 ---
 
 ## 12. Decisions
@@ -838,17 +861,17 @@ Accept loss and re-issue, or build encrypted backup? Affects SDK API surface. **
 
 Decided before Phase 0. Consequences now designed in: no tails server; credential definitions published with `supportRevocation: false` (**cannot be retrofitted** — adding revocation later means new credential definitions and re-issuance); short-lived credentials implemented as an integer expiry attribute with a mandatory verifier predicate (§4.7); customer-facing documentation that credentials cannot be invalidated early (§5.3). Revisit if a customer needs early invalidation.
 
-### 12.4 Issuer/verifier deployment split — open
+### 12.4 Issuer/verifier deployment split — decided: one codebase, one deployment
 
-Same process with both module sets, or separate deployments? Separate is recommended but costs more. **Decide before Phase 2.**
+**Decision (Phase 2 planning):** `agent-service` issues and verifies in one process (`AGENT_ROLES=issuer,verifier`, splittable later). DIDComm connections live in the tenant's wallet inside one agent; separate issuer and verifier processes would need either two connections per end user or a shared tenant store that Credo does not coordinate. Revisit if verification load ever starves issuance (Phase 6 load test).
 
 ### 12.5 Identifier format — decided: legacy unqualified on the wire
 
 Phase 0 result (§2.7.2). The issuer DID may be `did:indy`; schema and credential-definition identifiers in offers and proof requests must be legacy unqualified for as long as issue-credential/present-proof v1 is used, i.e. as long as the holders are AIP 1.0. Both forms are stored. This narrows interoperability with newer agents that expect qualified identifiers; revisit only together with a move to v2 protocols.
 
-### 12.6 SDK development start date — recommendation: in parallel with Phase 2
+### 12.6 SDK development start date — decided: Android in parallel with Phase 2
 
-Phase 0 has already produced a working Kotlin fork with its required changes, so SDK work is unblocked on Android. It stays gated on the Swift pass for iOS. **Decide during planning**; the recommendation is to start Android SDK work alongside Phase 2 and run the Swift pass immediately.
+**Decision (Phase 2 planning):** Android SDK work starts now, in its own plan; iOS stays gated on the Swift pass. Integration point with Phase 2 is `smoke:tenant-android` (a tenant issuer on staging, still to be run on the device). §12.2 (wallet recovery) must be decided before the SDK's public API is frozen.
 
 ### 12.7 Future OpenID4VC support — unchanged
 
@@ -862,6 +885,8 @@ The published mediator image is Credo 0.6.0; our agents are 0.7.0. Upstream `mai
 
 Staging runs two replicas of this image with a pre-baked migration image (§7.3). A Credo 0.7 issuer and a Credo 0.7 holder interoperate with it end to end over TLS (Phase 1 `smoke:credo`).
 
+**Amended in Phase 2: the image is now `12id/mediator:375518d-p1`**, the pinned image plus one patched file. The Postgres pickup queue never deleted messages handed to a **pickup-v1** holder (`takeFromQueue({ deleteMessages: true })` only selected), so the native holder was re-sent every message on every poll and answered every copy of a proof request. Upstream `main` has the same code. The patch (`infra/staging/mediator/Dockerfile.patched`) replaces that branch with an atomic delete-on-handover. File it upstream; re-check on every mediator upgrade. `8-phase-2-findings.md` has the evidence.
+
 The rejected option (b), porting the mediator to 0.7 ourselves, is roughly 3,700 lines of TypeScript with 48 files touching Credo, plus permanent ownership of image builds and security patching.
 
 ### 12.9 Corporate-network ledger access — accepted risk, hedge deployed
@@ -873,6 +898,19 @@ The restrictive corporate Wi-Fi test (§4.6) could not be run: no access. **Trea
 - **Trade-off:** reads through the proxy trust our TLS endpoint unless the fork verifies the included state proof.
 
 Re-run the §4.6 probe as soon as a corporate network is available; build the fork change only if client ports turn out to be blocked.
+
+### 12.10 Endorser key placement — decided: separate internal endorser-service (new, Phase 2)
+
+The endorser key is the most valuable secret in the system (§6). Phase 2 keeps it out of the process that accepts internet DIDComm traffic:
+- `endorser-service` opens the Phase 1 endorser Askar store and refuses to start unless it holds `ENDORSER_DID`. It is on a private Docker network only, behind a shared token.
+- It **signs and never submits**: role-less NYMs authored in its own name for DIDs the agent-service bound to a tenant (first binding wins, never rebound), and SCHEMA / CLAIM_DEF transactions authored by that tenant DID. Everything else is refused. Credo itself would sign any transaction whose endorser field matches, so this policy is entirely ours.
+- Every decision, signed or refused, is audited with the sha256 of the request; a signature is not released if the audit write fails.
+
+Consequence: tenant DIDs inherit the endorser's `did:indy` namespace, so the production namespace is fixed by the production endorser (with §12.1).
+
+### 12.11 HTTP framework — decided: Fastify for our APIs (new, Phase 2)
+
+Credo's `DidCommHttpInboundTransport` is Express-only, so the public DIDComm port stays on Credo's stock Express transport, untouched. Our own APIs (agent-service internal API now, platform API in Phase 3) use Fastify with zod schemas: request validation and response serialization are enforced by the framework, and undeclared response fields are stripped. A shared error handler answers server errors generically (a local run leaked SQL text in a 500 body before it existed).
 
 ---
 
