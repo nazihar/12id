@@ -1,0 +1,43 @@
+# Custom postgres-exporter queries against the mediator's message_pickup database.
+# Schema: packages/transport-queue-postgres/migrations/001-initial-schema.sql (image 375518d).
+
+# mediator_queue_messages{state} and mediator_queue_oldest_age_seconds{state}.
+# Both states are always emitted, with 0 when empty, so alerts do not go stale.
+mediator_queue:
+  query: |
+    SELECT s.state,
+           COALESCE(q.messages, 0) AS messages,
+           COALESCE(q.oldest_age_seconds, 0) AS oldest_age_seconds
+    FROM (VALUES ('pending'), ('sending')) AS s(state)
+    LEFT JOIN (
+      SELECT state::text AS state,
+             count(*) AS messages,
+             EXTRACT(EPOCH FROM (now() - min(created_at))) AS oldest_age_seconds
+      FROM queued_message
+      GROUP BY state
+    ) q ON q.state = s.state
+  metrics:
+    - state:
+        usage: LABEL
+        description: Queue state (pending or sending)
+    - messages:
+        usage: GAUGE
+        description: Messages queued for holders
+    - oldest_age_seconds:
+        usage: GAUGE
+        description: Age of the oldest message in this state
+
+# mediator_live_sessions_sessions{instance}: pickup v2 live-mode sessions. PickUpV1 native
+# holders never create these, so 0 is normal on this platform.
+mediator_live_sessions:
+  query: |
+    SELECT COALESCE(instance, 'unknown') AS instance, count(*) AS sessions
+    FROM live_session
+    GROUP BY 1
+  metrics:
+    - instance:
+        usage: LABEL
+        description: Mediator instance that owns the session
+    - sessions:
+        usage: GAUGE
+        description: Live pickup sessions

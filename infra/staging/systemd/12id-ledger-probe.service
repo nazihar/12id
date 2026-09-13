@@ -1,0 +1,10 @@
+[Unit]
+Description=12id staging ledger write probe (consensus check)
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+ExecStart=/opt/12id/infra/scripts/ledger-write-probe.sh

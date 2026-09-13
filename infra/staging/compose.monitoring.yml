@@ -1,0 +1,154 @@
+# Monitoring stack (W7): Prometheus, Alertmanager, Grafana and exporters.
+#
+#   EXTRA_SECRETS=mediator infra/scripts/deploy.sh monitoring
+#
+# secrets/monitoring.sops.env: GRAFANA_ADMIN_PASSWORD, GMAIL_APP_PASSWORD (added by the owner).
+# EXTRA_SECRETS=mediator: POSTGRES_PASSWORD for postgres-exporter.
+#
+# Everything listens on 127.0.0.1: Docker-published ports bypass ufw. Only Grafana is
+# exposed, through Caddy with its own login. Reach Prometheus (:9090) and Alertmanager
+# (:9093) over an SSH tunnel.
+name: monitoring
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.14.0
+    network_mode: host
+    restart: unless-stopped
+    mem_limit: 512m
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+      - --web.listen-address=127.0.0.1:9090
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+
+  alertmanager:
+    image: prom/alertmanager:v0.34.0
+    network_mode: host
+    restart: unless-stopped
+    mem_limit: 64m
+    environment:
+      GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD:-}
+    # Alertmanager does not expand env vars in its config; write the SMTP password to a
+    # tmpfs file it reads with smtp_auth_password_file. Nothing lands on a volume.
+    tmpfs:
+      - /run/smtp
+    entrypoint: ['/bin/sh', '-c']
+    command:
+      - >-
+        umask 077 &&
+        printf '%s' "$$GMAIL_APP_PASSWORD" > /run/smtp/password &&
+        exec /bin/alertmanager
+        --config.file=/etc/alertmanager/alertmanager.yml
+        --storage.path=/alertmanager
+        --web.listen-address=127.0.0.1:9093
+        --cluster.listen-address=
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+
+  grafana:
+    image: grafana/grafana-oss:13.0.2
+    network_mode: host
+    restart: unless-stopped
+    mem_limit: 256m
+    environment:
+      GF_SERVER_HTTP_ADDR: 127.0.0.1
+      GF_SERVER_HTTP_PORT: '3300'
+      GF_SERVER_ROOT_URL: https://grafana.12id.naziharitsolution.com
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?decrypt secrets via deploy.sh}
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+      GF_AUTH_ANONYMOUS_ENABLED: 'false'
+      GF_ANALYTICS_REPORTING_ENABLED: 'false'
+      GF_ANALYTICS_CHECK_FOR_UPDATES: 'false'
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+
+  node-exporter:
+    image: prom/node-exporter:v1.12.1
+    network_mode: host
+    pid: host
+    restart: unless-stopped
+    mem_limit: 64m
+    command:
+      - --path.rootfs=/host
+      - --web.listen-address=127.0.0.1:9100
+      # Textfile metrics, e.g. the ledger write probe (scripts/ledger-write-probe.sh).
+      - --collector.textfile.directory=/textfile
+    volumes:
+      - /:/host:ro,rslave
+      # Create before first start, or Docker creates it root-owned: mkdir -p /opt/12id/metrics
+      - /opt/12id/metrics:/textfile:ro
+
+  cadvisor:
+    image: ghcr.io/google/cadvisor:v0.60.5
+    network_mode: host
+    restart: unless-stopped
+    mem_limit: 256m
+    # cAdvisor needs broad host access to read container cgroups; acceptable on a
+    # single-purpose staging VM, revisit for production.
+    privileged: true
+    devices:
+      - /dev/kmsg
+    command: ['--listen_ip=127.0.0.1', '--port=9101', '--docker_only=true', '--housekeeping_interval=30s']
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+
+  blackbox:
+    image: prom/blackbox-exporter:v0.28.0
+    network_mode: host
+    restart: unless-stopped
+    mem_limit: 64m
+    command: ['--config.file=/etc/blackbox/blackbox.yml', '--web.listen-address=127.0.0.1:9115']
+    volumes:
+      - ./monitoring/blackbox.yml:/etc/blackbox/blackbox.yml:ro
+
+  # Mediator pickup-queue metrics from the message_pickup database.
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.20.1
+    restart: unless-stopped
+    mem_limit: 64m
+    environment:
+      DATA_SOURCE_NAME: postgresql://postgres:${POSTGRES_PASSWORD:?run with EXTRA_SECRETS=mediator}@postgres:5432/message_pickup?sslmode=disable
+      PG_EXPORTER_EXTEND_QUERY_PATH: /etc/postgres-exporter/queries.yml
+    volumes:
+      - ./monitoring/postgres-exporter-queries.yml:/etc/postgres-exporter/queries.yml:ro
+    ports:
+      - '127.0.0.1:9187:9187'
+    networks:
+      - mediator
+
+  # Mediation-record metrics from the drizzle database (open-mediation abuse signal).
+  postgres-exporter-drizzle:
+    image: prometheuscommunity/postgres-exporter:v0.20.1
+    restart: unless-stopped
+    mem_limit: 64m
+    environment:
+      DATA_SOURCE_NAME: postgresql://postgres:${POSTGRES_PASSWORD:?run with EXTRA_SECRETS=mediator}@postgres:5432/drizzle?sslmode=disable
+      PG_EXPORTER_EXTEND_QUERY_PATH: /etc/postgres-exporter/queries.yml
+    volumes:
+      - ./monitoring/postgres-exporter-drizzle-queries.yml:/etc/postgres-exporter/queries.yml:ro
+    ports:
+      - '127.0.0.1:9188:9187'
+    networks:
+      - mediator
+
+networks:
+  mediator:
+    external: true
+    name: 12id-mediator
+
+volumes:
+  prometheus-data:
+  alertmanager-data:
+  grafana-data:

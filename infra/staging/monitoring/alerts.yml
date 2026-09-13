@@ -1,0 +1,128 @@
+groups:
+  - name: staging
+    rules:
+      - alert: TargetDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: '{{ $labels.job }} target {{ $labels.instance }} is not being scraped'
+
+      - alert: EndpointDown
+        expr: probe_success{job="blackbox-http"} == 0
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: '{{ $labels.instance }} is failing from the VM'
+
+      - alert: CertificateExpiringSoon
+        expr: probe_ssl_earliest_cert_expiry{job="blackbox-http"} - time() < 14 * 86400
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: 'TLS certificate for {{ $labels.instance }} expires in under 14 days'
+
+      - alert: LedgerClientPortUnreachable
+        expr: probe_success{job="blackbox-indy-client"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Indy client port {{ $labels.instance }} is not answering'
+
+      - alert: LedgerBelowConsensusReachability
+        expr: sum(probe_success{job="blackbox-indy-client"}) < 3
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Fewer than 3 of 4 validator client ports answer'
+          description: >-
+            Port reachability only. Consensus has failed with all four ports open (findings W1);
+            LedgerWriteProbeFailing is the alert that detects that.
+
+      # Ledger write probe: scripts/ledger-write-probe.sh via 12id-ledger-probe.timer, every 15 min.
+      - alert: LedgerWriteProbeFailing
+        expr: ledger_write_probe_success == 0
+        # Two consecutive failed runs, so a single slow write does not page.
+        for: 20m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Ledger writes are not reaching consensus'
+          description: >-
+            A NYM written through the trustee was not readable back within 60 s on consecutive runs.
+            Reads can keep working while this fails. Check node-to-node connectivity
+            (DOCKER-USER rules, findings W1) and node logs for view changes.
+
+      - alert: LedgerWriteProbeStale
+        expr: time() - ledger_write_probe_last_run_timestamp_seconds > 45 * 60
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'The ledger write probe has not run for 45 minutes'
+
+      - alert: LedgerWriteProbeMissing
+        expr: absent(ledger_write_probe_last_run_timestamp_seconds)
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: 'No ledger write probe metrics: is 12id-ledger-probe.timer enabled?'
+
+      - alert: MediatorQueueBacklog
+        expr: sum(mediator_queue_messages) > 1000
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'More than 1000 messages queued for holders'
+          description: >-
+            Placeholder threshold. PickUpV1 holders that stay offline legitimately leave messages queued,
+            so tune this against real traffic before paging on it.
+
+      - alert: MediatorMessageStuckSending
+        expr: mediator_queue_oldest_age_seconds{state="sending"} > 600
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "A queued message has been in state 'sending' for over 10 minutes"
+
+      - alert: MediationRequestSpike
+        expr: sum(mediator_mediations_created_last_hour) > 100
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'More than 100 mediation records created in the last hour'
+          description: >-
+            Mediation is open (4-init §2.3): anyone holding the mediator invitation can register and
+            use the mediator as a relay. Placeholder threshold; tune against real onboarding volume.
+
+      - alert: DiskSpaceLow
+        expr: node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} < 0.2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Root filesystem has less than 20% free'
+
+      - alert: MemoryLow
+        expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Less than 10% of memory available'
+
+      - alert: ContainerRestartLoop
+        expr: changes(container_start_time_seconds{name!=""}[15m]) > 2
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Container {{ $labels.name }} restarted more than twice in 15 minutes'

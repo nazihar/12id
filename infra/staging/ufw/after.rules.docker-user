@@ -1,0 +1,24 @@
+# BEGIN 12id DOCKER-USER
+# Appended to /etc/ufw/after.rules on the staging VM.
+#
+# Docker-published ports bypass ufw, so ufw's own rules cannot close them. von-network
+# publishes its node-to-node consensus ports (9701/9703/9705/9707) on all interfaces.
+# The nodes must reach each other through the public IP, because that is the address in
+# the genesis. That traffic leaves via ens3, hairpins through the provider's 1:1 NAT, and
+# comes back in on ens3 with source 10.1.1.1 (the provider gateway, observed with tcpdump).
+# Allow that; drop everyone else. Internet traffic keeps its real source address, so this
+# does not open the ports publicly (verified from outside).
+# Client ports (9702/9704/9706/9708) stay public on purpose: phones read the ledger there.
+#
+# Matching on --ctorigdstport keeps the rule correct after Docker's DNAT.
+*filter
+:DOCKER-USER - [0:0]
+-A DOCKER-USER -m conntrack --ctstate RELATED,ESTABLISHED -j RETURN
+-A DOCKER-USER -i ens3 -s 10.1.1.1/32 -j RETURN
+-A DOCKER-USER -i ens3 -p tcp -m conntrack --ctorigdstport 9701 -j DROP
+-A DOCKER-USER -i ens3 -p tcp -m conntrack --ctorigdstport 9703 -j DROP
+-A DOCKER-USER -i ens3 -p tcp -m conntrack --ctorigdstport 9705 -j DROP
+-A DOCKER-USER -i ens3 -p tcp -m conntrack --ctorigdstport 9707 -j DROP
+-A DOCKER-USER -j RETURN
+COMMIT
+# END 12id DOCKER-USER

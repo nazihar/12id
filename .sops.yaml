@@ -1,0 +1,9 @@
+# SOPS encryption rules for 12id (Phase 1 W9).
+#
+# Recipient: the staging VM's age key (/opt/12id/secrets/age.key on id-dev).
+# The matching private key exists only on the VM and in the operator's password manager.
+# To add an operator key, append its age public key to the comma-separated list and run
+# `sops updatekeys` on each encrypted file.
+creation_rules:
+  - path_regex: infra/staging/secrets/.*\.sops\.(env|yaml|json)$
+    age: age1ftkynx64gy2frgt40rn0s9layhn95ykrgl8unr4uzrz8h40acsmqz0lc5q

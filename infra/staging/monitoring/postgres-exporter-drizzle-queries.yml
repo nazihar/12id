@@ -1,0 +1,23 @@
+# Custom postgres-exporter queries against the mediator's drizzle database.
+# Table "DidcommMediation" comes from @credo-ts/drizzle-storage's didcomm bundle (image 375518d).
+
+# mediator_mediations_records{state} and mediator_mediations_created_last_hour{state}.
+# Mediation is open (4-init §2.3): anyone holding the invitation can register. A spike in
+# new mediation records is the cheapest abuse signal until invitation gating exists.
+mediator_mediations:
+  query: |
+    SELECT state::text AS state,
+           count(*) AS records,
+           count(*) FILTER (WHERE created_at > now() - interval '1 hour') AS created_last_hour
+    FROM "DidcommMediation"
+    GROUP BY state
+  metrics:
+    - state:
+        usage: LABEL
+        description: Mediation record state
+    - records:
+        usage: GAUGE
+        description: Mediation records in this state
+    - created_last_hour:
+        usage: GAUGE
+        description: Mediation records created in the last hour

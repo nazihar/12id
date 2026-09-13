@@ -21,7 +21,21 @@ Phase 0 ran the stack end to end on Android. Content now falls into these tiers,
 
 **Confirmed (Phase 0, source read, not run).** Read directly from the pinned package or repository source but not exercised. Includes: mediator push-notification/webhook behaviour, Kotlin framework push support (absent), Redis multi-instance delivery behaviour.
 
-**Not yet tested.** Stated from documentation or reasoning only. Includes: **everything about the Swift/iOS holder**, multi-tenancy (`@credo-ts/tenants`), Postgres-backed agent wallets, multi-instance mediator, the mediator webhook actually firing, restrictive corporate Wi-Fi, production TLS (`https`/`wss`), and all platform-API behaviour.
+**Confirmed (Phase 1, staging, run).** Observed on the cloud staging environment (`5-phase-1-findings.md`). Includes:
+- **TLS:** Caddy-terminated `https`/`wss` for the mediator, the issuer endpoint, genesis distribution and the ledger proxy.
+- **Mediator:** two replicas sharing a Postgres pickup queue (cross-replica delivery), and the webhook firing, with its exact preconditions and body (§2.3).
+- **Endorser:** a DID with its key in Postgres-backed Askar, including a backup and restore of that store.
+- **End to end over the internet:** a Credo issuer and a Credo holder, and a Credo issuer and **the native Kotlin holder on a phone**. Live, offline and proof, all v1.
+- **Ledger proxy:** `indy-vdr-proxy` read replies that match the pool's reply format.
+
+**Not yet tested.** Stated from documentation or reasoning only. Includes:
+- **everything about the Swift/iOS holder**;
+- multi-tenancy (`@credo-ts/tenants`);
+- issuer/verifier agent wallets on Postgres (only the endorser store is tested);
+- mediator replica failover under load, and duplicate webhooks across replicas;
+- restrictive corporate Wi-Fi;
+- production (non-von-network) ledgers and the TAA;
+- all platform-API behaviour.
 
 Phase 0 found that the architecture holds. It also found that **three configuration switches, two holder fork changes and one mediator setting** must all be right, and each fails silently when wrong (§2.7.1, §2.7.4, §2.3). Treat those as load-bearing.
 
@@ -126,17 +140,23 @@ The tested image is built on **Credo 0.6.0** (`@credo-ts/didcomm@0.6.0`, `@openw
 | `STORAGE__TYPE` / `STORAGE__DIALECT` / `STORAGE__DATABASE_URL` | `drizzle` / `postgres` / `postgresql://…` | Run migrations first (§7.3) |
 | `ASKAR__STORE_ID`, `ASKAR__STORE_KEY`, `ASKAR__DATABASE__*` | postgres | **Askar is still required for KMS when storage is Drizzle.** Unlike the pickup host, `ASKAR__DATABASE__HOST` does take `host:port` |
 | `CACHE__TYPE` / `CACHE__REDIS_URL` | `redis` / `redis://…` | Required for multi-instance delivery |
-| `MESSAGE_PICKUP__MULTI_INSTANCE_DELIVERY__TYPE` | `redis` | **Not yet tested.** Requires `CACHE__TYPE=redis`. Also changes push-notification behaviour — see below |
-| `PUSH_NOTIFICATIONS__WEBHOOK_URL` | our platform API | **Not yet tested** — read the push-notification notes below before relying on it |
+| `MESSAGE_PICKUP__MULTI_INSTANCE_DELIVERY__TYPE` | **`none`** | **Confirmed (Phase 1, staging).** With the Postgres pickup queue, `redis` **silently disables every webhook** (see below). Multi-instance delivery still works with `none`: the Postgres queue itself delivers across replicas (verified with two replicas) |
+| `PUSH_NOTIFICATIONS__WEBHOOK_URL` | our platform API | **Confirmed (Phase 1).** Fires only together with the Firebase placeholder below |
+| `PUSH_NOTIFICATIONS__FIREBASE__NOTIFICATION_TITLE` / `__NOTIFICATION_BODY` | any non-empty text | **Required for the webhook** with the Postgres queue, even with no Firebase project. `projects` may be omitted; with no device-token record the FCM send is skipped |
 | `CREATE_NEW_INVITATION` | `true` in dev | Regenerates the startup invitation instead of reusing the stored one |
 
-**Push notifications / webhook — source read, not run.** From `apps/mediator/src/config/pushNotificationLoader.ts`, `redisMessageDeliveryLoader.ts` and `push-notifications/sendNotification.ts`:
+**Push notifications / webhook: confirmed on staging (Phase 1, W5 M2–M4).** Source trace in `apps/mediator/src/config/pushNotificationLoader.ts`, `redisMessageDeliveryLoader.ts`, `push-notifications/sendNotification.ts` and `packages/transport-queue-postgres`; evidence in [`5-phase-1-findings.md`](5-phase-1-findings.md).
 
-- The webhook POSTs `{ "connectionId": "...", "fcmToken": "..." | null }` with no signature or authentication.
-- `fcmToken` is populated only if the device registered a token over the DIDComm push-notifications protocol. **The Kotlin holder does not implement that protocol, so `fcmToken` will always be null.** The platform must map `connectionId → device token` itself (§4.8).
-- **Single-instance mode (`multiInstanceDelivery=none`): the queued-message listener is attached only if a Firebase block is configured.** With only `PUSH_NOTIFICATIONS__WEBHOOK_URL` set, the webhook never fires. A likely workaround is to set the Firebase title/body keys with no projects, but that has not been tried.
-- **Multi-instance mode (`multiInstanceDelivery=redis`): the Redis delivery loader calls the notifier directly**, with no Firebase gate, when no local or remote live session takes the message.
-- Either way, the notifier currently fires **for every queued message** (a TODO in the source says so). With `PickUpV1` holders every message is queued, so **expect one webhook per message, including while the app is open**. The platform API must tolerate and de-duplicate this.
+| Pickup queue | Multi-instance | Firebase block | Webhooks for 5 queued messages |
+|---|---|---|---|
+| postgres | `redis` | none | **0** |
+| postgres | `none` | none | **0** |
+| postgres | `none` | title + body only | **5** |
+
+- **Why `redis` disables it.** The Redis delivery loader, the only multi-instance notifier, listens for `DidCommMessageQueued`, which the Postgres queue never emits; the loader's own header says the Postgres queue is not supported. The Postgres queue emits `TransportQueuePostgresMessageQueued`, and its only listener (`pushNotificationLoader`) returns unless a Firebase block exists **and** multi-instance delivery is `none`. Nothing logs this.
+- **Body.** The webhook POSTs **`{ "connectionId": "..." }`** with no signature or authentication. There is **no `fcmToken` key at all**: it is `undefined` and dropped by `JSON.stringify`, not `null`. `connectionId` is the mediator-side connection id for the holder, which is the key for the platform's device-token registry (§4.8). The Kotlin holder has no push-notification protocol, so a token will never be present.
+- **Frequency.** Exactly **one webhook per queued message**, including while the holder is actively polling (app open). With `PickUpV1` holders every message is queued. The platform API must de-duplicate per `connectionId`.
+- **Not tested:** duplicate webhooks across replicas for one message. Not expected, since only the replica that queued the message emits the event.
 
 **Recommended Node flags** (from the project README, not tested): `NODE_OPTIONS=--max-old-space-size=512`, `MALLOC_CONF=background_thread:true,metadata_thp:auto`, and `LD_PRELOAD` set to jemalloc.
 
@@ -547,10 +567,16 @@ Run Drizzle migrations as a separate container from the same image before starti
 
 ```yaml
 entrypoint: ["sh", "-c"]
-command: cd /app/apps/mediator && pnpm run drizzle:migrate:postgres --database-url "$$STORAGE__DATABASE_URL"
+# One-element LIST. A plain string `command:` is split into words by Compose, so `sh -c`
+# runs only "cd" and exits 0 having migrated nothing.
+command: ['cd /app/apps/mediator && pnpm run drizzle:migrate:postgres --database-url "$$STORAGE__DATABASE_URL"']
 ```
 
-- **`--database-url` is required.** Without it the migration exits 0 with no output and creates nothing; the mediator then dies at startup with `relation "StorageVersion" does not exist`. Health-check the tables rather than trusting the exit code.
+- **The string form of `command:` is a silent no-op (confirmed, Phase 1).** On staging, Docker recorded `Cmd=["cd","/app/apps/mediator"]`; the container exited 0 with no output, no tables were created, and both mediator replicas crash-looped on the missing `StorageVersion` table. The list form above applies all three schema bundles (core, didcomm, mediator). This is very likely the same symptom Phase 0 attributed to a missing `--database-url`.
+- **Pass `--database-url` anyway.** It is what the working command uses; the variant without it was never isolated.
+- **Health-check the tables, not the exit code.** `infra/scripts/check-mediator-tables.sh` fails the deploy unless `drizzle."StorageVersion"` and `drizzle."PushNotificationsFcm"` exist (`--after-start` also checks `message_pickup.queued_message` and `live_session`).
+- **Start replicas one at a time on a fresh database.** Two replicas provisioning the Askar store at once race on `CREATE SCHEMA` (`duplicate key value violates unique constraint 'pg_namespace_nspname_index'`). Use `depends_on: service_healthy` from the second replica to the first.
+- **Pre-bake pnpm** (`FROM mediator:<sha>` + `corepack install --global pnpm@10.7.0`, `COREPACK_ENABLE_NETWORK=0`) so the migration needs no registry access at deploy time; see `infra/staging/mediator/Dockerfile.migrate`.
 - pnpm inside the image is provided by corepack and **downloaded at run time**, so the migration container needs outbound npm registry access unless pnpm is pre-baked.
 
 Moving the mediator to Credo 0.7 means building this repository ourselves (§12.8).
@@ -639,18 +665,28 @@ Answers:
 
 ### Phase 1 — Infrastructure
 
-- [ ] Decide node count and operators (see §12.1)
-- [ ] Stand up dev Indy pool (`von-network`, explicit host IP)
-- [ ] Stand up staging/production pool, or contract with a network operator
-- [ ] Test Indy client-port reachability from a restrictive corporate network; if blocked, evaluate `indy-vdr-proxy` and whether the native holders can use an HTTP resolver
-- [ ] Genesis file distribution endpoint (HTTPS, versioned, cacheable)
-- [ ] Create Trustee and Endorser DIDs; document the TAA acceptance flow
-- [ ] Decide mediator build: published 0.6 image pinned by SHA, or our own 0.7 build (§12.8)
-- [ ] Deploy mediator: Postgres (three databases), Redis, Drizzle migration with `--database-url` and a table health check, `AGENT_PORT` set, `AGENT_ENDPOINTS` wss-first, `QueueAndLiveModeDelivery`, multi-instance Redis delivery
-- [ ] Verify the mediator webhook actually fires in the chosen instance mode (§2.3), with TLS endpoints
-- [ ] Mediator ingress: per-user invitation gating, rate limiting, mediation-record alerting (§2.3)
-- [ ] `indy-node-monitor` + Grafana dashboards + alerting
-- [ ] Secrets management for store keys and the Endorser key
+Status and evidence: [`5-phase-1.md`](5-phase-1.md) (plan), [`5-phase-1-findings.md`](5-phase-1-findings.md) (results).
+
+- [—] Decide node count and operators (§12.1): **deferred**; staging is genesis-URL-driven so the switch is a config change
+- [x] Stand up dev Indy pool (`von-network`, explicit host IP)
+- [x] Stand up **staging** pool: von-network on a cloud VM behind 1:1 NAT, public IP in genesis, node-to-node ports firewalled via `DOCKER-USER` (a wrong allow-rule broke consensus silently while reads worked). Production pool not started (§12.1)
+- [~] Corporate-network reachability test: **not run (no access); accepted risk.** `indy-vdr-proxy` deployed on 443 and the holder change assessed as small (§12.9)
+- [x] Genesis distribution endpoint: HTTPS, versioned and immutable (`/v1/`), cacheable, sha256 + minisign signature
+- [x] Endorser DID created with its key in Postgres-backed Askar; TAA flow documented (not run: von-network has no TAA). Trustee is von-network's built-in one on staging
+- [x] Mediator build decided: published 0.6 image pinned by SHA (§12.8)
+- [x] Deploy mediator: Postgres (four databases incl. endorser), Redis cache, pre-baked migration image with the **list-form** command and table health check, `AGENT_PORT`, `AGENT_ENDPOINTS` wss-first, `QueueAndLiveModeDelivery`, two replicas with staggered start. **Multi-instance delivery `none`, not Redis** (§2.3)
+- [x] Verify the webhook fires, with TLS endpoints: fires only with multi-instance `none` + Firebase placeholder; one per queued message; body has no `fcmToken` (§2.3)
+- [~] Mediator ingress:
+  - `/invite` blocked at the edge (the mediator serves its invitation unauthenticated).
+  - **Per-IP rate limiting live** (custom Caddy build with caddy-ratelimit; burst verified 429 after the limit).
+  - **Mediation-record spike alerting live.**
+  - Per-user invitation gating **not designed yet**. Constraint: the edge cannot tell a mediation request from a forward, so it needs a mediator-side hook or a separate onboarding endpoint (Phase 3).
+- [~] Monitoring: Prometheus, Alertmanager, Grafana, node/cAdvisor/blackbox/postgres exporters, queue metrics, TLS expiry and a **ledger write probe** (reachability alone misses consensus loss). Alert email pending the owner's Gmail app password. `indy-node-monitor` and dashboards **not done**; alerts not yet fired deliberately
+- [x] Secrets: SOPS + age (encrypted env files in the repo, age key on the VM), minisign key, `deploy.sh` decrypts to tmpfs only. **Owner must back up the age key**
+- [x] Nightly age-encrypted Postgres backups (VM-local by decision) and a restore drill, including reopening the restored endorser store
+- [x] End-to-end smoke over TLS:
+  - `smoke:credo` passed (v1 only, cross-replica delivery). A Credo holder must use HTTP towards a ws-first mediator (Credo WS client limitation, findings W8).
+  - **`smoke:android` passed.** The native Kotlin holder, `PickUpV1` over `wss://` through the staging edge, completed a live credential, a credential offered while the app was force-stopped (collected 4.6 s after reopen) and a proof with `isVerified=true`, all v1. There was one webhook per queued message.
 
 ### Phase 2 — Agent services
 
@@ -779,7 +815,11 @@ Answers:
 
 ## 12. Decisions
 
-### 12.1 Indy node count and operators — open
+### 12.1 Indy node count and operators — deferred (Phase 1 decision)
+
+**Status after Phase 1:** deliberately deferred. Staging runs von-network (4 nodes on one VM) behind a signed, versioned genesis URL (`https://genesis.<domain>/v1/pool_transactions_genesis`, minisign-signed). Every agent, tool and (later) the SDK is configured from that URL plus a sha256, so moving to option (a), (b) or (c) below means publishing a new genesis version and updating one pinned URL/hash, not rebuilding components (`infra/runbooks/genesis-rotation.md`). Decide before any production deployment; the §12.9 hedge is already built, so corporate-network blocking no longer gates this decision.
+
+Original framing:
 
 If we run all validators ourselves, we have an append-only database with blockchain operating costs, not a decentralised ledger. Self-hosting only earns its keep when validators are operated by **different organisations**.
 
@@ -814,18 +854,25 @@ Phase 0 has already produced a working Kotlin fork with its required changes, so
 
 Not in v1 scope, but keep the issuance API abstracted at the platform layer so a second credential format can be added without rewriting customer-facing endpoints.
 
-### 12.8 Mediator Credo line — open (new)
+### 12.8 Mediator Credo line — decided: published 0.6 image, pinned by SHA
 
-The published mediator image is Credo 0.6.0; our agents are 0.7.0.
+The published mediator image is Credo 0.6.0; our agents are 0.7.0. Upstream `main` was still at `375518d` (December 2025) with no 0.7 build when Phase 1 started.
 
-- **(a) Published 0.6 image, pinned by SHA.** No build pipeline to own. Requires the DIDDoc-context fork change in both holders (§2.7.4) and tracks upstream's release cadence.
-- **(b) Build `didcomm-mediator-credo` ourselves on Credo 0.7.** Removes the DIDDoc-context fork change and aligns the Credo line across components. We own the image build and security patching.
+**Decision (Phase 1): (a), `ghcr.io/openwallet-foundation/didcomm-mediator-credo/mediator:375518d`.** Upstream maintains the code; the one-line DIDDoc-context change stays in both holder forks, which we maintain anyway (§2.7.4). Revisit when upstream publishes a 0.7 image.
 
-Recommendation: **(b) once it builds cleanly on 0.7**, falling back to (a). Decide before Phase 1 mediator deployment. Either way, the pickup, endpoint-order and webhook findings in §2.3 apply.
+Staging runs two replicas of this image with a pre-baked migration image (§7.3). A Credo 0.7 issuer and a Credo 0.7 holder interoperate with it end to end over TLS (Phase 1 `smoke:credo`).
 
-### 12.9 Corporate-network ledger access — open (new)
+The rejected option (b), porting the mediator to 0.7 ourselves, is roughly 3,700 lines of TypeScript with 48 files touching Credo, plus permanent ownership of image builds and security patching.
 
-Pending the §4.6 test. If client ports are blocked on corporate networks, decide between `indy-vdr-proxy` (requires HTTP resolver support in both native frameworks) and accepting that the wallet does not work on those networks. **Decide before §12.1.**
+### 12.9 Corporate-network ledger access — accepted risk, hedge deployed
+
+The restrictive corporate Wi-Fi test (§4.6) could not be run: no access. **Treated as an accepted open risk**, with the fallback built so it is not a blocker if the risk materialises:
+- **`indy-vdr-proxy` runs on staging** at `https://vdr.<domain>` on 443, built from `hyperledger-indy/indy-vdr` v0.4.5 (no official binary or image exists). The edge allows GET/HEAD only; the proxy's `POST /submit` write relay is blocked.
+- **The proxy returns the pool's raw reply envelope, including the state proof** (verified for NYM and CLAIM_DEF reads).
+- **Holder change is small (Kotlin, source read):** every ledger read goes through `LedgerService.submitReadRequest`, and v1 needs only `getSchema` and `getCredentialDefinition`, whose parsing needs no change against the proxy. Estimate: 1–2 days per platform; Swift not yet read.
+- **Trade-off:** reads through the proxy trust our TLS endpoint unless the fork verifies the included state proof.
+
+Re-run the §4.6 probe as soon as a corporate network is available; build the fork change only if client ports turn out to be blocked.
 
 ---
 

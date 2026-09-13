@@ -1,0 +1,29 @@
+{
+  "name": "12id-ledger-tools",
+  "private": true,
+  "type": "module",
+  "description": "One-off Credo 0.7 scripts against the staging ledger (Phase 1 W3). Run with plain node; tsx cannot run Credo 0.7.",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "bootstrap-endorser": "node src/bootstrap-endorser.ts"
+  },
+  "dependencies": {
+    "@credo-ts/anoncreds": "0.7.0",
+    "@credo-ts/askar": "0.7.0",
+    "@credo-ts/core": "0.7.0",
+    "@credo-ts/didcomm": "0.7.0",
+    "@credo-ts/indy-vdr": "0.7.0",
+    "@credo-ts/node": "0.7.0",
+    "@hyperledger/anoncreds-nodejs": "0.4.0",
+    "@hyperledger/indy-vdr-nodejs": "0.3.0",
+    "@openwallet-foundation/askar-nodejs": "0.6.0",
+    "express": "5.1.0",
+    "reflect-metadata": "0.2.2"
+  },
+  "devDependencies": {
+    "@types/node": "22.18.1",
+    "typescript": "5.9.2"
+  }
+}

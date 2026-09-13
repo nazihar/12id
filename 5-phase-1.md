@@ -26,21 +26,25 @@ Phase 1 turns it into a reproducible, TLS-fronted **staging environment on a clo
 |---|---|
 | Host | `id-dev`, `123.176.58.72` |
 | Domain | `12id.naziharitsolution.com` (A record → that IP, TTL 600) |
-| OS / hardware | Ubuntu 24.04.3, x86_64, 4 vCPU, **7.8 GB RAM**, 88 GB free disk |
+| OS / hardware | Ubuntu 24.04.3, x86_64, 4 vCPU, **16 GB RAM** (upsized from 7.8 GB), 4 GB swapfile, 88 GB free disk |
 | Docker | 29.8.0, Compose v5.5.1 already installed |
-| Access | `ubuntu` has passwordless sudo |
-| Firewall | ufw inactive; only :22 listening |
+| Access | `ubuntu`, key-only SSH (`~/.ssh/12id_staging_ed25519`), passwordless sudo |
+| Firewall | ufw active: 22, 80, 443, Indy client 9702/9704/9706/9708 |
 
-- **Ports:** 80 and 443 are closed from outside. Nothing is listening yet, so a provider firewall can't be ruled out until Caddy is up.
-- **DNS:** subdomains do not resolve and there is no wildcard. **Decision:** user adds `*.12id.naziharitsolution.com A 123.176.58.72`. Services use `mediator.`, `genesis.`, `ledger.`, `vdr.`, `grafana.`, `smoke-issuer.` under it; Caddy issues per-host certificates via HTTP-01.
-- **RAM:** **Decision:** upsize the VM to 16 GB before W1. Keep per-service `mem_limit`s anyway, so Phase 2 agents can later be added to the same budget.
-- **Security:** SSH password auth is enabled and there are no authorized_keys.
-- **The password was shared in chat.** Rotate it, and disable password auth once key access works (first step of W1).
-
-Still needed: an email for ACME/alerts; the Android device again for W8.
+- **DNS:** wildcard `*.12id.naziharitsolution.com A 123.176.58.72` is live. Services use `mediator.`, `genesis.`, `ledger.`, `vdr.`, `grafana.`, `smoke-issuer.`; Caddy issues per-host certificates via HTTP-01.
+- **RAM:** upsized to 16 GB. Per-service `mem_limit`s are kept so Phase 2 agents fit the same budget.
+- **W1 hardening done (2026-09-13):**
+  - SSH password auth disabled (`/etc/ssh/sshd_config.d/00-12id-hardening.conf`); refusal verified from outside.
+  - ufw, unattended-upgrades and fail2ban enabled. fail2ban logged 82 failed SSH logins within minutes, so the VM was already being brute-forced.
+  - **Still to do by the owner:** rotate the `ubuntu` password (it was shared in chat).
+- **Ports:** 80/443 not yet verified from outside; nothing listens until Caddy is up.
+- **Docker bypasses ufw.** von-network publishes 9000 and the node-to-node ports 9701/9703/9705/9707 on all interfaces. They must be bound to localhost or dropped in the `DOCKER-USER` chain (W2).
+- **von-network `/register` is unauthenticated** and can write ENDORSER NYMs. It must never be public; Caddy blocks it and bootstrap uses `127.0.0.1:9000` on the VM.
+- **Pre-existing issue:** a HashiCorp apt repo on the VM has a missing GPG key. Left untouched.
+- **Ops email** (ACME/alerts): `onetwoidadmin@gmail.com`. The Android device is needed again for W8.
 
 ## Layout
-New top-level `infra/` in `E:\12id-credo` (suggest `git init` first — the workspace is not a repo):
+`infra/` lives inside this repo (`12id/infra/`, remote `nazihar/12id`). A `.gitignore` excludes decrypted secrets and keys; only `*.sops.*` secret files may be committed:
 ```
 infra/
   staging/
