@@ -9,9 +9,10 @@
 # 127.0.0.1 for Caddy; postgres and valkey are not published at all.
 name: mediator
 
-# Pinned upstream image plus one patched file (mediator/Dockerfile.patched): the Postgres pickup
-# queue never deleted messages handed to pickup-v1 holders (Phase 2 findings, A11).
-x-mediator-image: &mediator-image 12id/mediator:375518d-p1
+# Pinned upstream image plus two patched files (mediator/Dockerfile.patched): the Postgres pickup
+# queue never deleted messages handed to pickup-v1 holders (Phase 2 findings, A11), and the
+# POST /admin/invitations route the platform API uses for per-wallet invitations (Phase 3 P1).
+x-mediator-image: &mediator-image 12id/mediator:375518d-p2
 
 x-mediator-env: &mediator-env
   LOG_LEVEL: ${MEDIATOR_LOG_LEVEL:-info}
@@ -63,8 +64,14 @@ x-mediator-env: &mediator-env
   CACHE__TYPE: redis
   CACHE__REDIS_URL: redis://valkey:6379
 
-  # Unauthenticated POST {connectionId, fcmToken}; kept on the internal network only.
-  PUSH_NOTIFICATIONS__WEBHOOK_URL: http://webhook-sink:8080/mediator
+  # Unauthenticated POST {connectionId}; kept on the internal network only. The platform API
+  # receives it (Phase 3 P7) and authenticates the caller by a secret path segment, so the whole
+  # URL lives in mediator.sops.env: http://platform-api:3500/internal/mediator/<MEDIATOR_WEBHOOK_SECRET>.
+  # Point it at http://webhook-sink:8080/mediator to capture webhooks for debugging.
+  PUSH_NOTIFICATIONS__WEBHOOK_URL: ${MEDIATOR_WEBHOOK_URL:?decrypt secrets via deploy.sh}
+
+  # Enables the patched POST /admin/invitations route (Phase 3 P1). Presented by the platform API.
+  ADMIN_API_TOKEN: ${MEDIATOR_ADMIN_TOKEN:?decrypt secrets via deploy.sh}
 
 services:
   postgres:

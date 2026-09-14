@@ -2,7 +2,7 @@
  * endorser-service HTTP API (A9). Internal network only; every route except /healthz requires
  * the shared token. It signs, never submits: the tenant (via agent-service) submits to the ledger.
  */
-import { createHash, timingSafeEqual } from 'node:crypto'
+import { createHash } from 'node:crypto'
 
 import {
   INTERNAL_TOKEN_HEADER,
@@ -13,6 +13,7 @@ import {
   refusalResponse,
 } from '@12id/credo-base/endorsement-contract.ts'
 import { internalApiErrorHandler } from '@12id/credo-base/fastify-errors.ts'
+import { tokenMatches } from '@12id/credo-base/internal-token.ts'
 import Fastify from 'fastify'
 import { serializerCompiler, validatorCompiler, type ZodTypeProvider } from 'fastify-type-provider-zod'
 import type { Logger as PinoLogger } from 'pino'
@@ -44,13 +45,6 @@ export interface EndorserApiOptions {
 }
 
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex')
-
-function tokenMatches(presented: unknown, expected: string): boolean {
-  if (typeof presented !== 'string') return false
-  const a = Buffer.from(presented)
-  const b = Buffer.from(expected)
-  return a.length === b.length && timingSafeEqual(a, b)
-}
 
 export function buildEndorserApi(options: EndorserApiOptions) {
   if (options.token.length < 32) throw new Error('endorser-service token must be at least 32 characters')

@@ -66,10 +66,12 @@ const shared = { agent, db, endorser, endorserDid: config.ENDORSER_DID, logger }
 const internalApi = buildInternalApi({
   logger,
   readiness,
+  token: config.INTERNAL_API_TOKEN,
   commands: commandRoutes({
     onboarding: shared,
     catalogue: shared,
     exchanges: { agent, db, didcommEndpoint: config.DIDCOMM_ENDPOINT, logger, pendingCorrelations },
+    outbox: { db },
   }),
 })
 await internalApi.listen({ host: config.INTERNAL_API_HOST, port: config.INTERNAL_API_PORT })

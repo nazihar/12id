@@ -25,6 +25,8 @@ const configSchema = z.object({
   // Private internal API (D2). Bind to the container's private network address, never 0.0.0.0 on a host.
   INTERNAL_API_HOST: z.string().min(1).default('127.0.0.1'),
   INTERNAL_API_PORT: z.coerce.number().int().min(1).max(65535).default(3410),
+  /** Shared secret the platform API presents on the internal API (Phase 3). Optional locally. */
+  INTERNAL_API_TOKEN: z.string().min(32).optional(),
 
   // Root Askar store on Postgres; tenants are profiles inside it (T1).
   ASKAR_STORE_ID: z.string().regex(/^[a-z_][a-z0-9_]{0,62}$/, 'store id doubles as the Postgres database name'),

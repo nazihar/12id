@@ -44,9 +44,10 @@ done
 #   agent_root        agent-service root Askar store (tenant wallets: keys, connections, credentials)
 #   agent_service     tenants, catalogue, outbox
 #   endorser_service  tenant bindings, endorsement audit
+#   platform_api      Phase 3: tenants, API keys, wallets, mirror tables, webhook queue
 # compose.agent.yml interpolates secrets from three files, so deploy.sh needs EXTRA_SECRETS here.
 if [ -f "$ROOT/infra/staging/compose.agent.yml" ] && EXTRA_SECRETS="ledger mediator" "$DEPLOY" agent ps --status running agent-postgres | grep -q agent-postgres; then
-  for db in agent_root agent_service endorser_service; do
+  for db in agent_root agent_service endorser_service platform_api; do
     EXTRA_SECRETS="ledger mediator" "$DEPLOY" agent exec -T agent-postgres pg_dump -U postgres --format=custom "$db" \
       | age -r "$recipient" > "$dest/agent-$db.dump.age"
     if [ "$(stat -c %s "$dest/agent-$db.dump.age")" -lt 1024 ]; then

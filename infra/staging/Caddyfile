@@ -121,6 +121,19 @@ agent.12id.naziharitsolution.com {
 	}
 }
 
+# Phase 3 platform-api: the customer-facing REST API. /internal/* (mediator webhook receiver)
+# and /admin/* (operator bootstrap, SSH tunnel to 127.0.0.1:3500) never leave the VM.
+api.12id.naziharitsolution.com {
+	import hardening
+
+	@private path /internal /internal/* /admin /admin/*
+	respond @private "Not Found" 404
+
+	import per_ip_limit api_per_ip 600
+
+	reverse_proxy 127.0.0.1:3500
+}
+
 # DIDComm mediator (W4). Two replicas; WebSocket upgrades are proxied automatically.
 mediator.12id.naziharitsolution.com {
 	import hardening
@@ -130,6 +143,11 @@ mediator.12id.naziharitsolution.com {
 	# smoke tests read it on the VM at 127.0.0.1:3001/invite.
 	@invite path /invite /invite/*
 	respond @invite "Not Found" 404
+
+	# The patched POST /admin/invitations (Phase 3 P1) is for the platform API on the Docker
+	# network only.
+	@admin path /admin /admin/*
+	respond @admin "Not Found" 404
 
 	import per_ip_limit mediator_per_ip 300
 

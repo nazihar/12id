@@ -1,5 +1,5 @@
-# One image for agent-service and endorser-service (Phase 2 A10); the compose file picks the
-# entry script. Node 22.20 runs the TypeScript sources directly; no tsx (Phase 0 finding).
+# One image for agent-service, endorser-service and platform-api (Phase 2 A10, Phase 3 P9); the
+# compose file picks the entry script. Node 22.20 runs the TypeScript sources directly; no tsx (Phase 0 finding).
 FROM node:22.20.0-bookworm-slim
 
 WORKDIR /app
@@ -10,6 +10,7 @@ COPY package.json package-lock.json ./
 COPY credo-base/package.json credo-base/
 COPY agent-service/package.json agent-service/
 COPY endorser-service/package.json endorser-service/
+COPY platform-api/package.json platform-api/
 COPY spikes/package.json spikes/
 RUN npm ci --omit=dev && npm cache clean --force
 
@@ -18,6 +19,8 @@ COPY agent-service/src agent-service/src
 COPY agent-service/drizzle agent-service/drizzle
 COPY endorser-service/src endorser-service/src
 COPY endorser-service/drizzle endorser-service/drizzle
+COPY platform-api/src platform-api/src
+COPY platform-api/drizzle platform-api/drizzle
 
 USER node
 ENTRYPOINT ["node"]

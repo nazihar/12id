@@ -84,6 +84,15 @@ export async function listConnections(deps: ExchangeDeps, tenantId: string, outO
   })
 }
 
+export async function getConnection(deps: ExchangeDeps, tenantId: string, id: string) {
+  await assertTenantReady(deps, tenantId)
+  return withTenant(deps, tenantId, async (t) => {
+    const c = await t.modules.didcomm.connections.findById(id)
+    if (!c) throw new ExchangeError(404, `connection ${id} not found`)
+    return { id: c.id, state: c.state, theirLabel: c.theirLabel ?? null, outOfBandId: c.outOfBandId ?? null, createdAt: c.createdAt }
+  })
+}
+
 export async function offerCredential(
   deps: ExchangeDeps,
   tenantId: string,
@@ -153,7 +162,19 @@ export async function getCredentialExchange(deps: ExchangeDeps, tenantId: string
   return withTenant(deps, tenantId, async (t) => {
     const record = await t.modules.didcomm.credentials.findById(id)
     if (!record) throw new ExchangeError(404, `credential exchange ${id} not found`)
-    return { id: record.id, state: record.state, threadId: record.threadId, connectionId: record.connectionId ?? null, errorMessage: record.errorMessage ?? null }
+    // The offered cred def id (unqualified, as sent) lives in the offer format data, not on the record.
+    const data = await t.modules.didcomm.credentials.getFormatData(id).catch(() => null)
+    const offer = data?.offer?.indy as { cred_def_id?: string } | undefined
+    const attributes = Object.fromEntries((record.credentialAttributes ?? []).map((a) => [a.name, a.value]))
+    return {
+      id: record.id,
+      state: record.state,
+      threadId: record.threadId,
+      connectionId: record.connectionId ?? null,
+      errorMessage: record.errorMessage ?? null,
+      credentialDefinitionId: offer?.cred_def_id ?? null,
+      attributes,
+    }
   })
 }
 

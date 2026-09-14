@@ -195,12 +195,13 @@ export async function createEndorserAgent() {
 export type EndorserAgent = Awaited<ReturnType<typeof createEndorserAgent>>
 
 /** A Credo holder behind the staging mediator (HTTP outbound + PickUpV2: findings W8). */
-export async function createHolderAgent(name: string, options: { autoAccept?: boolean } = {}) {
-  const invitationFile = env('MEDIATOR_INVITATION_FILE')
+export async function createHolderAgent(name: string, options: { autoAccept?: boolean; mediatorInvitationUrl?: string } = {}) {
+  // Phase 3: the platform mints a per-wallet invitation; earlier smokes read the startup one from a file.
+  const mediatorInvitationUrl = options.mediatorInvitationUrl ?? readFileSync(env('MEDIATOR_INVITATION_FILE'), 'utf8').trim()
   return createMemoryAgent(name, {
     didcomm: v1DidComm({
       outbound: ['http'],
-      mediatorInvitationUrl: readFileSync(invitationFile, 'utf8').trim(),
+      mediatorInvitationUrl,
       pickupStrategy: DidCommMediatorPickupStrategy.PickUpV2,
       autoAccept: options.autoAccept,
     }),

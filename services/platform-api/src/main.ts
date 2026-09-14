@@ -1,0 +1,81 @@
+/**
+ * platform-api entry point. Assumes `provision.ts` has migrated the database.
+ *
+ * One process runs the HTTP API, the outbox consumer and the webhook dispatcher (single replica
+ * in Phase 3, like agent-service). SIGTERM: readiness → 503, stop the workers, wait for in-flight
+ * deliveries, close the server and the pools.
+ */
+import { createServiceLogger } from '@12id/credo-base/logger.ts'
+
+import { createAgentClient } from './agent-client.ts'
+import { loadConfig } from './config.ts'
+import { createDatabase } from './db/client.ts'
+import { buildApp, type ReadinessReport } from './http/app.ts'
+import { expireIdempotencyKeys } from './http/idempotency.ts'
+import { createMediatorClient } from './mediator-client.ts'
+import { createOutboxConsumer } from './outbox-consumer.ts'
+import { handleMediatorWebhook } from './wake.ts'
+import { createDispatcher } from './webhooks/dispatcher.ts'
+import { endpointLookup } from './webhooks/events.ts'
+
+const config = loadConfig()
+const logger = createServiceLogger({ name: 'platform-api', level: config.LOG_LEVEL })
+
+let draining = false
+const { pool, db } = createDatabase(config.DATABASE_URL)
+const agent = createAgentClient({ baseUrl: config.AGENT_API_URL, token: config.AGENT_API_TOKEN })
+const mediator = createMediatorClient({ adminUrl: config.MEDIATOR_ADMIN_URL, adminToken: config.MEDIATOR_ADMIN_TOKEN, drizzleUrl: config.MEDIATOR_DRIZZLE_URL })
+const endpoints = endpointLookup(db)
+
+async function readiness(): Promise<ReadinessReport> {
+  const [database, agentOk, mediatorDb] = await Promise.all([
+    pool.query('select 1').then(() => true, () => false),
+    agent.healthy(),
+    mediator.healthy(),
+  ])
+  return { ready: database && agentOk && !draining, draining, checks: { database, agent: agentOk, mediatorDatabase: mediatorDb } }
+}
+
+const app = buildApp({
+  config,
+  db,
+  agent,
+  mediator,
+  logger,
+  readiness,
+  wake: (connectionId) => handleMediatorWebhook({ db, mediator, endpoints, logger, debounceMs: config.WAKE_DEBOUNCE_MS }, connectionId),
+})
+
+const consumer = createOutboxConsumer({ db, agent, logger, endpoints, batch: config.OUTBOX_BATCH })
+const dispatcher = createDispatcher({ db, logger, timeoutMs: config.WEBHOOK_TIMEOUT_MS, maxAttempts: config.WEBHOOK_MAX_ATTEMPTS })
+
+await app.listen({ host: config.HOST, port: config.PORT })
+const stopConsumer = consumer.start(config.OUTBOX_POLL_MS)
+const stopDispatcher = dispatcher.start(config.WEBHOOK_POLL_MS)
+const expiry = setInterval(() => void expireIdempotencyKeys(db, config.IDEMPOTENCY_TTL_MS).catch((error: unknown) => logger.warn({ err: error }, 'idempotency expiry failed')), 10 * 60 * 1000)
+
+async function drain(signal: string) {
+  if (draining) return
+  draining = true
+  const started = Date.now()
+  logger.info({ signal }, 'drain started')
+  clearInterval(expiry)
+  await Promise.all([stopConsumer(), stopDispatcher()])
+  const deadline = started + config.DRAIN_DEADLINE_MS
+  while (dispatcher.inFlight() > 0 && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 100))
+  await app.close()
+  await mediator.close()
+  await pool.end()
+  logger.info({ durationMs: Date.now() - started, inFlight: dispatcher.inFlight() }, 'drain complete')
+}
+
+for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+  process.on(signal, () => {
+    void drain(signal).then(() => process.exit(0), (error: unknown) => {
+      logger.error({ err: error }, 'drain failed')
+      process.exit(1)
+    })
+  })
+}
+
+logger.info({ host: config.HOST, port: config.PORT, publicUrl: config.PUBLIC_URL, agentApi: config.AGENT_API_URL, mediatorAdmin: config.MEDIATOR_ADMIN_URL }, 'platform-api ready')

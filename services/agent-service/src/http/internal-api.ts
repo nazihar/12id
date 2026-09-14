@@ -6,6 +6,7 @@
  * in its schema.
  */
 import { internalApiErrorHandler } from '@12id/credo-base/fastify-errors.ts'
+import { INTERNAL_TOKEN_HEADER, tokenMatches } from '@12id/credo-base/internal-token.ts'
 import Fastify from 'fastify'
 import { type FastifyPluginAsyncZod, serializerCompiler, validatorCompiler, type ZodTypeProvider } from 'fastify-type-provider-zod'
 import type { Logger as PinoLogger } from 'pino'
@@ -25,6 +26,11 @@ export interface InternalApiOptions {
   readiness: () => Promise<ReadinessReport>
   /** Command routes (tenants, catalogue, exchanges); omitted in health-only tests. */
   commands?: FastifyPluginAsyncZod
+  /**
+   * Shared secret the platform API presents (Phase 3 P0). Health routes stay open for container
+   * checks; everything else answers 401 without it. Omitted in health-only tests.
+   */
+  token?: string
 }
 
 export function buildInternalApi(options: InternalApiOptions) {
@@ -37,6 +43,17 @@ export function buildInternalApi(options: InternalApiOptions) {
   app.setValidatorCompiler(validatorCompiler)
   app.setSerializerCompiler(serializerCompiler)
   app.setErrorHandler(internalApiErrorHandler)
+
+  if (options.token !== undefined) {
+    if (options.token.length < 32) throw new Error('internal API token must be at least 32 characters')
+    const token = options.token
+    app.addHook('onRequest', async (request, reply) => {
+      if (request.url === '/healthz' || request.url === '/readyz') return
+      if (!tokenMatches(request.headers[INTERNAL_TOKEN_HEADER], token)) {
+        return reply.code(401).send({ error: 'unauthorized', reason: 'missing or invalid internal token' })
+      }
+    })
+  }
 
   // Liveness: the process is up and the event loop answers. Never checks dependencies, so an
   // orchestrator does not restart the agent because the ledger is slow.

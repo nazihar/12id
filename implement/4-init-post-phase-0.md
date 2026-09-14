@@ -1,6 +1,6 @@
 # SSI Platform — System Architecture and Implementation Plan
 
-**Status:** Design handover document — **revised after Phase 0 (Android pass), Phase 1 (staging infrastructure) and Phase 2 (agent services on staging)**
+**Status:** Design handover document — **revised after Phase 0 (Android pass), Phase 1 (staging infrastructure), Phase 2 (agent services on staging) and Phase 3 (platform API on staging)**
 **Audience:** Implementation engineer / coding agent
 **Stack decision:** Credo-TS 0.7 + DIDComm v1 + AnonCreds + Hyperledger Indy
 **Evidence:** every Phase 0 claim below is backed by a run or a source read recorded in [`../../phase0/findings.md`](../../phase0/findings.md). The pre-Phase-0 version of this document is kept at [`init.pre-phase0.md`](init.pre-phase0.md).
@@ -34,6 +34,12 @@ Phase 0 ran the stack end to end on Android. Content now falls into these tiers,
 - **Tenant issuance and verification over the internet:** a Credo holder behind the staging mediator against `https://agent.<domain>`, v1 only, correlation ids on every state transition.
 - **Crash and shutdown behaviour:** a hard kill leaves both sides permanently desynchronised (nothing retries); a drained shutdown loses nothing; a naive `agent.shutdown()` loses the message being processed.
 
+**Confirmed (Phase 3, staging, run).** Observed with the deployed platform-api (`10-phase-3-findings.md`). Includes:
+- **Customer API end to end:** API key → catalogue → wallet → per-wallet mediator invitation → connection → v1 credential → template proof, with a Credo holder, over `https://api.<domain>`.
+- **Signed webhooks** for every transition, first-attempt delivery, idempotent replays.
+- **The §4.8 wake path's server half:** mediator webhook → wallet lookup through the mediator connection's `out_of_band_id` → debounced `wallet.sync_requested`.
+- **The native Kotlin holder on a phone through the platform API** (`smoke:platform-android`): per-wallet mediator invitation, live and offline credentials, template proof; a message queued while the app was force-stopped produced `wallet.sync_requested` 0.4 s later and was collected 7.2 s after reopen.
+
 **Not yet tested.** Stated from documentation or reasoning only. Includes:
 - **everything about the Swift/iOS holder**;
 - the native Kotlin holder against a **tenant** issuer (it was tested against a single-tenant smoke issuer);
@@ -41,7 +47,7 @@ Phase 0 ran the stack end to end on Android. Content now falls into these tiers,
 - mediator replica failover under load, and duplicate webhooks across replicas;
 - restrictive corporate Wi-Fi;
 - production (non-von-network) ledgers and the TAA;
-- all platform-API behaviour.
+- the customer-side push → `sync()` half of §4.8.
 
 Phase 0 found that the architecture holds. It also found that **three configuration switches, two holder fork changes and one mediator setting** must all be right, and each fails silently when wrong (§2.7.1, §2.7.4, §2.3). Treat those as load-bearing.
 
@@ -127,7 +133,7 @@ The tested image is built on **Credo 0.6.0** (`@credo-ts/didcomm@0.6.0`, `@openw
 
 **Protocols implemented.** Out-of-band invitation (RFC 0434), mediator coordination (RFC 0211), pickup v1 (RFC 0212), pickup v2 (RFC 0685), implicit pickup. Its generated invitation advertises `handshake_protocols` of both `didexchange/1.1` and `connections/1.0`, and `accept: ["didcomm/aip1", "didcomm/aip2;env=rfc19"]`. **The invitation has no `label` field** (RFC 0434 makes it optional; the stock Kotlin holder requires it — §2.7.4).
 
-**Open mediation — confirmed gap.** The mediator grants mediation to any agent that presents its invitation, and prints a reusable multi-use invitation at startup. Controlling acceptance of mediation requests is **not implemented**. Mitigations to implement ourselves:
+**Open mediation — confirmed gap, mitigated in Phase 3.** The mediator grants mediation to any agent that presents its invitation, and prints a reusable multi-use invitation at startup. Controlling acceptance of mediation requests is **not implemented** upstream. Built so far: per-wallet single-use invitations minted through a patched internal route (`POST /admin/invitations`, §12.8) and served only by `GET /v1/wallet/mediator-invitation` behind a wallet token; `/invite` and `/admin/*` blocked at the edge; per-IP rate limits; a mediation-spike alert. An unused invitation does not expire on the mediator. Original mitigation list:
 - Do not publish a static, universally-shared invitation. Serve per-tenant or per-user invitations from the platform API behind auth, with short expiry.
 - Rate limit mediation requests at the ingress layer.
 - Monitor mediation record creation rate and alert on anomalies.
@@ -198,7 +204,7 @@ Responsibilities:
 - Schema and credential definition catalogue — **storing both qualified and unqualified identifiers** per ledger object (§2.7.2)
 - Proof request templates
 - Webhook delivery to customer backends
-- **Device push-token registry** keyed by mediator connection, and the mediator webhook receiver (§4.8)
+- **Wallets** (per-installation tokens), per-wallet mediator invitations, and the mediator webhook receiver that relays wake-ups to the customer (§4.8, §12.12). No device tokens are stored
 - Admin UI
 - Business-data-to-credential-attribute mapping
 
@@ -317,9 +323,10 @@ With `QueueAndLiveModeDelivery` the mediator checks for a *live-mode* session (a
 | Mediator | Holder SDK | DIDComm v1: batch response + queued messages | WSS | Over the holder's socket | Only in response to pickup; the holder has no inbound endpoint |
 | Holder SDK | Issuer/Verifier agent | DIDComm v1 (connections/1.0 request, credential request, presentation, acks) | HTTPS | **Outbound from device, direct** | Agent endpoints must be reachable from mobile networks |
 | Issuer/Verifier agent | Mediator | DIDComm v1 `routing/1.0/forward` | Holder's advertised mediator endpoint (WSS when ws is listed first) | Outbound | Credo opens a socket, sends, and closes it immediately when no response is expected — normal |
-| Mediator | Platform API | HTTPS webhook `{connectionId, fcmToken:null}` | HTTPS | Outbound | **Not yet tested.** Fires per queued message; unauthenticated; see §2.3 for when it fires at all |
-| Holder SDK (via host app) | Platform API | REST: register device push token | HTTPS | Outbound from device | New in this revision (§4.8) |
-| Platform API | FCM / APNs | Push | HTTPS | Outbound | Wakes the device to trigger pickup |
+| Mediator | Platform API | HTTP webhook `{connectionId}` to a secret path | HTTP (Docker network) | Outbound | **Confirmed.** Fires per queued message; no authentication beyond the path |
+| Holder SDK | Platform API | REST: `/v1/ledger`, `/v1/wallet/mediator-invitation` (wallet token) | HTTPS | Outbound from device | Phase 3 |
+| Platform API | Mediator | `POST /admin/invitations` (patched route, token) | HTTP (Docker network) | Outbound | Phase 3; never reachable from the internet |
+| Platform API | Customer backend | `wallet.sync_requested` webhook | HTTPS | Outbound | The customer pushes its own app (FCM/APNs); §12.12 |
 | Issuer agent | Indy pool | Indy client protocol | TCP (client port) | Outbound | Writes: NYM, SCHEMA, CLAIM_DEF |
 | Verifier agent | Indy pool | Indy client protocol | TCP | Outbound | Reads only |
 | Holder SDK | Indy pool | Indy client protocol | TCP (non-standard ports, e.g. 9702–9708) | Outbound from device | Reads schema and cred def. See §4.6 for reachability results |
@@ -358,11 +365,11 @@ Private: Postgres instances, Redis, admin UI (behind auth + IP allowlist). The m
 
 1. SDK generates a wallet key, stores it in Keychain (iOS) / Keystore (Android).
 2. SDK fetches the genesis file from the platform API, writes it to app storage, and passes the path as `genesisPath`. (**Confirmed on device**; no framework change needed.)
-3. SDK fetches a short-lived mediator out-of-band invitation from the platform API.
+3. SDK fetches its single-use mediator out-of-band invitation from `GET /v1/wallet/mediator-invitation`, authenticated by the wallet token the customer backend created with `POST /v1/wallets` (§12.13).
 4. SDK completes the DIDComm connection to the mediator (`connections/1.0` on Kotlin).
 5. SDK sends a mediation request; mediator grants and returns routing key + endpoint.
 6. SDK starts `PickUpV1` polling over its persistent WebSocket.
-7. Host app obtains its FCM/APNs token and the SDK registers it with the platform API against this wallet's mediator connection (§4.8).
+7. Nothing push-related is registered with the platform: the mediator connection created from the per-wallet invitation already identifies the wallet (§4.8).
 
 From this point, every pairwise DID the wallet creates advertises the mediator's endpoint and routing key (observed: `serviceEndpoint: ws://<mediator>`, one routing key).
 
@@ -413,13 +420,13 @@ If revocation is added later, the original flow applies (registry entries batche
 
 ### 4.8 Offline / background message delivery
 
-**Revised.** The mediator cannot learn device tokens from our holder (no push-notification protocol in the framework), so the platform owns the token mapping.
+**Revised in Phase 3 (§12.12).** The mediator cannot learn device tokens from our holder, and any token belongs to the customer's own Firebase/Apple project, so the platform relays the wake-up to the customer instead of pushing.
 
-1. At wallet onboarding the host app registers its FCM/APNs token with the platform API, keyed to the wallet's mediator connection ID (§4.3 step 7).
+1. The wallet's mediator connection was created from an invitation minted for that wallet (§4.3 step 3); the mediator stores its `out_of_band_id`.
 2. A message for the holder arrives at the mediator and is queued (`QueueAndLiveModeDelivery`).
-3. Mediator POSTs `{ connectionId, fcmToken: null }` to the platform webhook. **Not yet tested** — and in single-instance mode it only fires if a Firebase block is configured (§2.3). Expect a call **per queued message**, including while the app is open.
-4. Platform API looks up the device token by `connectionId`, de-duplicates bursts, and sends a push via FCM or APNs.
-5. Customer app receives it and calls the SDK's `sync()`.
+3. Mediator POSTs `{ connectionId }` to `platform-api/internal/mediator/<secret>` (**confirmed**; needs multi-instance `none` + the Firebase placeholder, §2.3). One call **per queued message**, including while the app is open.
+4. Platform API reads the connection's `out_of_band_id` (read-only role on the mediator database), finds the wallet, and emits at most one signed `wallet.sync_requested` webhook per wallet per 30 s (**confirmed**).
+5. The customer backend pushes its app with its own FCM/APNs; the app calls the SDK's `sync()`.
 6. SDK runs a `PickUpV1` batch pickup immediately; queued messages are delivered. (**Confirmed:** after a force-stop, a credential offered while the app was closed was collected 1.7 s after the app reopened.)
 
 > Design note: the SDK should expose `sync()` for the host app to call from its own notification handler, rather than claiming a notification category. Customers will already have push infrastructure. `sync()` should trigger a pickup immediately rather than waiting for the next poll.
@@ -717,7 +724,24 @@ Plan: [`7-phase-2.md`](7-phase-2.md); evidence: [`8-phase-2-findings.md`](8-phas
 
 **Also new:** `endorser-service` (§12.10). **Multi-tenant traps** (findings T1): Credo's default cache breaks the second tenant (use `InMemoryLruCache`, never `useCachedStorageService`); inbound messages are processed one at a time across all tenants by default.
 
-### Phase 3 — Platform API
+### Phase 3 — Platform API — **deployed on staging**
+
+Plan: [`9-phase-3.md`](9-phase-3.md); evidence: [`10-phase-3-findings.md`](10-phase-3-findings.md); code: `services/platform-api/`, `infra/staging/compose.platform.yml`, runbook `infra/runbooks/platform-api.md`.
+
+- [x] Auth: API keys per tenant (sha256 stored, shown once); operator bootstrap routes behind an admin token, blocked at the edge; agent-service internal API now token-gated
+- [x] `GET /v1/wallet/mediator-invitation` — wallet-token auth, single-use invitation per wallet minted by the patched mediator (§2.3, §12.8, §12.13)
+- [x] `GET /v1/ledger` — genesis URL, sha256, minisign signature URL and public key, vdr proxy (the file stays on the versioned genesis host)
+- [—] `POST /devices` — dropped: wake-ups are relayed to the customer (§12.12)
+- [x] `POST /v1/connections/invitations` — single- and multi-use; `GET /v1/connections`, `/{id}`
+- [x] `POST /v1/credentials/offer` (async, 202) and `GET /v1/credentials`, `/{id}` from mirror tables fed by agent-service's outbox
+- [x] Proof templates (by schema name across versions, or by cred def id) and `POST /v1/proofs/request`, `GET /v1/proofs/{id}` with `verified` + `disclosed`
+- [x] Webhooks: HMAC-signed, Postgres-queued, exponential backoff, dead-letter with customer retry; `Idempotency-Key` on POSTs
+- [x] Mediator webhook receiver → wallet via `out_of_band_id` → debounced `wallet.sync_requested` (§4.8)
+- [x] OpenAPI (`/openapi.json`, committed) and integration guide (`services/platform-api/docs/api.md`)
+- [x] `smoke:platform-credo` PASSED over the public API
+- [x] `smoke:platform-android` PASSED on the phone (gate): per-wallet invitation, live + offline + template proof, wake-up from the offline message
+
+Original checklist:
 
 - [ ] Auth: API keys scoped per tenant
 - [ ] `GET /mediator/invitation` — authenticated, short-lived, per-user mediator invitation (do not ship a static one; see §2.3)
@@ -834,6 +858,12 @@ Plan: [`7-phase-2.md`](7-phase-2.md); evidence: [`8-phase-2-findings.md`](8-phas
 
 28. **An attribute cannot be both revealed and predicated** in one v1 proof request (AnonCreds). With a mandatory `expiresAt` predicate, `expiresAt` can never be disclosed.
 
+29. **Single-file bind mounts ignore a replaced file** (Phase 3). Syncing the Caddyfile by extracting over it created a new inode; `caddy reload` re-read the old content and the new sites silently did not exist. Recreate the container after syncing.
+
+30. **The mediator webhook fires during mediation setup** (Phase 3). A fresh wallet triggers `wallet.sync_requested` before it has any customer connection. Customers must treat the event as "sync now", not "a credential arrived".
+
+31. **A used mediator invitation fails silently** (Phase 3, confirmed on the phone). After an app data wipe, the holder presents the wallet's spent single-use invitation; the mediator logs `Out-of-band record has been already processed` and sends nothing back, and the Kotlin holder reports only `Connection to the mediator timed out` after 20 s. The SDK must fetch a new invitation from `GET /v1/wallet/mediator-invitation` and retry on that timeout (Phase 5).
+
 ---
 
 ## 12. Decisions
@@ -885,6 +915,8 @@ The published mediator image is Credo 0.6.0; our agents are 0.7.0. Upstream `mai
 
 Staging runs two replicas of this image with a pre-baked migration image (§7.3). A Credo 0.7 issuer and a Credo 0.7 holder interoperate with it end to end over TLS (Phase 1 `smoke:credo`).
 
+**Amended in Phase 3: `12id/mediator:375518d-p2`** adds a second patched file, `apps/mediator/build/agent.js`, with an internal `POST /admin/invitations` route (token-guarded, absent without `ADMIN_API_TOKEN`, 404 at the edge) that mints single-use invitations for the platform API.
+
 **Amended in Phase 2: the image is now `12id/mediator:375518d-p1`**, the pinned image plus one patched file. The Postgres pickup queue never deleted messages handed to a **pickup-v1** holder (`takeFromQueue({ deleteMessages: true })` only selected), so the native holder was re-sent every message on every poll and answered every copy of a proof request. Upstream `main` has the same code. The patch (`infra/staging/mediator/Dockerfile.patched`) replaces that branch with an atomic delete-on-handover. File it upstream; re-check on every mediator upgrade. `8-phase-2-findings.md` has the evidence.
 
 The rejected option (b), porting the mediator to 0.7 ourselves, is roughly 3,700 lines of TypeScript with 48 files touching Credo, plus permanent ownership of image builds and security patching.
@@ -913,6 +945,14 @@ Consequence: tenant DIDs inherit the endorser's `did:indy` namespace, so the pro
 Credo's `DidCommHttpInboundTransport` is Express-only, so the public DIDComm port stays on Credo's stock Express transport, untouched. Our own APIs (agent-service internal API now, platform API in Phase 3) use Fastify with zod schemas: request validation and response serialization are enforced by the framework, and undeclared response fields are stripped. A shared error handler answers server errors generically (a local run leaked SQL text in a 500 body before it existed).
 
 ---
+
+### 12.12 Push wake-up path — decided: relay to the customer (new, Phase 3)
+
+The platform never sends FCM/APNs pushes and stores no device tokens. The SDK is embedded in the customer's app, so push credentials and tokens belong to the customer's own Firebase/Apple projects. The mediator webhook is mapped to a wallet and relayed as a signed `wallet.sync_requested` webhook; the customer pushes its app, which calls `sync()`. Revisit if a customer cannot run push infrastructure (option: per-tenant FCM credentials uploaded to the platform).
+
+### 12.13 Wallet authentication — decided: per-wallet tokens via the customer backend (new, Phase 3)
+
+`POST /v1/wallets` (API key) returns a `walletToken` that the customer backend hands to its app. It authenticates the SDK-facing routes, is revocable per installation, and never links a wallet to an end-user identity on the platform side. A per-tenant key embedded in the app was rejected: extractable, and it leaves wallets anonymous, which would break the wake-up mapping.
 
 ## Appendix A — Repository reference
 

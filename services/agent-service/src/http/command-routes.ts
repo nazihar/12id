@@ -3,7 +3,10 @@
  * is the only caller. Every route is scoped by tenant id in the path.
  */
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
+import { eq } from 'drizzle-orm'
 import { z } from 'zod'
+
+import { tenants } from '../db/schema.ts'
 
 import { type CatalogueDeps, publishCredentialDefinition, publishSchema } from '../ledger/catalogue.ts'
 import { schemaInput } from '../ledger/schema-input.ts'
@@ -14,6 +17,7 @@ import {
   ExchangeError,
   type ExchangeDeps,
   createInvitation,
+  getConnection,
   getCredentialExchange,
   getProofExchange,
   listConnections,
@@ -22,12 +26,14 @@ import {
 } from '../exchanges/exchanges.ts'
 import { type OnboardingDeps, createTenantRecord, onboardTenant } from '../tenants/onboarding.ts'
 import { EndorsementRefusedError } from '../endorser/endorser-client.ts'
+import { type OutboxDeps, outboxRoutes } from './outbox-routes.ts'
 import { WireIdentifierError } from '@12id/credo-base/ids.ts'
 
 export interface CommandDeps {
   onboarding: OnboardingDeps
   catalogue: CatalogueDeps
   exchanges: ExchangeDeps
+  outbox: OutboxDeps
 }
 
 const tenantParams = z.object({ tenantId: z.string().min(1) })
@@ -55,6 +61,9 @@ export const commandRoutes = (deps: CommandDeps): FastifyPluginAsyncZod => async
       return reply.code(400).send({ error: 'bad_request', reason: (error as Error).message })
     }
     if (error instanceof EndorsementRefusedError) return reply.code(422).send({ error: 'endorsement_refused', reason: error.message })
+    // Fastify's own client errors (empty JSON body, payload too large) carry a 4xx statusCode.
+    const statusCode = (error as { statusCode?: number }).statusCode
+    if (statusCode && statusCode >= 400 && statusCode < 500) return reply.code(statusCode).send({ error: 'bad_request', reason: (error as Error).message })
     request.log.error({ err: error }, 'command failed')
     return reply.code(500).send({ error: 'internal', reason: 'internal error' })
   })
@@ -65,6 +74,12 @@ export const commandRoutes = (deps: CommandDeps): FastifyPluginAsyncZod => async
     // Onboarding writes the ledger; run it without holding the request open.
     void onboardTenant(deps.onboarding, tenantId).catch(() => undefined)
     return reply.code(202).send({ tenantId, status: 'pending' })
+  })
+
+  app.get('/tenants/:tenantId', { schema: { params: tenantParams, response: { 200: z.object({ tenantId: z.string(), label: z.string(), status: z.string(), did: z.string().nullable(), lastError: z.string().nullable() }), 404: errorBody } } }, async (request, reply) => {
+    const [row] = await deps.onboarding.db.select().from(tenants).where(eq(tenants.id, request.params.tenantId))
+    if (!row) return reply.code(404).send({ error: 'not_found', reason: `unknown tenant ${request.params.tenantId}` })
+    return { tenantId: row.id, label: row.label, status: row.status, did: row.did, lastError: row.lastError }
   })
 
   app.post('/tenants/:tenantId/onboard', { schema: { params: tenantParams, response: { 200: z.object({ tenantId: z.string(), status: z.string(), did: z.string().nullable() }) } } }, async (request) => {
@@ -111,6 +126,11 @@ export const commandRoutes = (deps: CommandDeps): FastifyPluginAsyncZod => async
     async (request) => listConnections(deps.exchanges, request.params.tenantId, request.query.outOfBandId)
   )
 
+  const connectionView = z.object({ id: z.string(), state: z.string(), theirLabel: z.string().nullable(), outOfBandId: z.string().nullable(), createdAt: z.date() })
+  app.get('/tenants/:tenantId/connections/:id', { schema: { params: tenantParams.extend({ id: z.string() }), response: { 200: connectionView, 404: errorBody } } }, async (request) =>
+    getConnection(deps.exchanges, request.params.tenantId, request.params.id)
+  )
+
   app.post(
     '/tenants/:tenantId/credentials/offer',
     {
@@ -125,7 +145,7 @@ export const commandRoutes = (deps: CommandDeps): FastifyPluginAsyncZod => async
 
   app.get(
     '/tenants/:tenantId/credentials/:id',
-    { schema: { params: tenantParams.extend({ id: z.string() }), response: { 200: z.object({ id: z.string(), state: z.string(), threadId: z.string(), connectionId: z.string().nullable(), errorMessage: z.string().nullable() }), 404: errorBody } } },
+    { schema: { params: tenantParams.extend({ id: z.string() }), response: { 200: z.object({ id: z.string(), state: z.string(), threadId: z.string(), connectionId: z.string().nullable(), errorMessage: z.string().nullable(), credentialDefinitionId: z.string().nullable(), attributes: z.record(z.string(), z.string()) }), 404: errorBody } } },
     async (request) => getCredentialExchange(deps.exchanges, request.params.tenantId, request.params.id)
   )
 
@@ -160,4 +180,7 @@ export const commandRoutes = (deps: CommandDeps): FastifyPluginAsyncZod => async
     },
     async (request) => getProofExchange(deps.exchanges, request.params.tenantId, request.params.id)
   )
+
+  // --- outbox feed for the platform API (Phase 3 P0) --------------------------------
+  await app.register(outboxRoutes(deps.outbox))
 }

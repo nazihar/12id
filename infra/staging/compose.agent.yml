@@ -10,7 +10,7 @@
 # agent.<domain>; 3410 (agent internal API) is for operator tooling over SSH only.
 name: agent
 
-x-image: &image 12id/services:phase2
+x-image: &image 12id/services:phase3
 
 x-ledger-env: &ledger-env
   INDY_NAMESPACE: twelveid:staging
@@ -26,6 +26,8 @@ x-agent-env: &agent-env
   DIDCOMM_PORT: "3400"
   INTERNAL_API_HOST: 0.0.0.0
   INTERNAL_API_PORT: "3410"
+  # Phase 3: the platform API presents this token on every internal call (health routes stay open).
+  INTERNAL_API_TOKEN: ${AGENT_INTERNAL_TOKEN:?decrypt secrets via deploy.sh}
   ASKAR_STORE_ID: agent_root
   ASKAR_STORE_KEY: ${AGENT_ASKAR_STORE_KEY:?decrypt secrets via deploy.sh}
   POSTGRES_HOST: agent-postgres:5432
