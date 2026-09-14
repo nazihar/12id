@@ -2,7 +2,7 @@
   "name": "@12id/credo-base",
   "private": true,
   "type": "module",
-  "description": "Shared Credo 0.7 plumbing for agent-service and endorser-service (7-phase-2.md A0). Import ./bindings.ts before any @credo-ts package.",
+  "description": "Shared Credo 0.7 plumbing for agent-service and endorser-service (implement/7-phase-2.md A0). Import ./bindings.ts before any @credo-ts package.",
   "exports": {
     "./*": "./src/*"
   },

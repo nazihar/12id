@@ -3,7 +3,7 @@ import { describe, it } from 'node:test'
 
 import { type EndorsementRequest, type TenantRegistry, checkEndorsement } from '../src/policy.ts'
 
-// Nyms from the T2 run (8-phase-2-findings.md).
+// Nyms from the T2 run (implement/8-phase-2-findings.md).
 const ENDORSER = 'N3YX7unyWS1iSNXeVc4seL'
 const TENANT_NYM = 'EAHqZgP3xBtmKuCMe57eWu'
 const OTHER_NYM = 'KaZDBincU3GEZYuNeMJH3M'

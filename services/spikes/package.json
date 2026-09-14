@@ -2,7 +2,7 @@
   "name": "@12id/spikes",
   "private": true,
   "type": "module",
-  "description": "Phase 2 spikes T1-T3 (12id/7-phase-2.md). Throwaway; results go to 12id/8-phase-2-findings.md.",
+  "description": "Phase 2 spikes T1-T3 (12id/implement/7-phase-2.md). Throwaway; results go to 12id/implement/8-phase-2-findings.md.",
   "scripts": {
     "typecheck": "tsc --noEmit"
   },

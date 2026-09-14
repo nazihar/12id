@@ -11,7 +11,7 @@ import {
   schemaIds,
 } from '../src/ids.ts'
 
-// Real identifiers from the T2 run against the staging ledger (8-phase-2-findings.md).
+// Real identifiers from the T2 run against the staging ledger (implement/8-phase-2-findings.md).
 const QUALIFIED_SCHEMA = 'did:indy:twelveid:staging:EAHqZgP3xBtmKuCMe57eWu/anoncreds/v0/SCHEMA/p2t21789293028224-badge/1.0'
 const UNQUALIFIED_SCHEMA = 'EAHqZgP3xBtmKuCMe57eWu:2:p2t21789293028224-badge:1.0'
 const QUALIFIED_CRED_DEF = 'did:indy:twelveid:staging:EAHqZgP3xBtmKuCMe57eWu/anoncreds/v0/CLAIM_DEF/35/default'

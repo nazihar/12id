@@ -1,5 +1,5 @@
 /**
- * Spike T3a (7-phase-2.md): hard-kill the tenant issuer mid-exchange and restart it.
+ * Spike T3a (implement/7-phase-2.md): hard-kill the tenant issuer mid-exchange and restart it.
  * Runs on Windows or Linux (SIGKILL is a hard terminate on both).
  *
  * Scenario:

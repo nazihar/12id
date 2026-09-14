@@ -43,7 +43,7 @@ export function env(name: string, fallback?: string): string {
   return value
 }
 
-// Staging defaults (6-phase-1-findings.md W2). Overridable for a different ledger.
+// Staging defaults (implement/6-phase-1-findings.md W2). Overridable for a different ledger.
 export const INDY_NAMESPACE = env('INDY_NAMESPACE', 'twelveid:staging')
 const GENESIS_URL = env('GENESIS_URL', 'https://genesis.12id.naziharitsolution.com/v1/pool_transactions_genesis')
 const GENESIS_SHA256 = env('GENESIS_SHA256', '6ab9bc1a3ba5ff257454ca8500a41d45756cd02c3db6c280bde51c7b363a835a')

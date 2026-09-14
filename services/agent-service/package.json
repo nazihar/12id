@@ -2,7 +2,7 @@
   "name": "@12id/agent-service",
   "private": true,
   "type": "module",
-  "description": "Multi-tenant Credo 0.7 issuer/verifier agent (7-phase-2.md). Private service: internal API + outbox; only the DIDComm endpoint is public.",
+  "description": "Multi-tenant Credo 0.7 issuer/verifier agent (implement/7-phase-2.md). Private service: internal API + outbox; only the DIDComm endpoint is public.",
   "scripts": {
     "provision": "node src/provision.ts",
     "typecheck": "tsc --noEmit",

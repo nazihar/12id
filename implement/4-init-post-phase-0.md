@@ -3,7 +3,7 @@
 **Status:** Design handover document — **revised after Phase 0 (Android pass), Phase 1 (staging infrastructure) and Phase 2 (agent services on staging)**
 **Audience:** Implementation engineer / coding agent
 **Stack decision:** Credo-TS 0.7 + DIDComm v1 + AnonCreds + Hyperledger Indy
-**Evidence:** every Phase 0 claim below is backed by a run or a source read recorded in [`../phase0/findings.md`](../phase0/findings.md). The pre-Phase-0 version of this document is kept at [`init.pre-phase0.md`](init.pre-phase0.md).
+**Evidence:** every Phase 0 claim below is backed by a run or a source read recorded in [`../../phase0/findings.md`](../../phase0/findings.md). The pre-Phase-0 version of this document is kept at [`init.pre-phase0.md`](init.pre-phase0.md).
 
 ---
 
@@ -646,7 +646,7 @@ Published to GitHub Packages as `org.hyperledger:aries-framework-kotlin`, with U
 
 ### Phase 0 — Spike — **Android: conditional pass**
 
-Rig, scripts and full evidence: `phase0/` and [`../phase0/findings.md`](../phase0/findings.md).
+Rig, scripts and full evidence: `phase0/` and [`../../phase0/findings.md`](../../phase0/findings.md).
 
 - [x] Local Indy pool (`von-network`), endorser DID, schema and credential definition published from Credo 0.7
 - [x] Credo-to-Credo control round trip, v1 end to end (establishes a baseline before involving native code)

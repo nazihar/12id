@@ -1,7 +1,7 @@
 # Phase 1 — Infrastructure (staging)
 
 ## Context
-Phase 0 passed conditionally on Android (`12id/3-phase-0-findings.md`). `12id/4-init-post-phase-0.md` §10 lists Phase 1 as infrastructure. The `phase0/` rig works but is throwaway: it runs on one Windows machine, uses a LAN IP, plain `ws`/`http`, dev passwords in compose files and no monitoring.
+Phase 0 passed conditionally on Android (`12id/implement/3-phase-0-findings.md`). `12id/implement/4-init-post-phase-0.md` §10 lists Phase 1 as infrastructure. The `phase0/` rig works but is throwaway: it runs on one Windows machine, uses a LAN IP, plain `ws`/`http`, dev passwords in compose files and no monitoring.
 
 Phase 1 turns it into a reproducible, TLS-fronted **staging environment on a cloud VM**. It also closes the Tier-"not yet tested" items that only real infrastructure can answer:
 - `wss`/`https` endpoints
@@ -9,7 +9,7 @@ Phase 1 turns it into a reproducible, TLS-fronted **staging environment on a clo
 - multi-instance mediator delivery
 - a hedge for corporate networks blocking Indy client ports
 
-**Outcome:** a staging stack that the Android holder completes live + offline issuance and verification against over TLS, plus `12id/5-phase-1-findings.md` and updates to 4-init §10/§12.
+**Outcome:** a staging stack that the Android holder completes live + offline issuance and verification against over TLS, plus `12id/implement/5-phase-1-findings.md` and updates to 4-init §10/§12.
 
 ## Decisions (this session)
 | Item | Decision | Consequence |
@@ -202,8 +202,8 @@ W1 → W2 → W3 → W9 (secrets before real deploys) → W4 → W8 `smoke:credo
 - `curl https://vdr.<domain>/...` returns the published schema; W10 assessment written.
 
 ## Document updates this produces
-- `12id/5-phase-1-findings.md`: evidence for W5, W8, W10.
-- `12id/4-init-post-phase-0.md`:
+- `12id/implement/5-phase-1-findings.md`: evidence for W5, W8, W10.
+- `12id/implement/4-init-post-phase-0.md`:
   - Tick §10 Phase 1 items.
   - §12.8 → decided (a).
   - §12.1 → deferred, with von-network staging.

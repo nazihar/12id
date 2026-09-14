@@ -2,7 +2,7 @@
   "name": "12id-services",
   "private": true,
   "type": "module",
-  "description": "Phase 2 agent services (12id/7-phase-2.md). Run TypeScript with plain node; tsx cannot run Credo 0.7.",
+  "description": "Phase 2 agent services (12id/implement/7-phase-2.md). Run TypeScript with plain node; tsx cannot run Credo 0.7.",
   "engines": {
     "node": ">=22.18.0"
   },

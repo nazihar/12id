@@ -1,7 +1,7 @@
 # Phase 2 — Agent services (plan)
 
 ## Context
-Phase 1 is complete (`12id/5-phase-1.md`, `12id/6-phase-1-findings.md`, 4-init updated). Staging on `id-dev` (`*.12id.naziharitsolution.com`) runs:
+Phase 1 is complete (`12id/implement/5-phase-1.md`, `12id/implement/6-phase-1-findings.md`, 4-init updated). Staging on `id-dev` (`*.12id.naziharitsolution.com`) runs:
 - a signed genesis `v1`;
 - a von-network pool (namespace `twelveid:staging`);
 - a Postgres-backed endorser DID `did:indy:twelveid:staging:9WnSruRkr6b3V7XX9zPjka` (store `endorser`);
@@ -14,10 +14,10 @@ Phase 1 is complete (`12id/5-phase-1.md`, `12id/6-phase-1-findings.md`, 4-init u
 Phase 2 builds the first real product service: a multi-tenant Credo 0.7 **agent-service** that customers' tenants issue and verify through. It goes to staging and is proven with the native Android holder against a **tenant** issuer.
 
 **Outputs:**
-- the plan, copied to `12id/7-phase-2.md`;
+- the plan, copied to `12id/implement/7-phase-2.md`;
 - code in `12id/services/`;
 - `12id/infra/staging/compose.agent.yml`;
-- `12id/8-phase-2-findings.md`;
+- `12id/implement/8-phase-2-findings.md`;
 - 4-init updates.
 
 ## What Phase 1 changed for this plan
@@ -177,7 +177,7 @@ Run from the workstation against **staging** (public genesis + client ports), wi
   - §7.1 transports config form;
   - §0.1 tenants tier;
   - §4.2 tenant onboarding flow as built.
-- `12id/8-phase-2-findings.md`.
+- `12id/implement/8-phase-2-findings.md`.
 
 ## Parallel track, not in this plan
 - **Android SDK (§12.6, decided to start now):** separate plan `12id/9-sdk-android.md`. Integration point: A11.

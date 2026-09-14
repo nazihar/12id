@@ -1,5 +1,5 @@
 /**
- * Spike T3b (7-phase-2.md): SIGTERM the tenant issuer while it is processing the holder's
+ * Spike T3b (implement/7-phase-2.md): SIGTERM the tenant issuer while it is processing the holder's
  * request-credential, once with a naive shutdown and once with a drain. LINUX ONLY: on Windows
  * a parent cannot deliver a catchable SIGTERM to a Node child.
  *

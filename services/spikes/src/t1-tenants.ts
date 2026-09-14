@@ -1,5 +1,5 @@
 /**
- * Spike T1 (7-phase-2.md): two tenants in one Credo 0.7.0 root agent on Postgres
+ * Spike T1 (implement/7-phase-2.md): two tenants in one Credo 0.7.0 root agent on Postgres
  * (ProfilePerWallet), each onboarded with the T2 author/endorser flow, each issuing and
  * verifying a v1 credential to ONE Credo holder behind the staging mediator, concurrently.
  *

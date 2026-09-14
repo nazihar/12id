@@ -1,5 +1,5 @@
 /**
- * T2: tenant onboarding with the author/endorser split (7-phase-2.md D3, D5).
+ * T2: tenant onboarding with the author/endorser split (implement/7-phase-2.md D3, D5).
  *
  * The tenant never holds an ENDORSER role and the endorser never writes to the ledger:
  *   NYM:            tenant builds an UNSIGNED nym request -> endorser signs it as author -> tenant submits

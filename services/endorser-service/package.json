@@ -2,7 +2,7 @@
   "name": "@12id/endorser-service",
   "private": true,
   "type": "module",
-  "description": "Internal signer for the platform endorser DID (7-phase-2.md D5, A9). Never reachable from the internet; signs only requests its policy allows; never writes to the ledger.",
+  "description": "Internal signer for the platform endorser DID (implement/7-phase-2.md D5, A9). Never reachable from the internet; signs only requests its policy allows; never writes to the ledger.",
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "node --test \"test/**/*.test.ts\""

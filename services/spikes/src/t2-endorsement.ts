@@ -1,5 +1,5 @@
 /**
- * Spike T2 (7-phase-2.md): author/endorser flow on Credo 0.7.0 against the staging ledger.
+ * Spike T2 (implement/7-phase-2.md): author/endorser flow on Credo 0.7.0 against the staging ledger.
  *
  *   MEDIATOR_INVITATION_FILE is not needed here. Needs the SSH tunnel to /register
  *   (LEDGER_REGISTER_URL, default http://127.0.0.1:19000/register) for the throwaway
