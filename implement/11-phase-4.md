@@ -1,0 +1,293 @@
+# Phase 4 — Console (operator console + tenant portal)
+
+## Context
+Phases 0–3 run on staging (`12id/implement/1…10`). Customers can do everything through `https://api.12id.naziharitsolution.com` with an API key. People still have no UI:
+- Operators create tenants and API keys over an SSH tunnel with `x-admin-token` (`services/platform-api/src/http/routes/admin.ts`).
+- Customer staff have only the REST API.
+
+4-init §10 Phase 4 lists: tenant management, catalogue (both identifier forms), a proof template builder with the expiry predicate enforced, connection and credential browsers, and a webhook delivery log.
+
+The product will be **SaaS, and also self-hostable**. SaaS needs two kinds of user: 12id operators across all tenants, and customer staff limited to their own tenant. A self-hosted install needs only the operator role. Outcome: one console app with two roles, delivered in two stages, both verified on staging.
+
+## Decisions (this session)
+| Item | Decision | Consequence |
+|---|---|---|
+| Audience | **One app, two roles:** platform operator (all tenants) and tenant member (own tenant only) | Stage **4a**: operator console. Stage **4b**: tenant portal on the same app |
+| Self-host | **Console-ready only** | No dependency on Google, our IPs or our VM; everything is configured by env. Packaging the whole stack for self-hosters is a later phase. New 4-init §12.15 |
+| Stack | **TanStack Start (full stack) + Better Auth** | Server functions are the only caller of platform-api; the browser holds only a Better Auth session cookie |
+| Auth | Better Auth with plugins `organization` (tenant membership, roles, invitations), `twoFactor`, `admin` (operator role, bans, session revocation) | Accounts come only from invitations or an operator bootstrap script (tenant onboarding writes the ledger, so there is no open sign-up) |
+| 2FA methods | **TOTP (authenticator app) or email OTP** (`twoFactor` `otpOptions.sendOTP`), plus backup codes. **Required for everyone**, enforced by our middleware (Better Auth 2FA is opt-in per user) | **Operators: TOTP required, email OTP not allowed, no trusted devices.** If someone controls an operator's mailbox, password reset + email OTP collapse into one factor. Tenant members may choose either method; trusted device 30 days allowed |
+| Console → platform-api | **New internal console scope:** `x-console-token` + `x-console-tenant` + `x-console-actor` | The existing `/v1/*` routes work unchanged; the console never sees customer API keys; every console call is audited |
+| UI | **shadcn/ui + Tailwind v4** (Base UI primitives, the shadcn default since July 2026), lucide-react icons, sonner toasts | Components are copied into `src/components/ui` and owned by us; per-deployment theming via CSS variables (self-host rebranding) |
+| Client packages | **TanStack Query** (router SSR integration), **TanStack Table**, **TanStack Form** + zod, `qrcode` | One ecosystem with Start; zod schemas shared by forms and server-function validators |
+| Data access | **The console never reads `platform_api` or agent databases** | Response stripping, validation and audit stay in platform-api |
+| Customer API keys | Stay in platform-api (sha256 table). The console only manages them through new routes | Better Auth's api-key plugin is **not** used |
+| Storage | Better Auth tables in their own database `console` on `agent-postgres` | platform-api migrations stay separate |
+| Packaging | `12id/console/`, a **separate package, lockfile and image**, outside the `services/` npm workspace | Vite and React dependencies never enter the Credo image (tsx/dual-module lesson, 4-init §7.1) |
+| Email | **`SMTP_URL` required in production-like environments** (nodemailer): email OTP, invitations and password reset all send mail. In `NODE_ENV=development` only, mail is written to the log | Staging needs a provider before 4b (owner picks one; Gmail app password acceptable for staging only) |
+| Hostname | **`12id.naziharitsolution.com`** (apex of the staging zone) | **Owner action:** add `12id.naziharitsolution.com A 123.176.58.72`. Checked 2026-09-14: the apex has no A record, and the wildcard `*.12id…` does not cover it. Cookies stay host-only (Better Auth `crossSubDomainCookies` is off by default), so session cookies never reach `api.`, `mediator.` or `agent.`. Production hostname decided with the production domain |
+
+## Architecture
+```
+browser ──Better Auth session cookie──▶ console (TanStack Start, :3600)
+                                          │ server functions only, via guard wrappers
+                                          │ x-console-token / -tenant / -actor
+                                          ▼
+                                     platform-api (:3500, Docker network 12id-agent)
+                                          ├─ /v1/*    same routes, tenant from console headers
+                                          ├─ /v1/api-keys   (new, console principal only)
+                                          └─ /admin/* (existing; now also console token + operator)
+console DB (Better Auth) ── separate database `console` on agent-postgres
+```
+Tenant isolation lives in two places:
+1. The console guard resolves the tenant from the session's organization membership, never from client input, for tenant members.
+2. platform-api scopes every query by `request.tenant` (unchanged).
+
+The console token can act as any tenant, so it:
+- exists only on the internal network;
+- is refused at the edge;
+- is audited per call with the actor.
+
+## Workstreams
+
+### C0 — Spike (gates C2) — record in `12id/implement/12-phase-4-findings.md`
+Pin exact versions of `@tanstack/react-start`, `@tanstack/react-router`, `better-auth`, the Better Auth CLI (docs now say `npx auth@latest`; pin it, never `@latest` in scripts), `drizzle-orm`/`drizzle-kit` and `vite` (no caret ranges). In a `node:22.20.0-bookworm-slim` container against local Docker Postgres, verify each against the pinned versions, because the docs move:
+
+- **Schema workflow:** `auth generate` → `drizzle-kit generate` → committed SQL migrations applied by `drizzle-kit migrate` / the drizzle migrator on a dedicated `console` database; regenerate when a plugin is added.
+- **Sign-up with invitations only.** Better Auth's `disableSignUp` would also block invitees from creating an account. Settle the mechanism, recommended: a `hooks.before` on the email sign-up endpoint that allows it only when a pending invitation exists for that email, plus the operator bootstrap script via server-side `auth.api` calls. Also `requireEmailVerification` (the invite link proves the address).
+- **`organization`:**
+  - `schema.organization.additionalFields.platformTenantId` (+ `inferOrgAdditionalFields` on the client);
+  - `allowUserToCreateOrganization: false`;
+  - `organizationHooks.beforeCreateOrganization` refusing an organization without `platformTenantId`;
+  - `sendInvitationEmail`;
+  - active organization set by a `databaseHooks.session.create` hook;
+  - `auth.api.hasPermission` on the server.
+- **`twoFactor`:**
+  - TOTP enroll/verify, `otpOptions.sendOTP` email OTP, backup codes, `trustDevice`;
+  - the sign-in `twoFactorRedirect` / `twoFactorPage` flow;
+  - how to restrict operators to TOTP (read `twoFactorMethods` at enrollment + middleware check).
+- **`admin`:** `adminRoles: ['operator']` with a custom access-control role, ban, revoke sessions. Impersonation stays **off** unless we decide otherwise.
+- **TanStack Start:**
+  - global request middleware in `src/start.ts`;
+  - `createMiddleware({ type: 'function' })` with `.middleware([authMiddleware])`;
+  - `createServerFn().middleware([...]).validator(zod)` (confirm whether the pinned version names it `validator` or `inputValidator`);
+  - `vite build` output run with plain `node`.
+- **Behind Caddy:**
+  - `baseURL`, `trustedOrigins`;
+  - `ipAddress.ipAddressHeaders` + `trustedProxies` matching Caddy on host networking (so rate limits see real client IPs, not the proxy);
+  - `rateLimit` with database storage;
+  - cookies `Secure` / `HttpOnly` / `SameSite=Lax`, host-only;
+  - `BETTER_AUTH_SECRETS` rotation.
+
+### C0 outcomes (2026-09-14) — where the spike changed this plan
+Evidence in [12-phase-4-findings.md](12-phase-4-findings.md).
+- **Production runtime: `srvx`, not Nitro.** Nitro is published only as a beta; a plain `vite build` plus `srvx --prod -s ../client dist/server/server.js` serves the app. Dependencies stay external to the server bundle, so the image ships production `node_modules`.
+- **Invitee accounts are created server-side, not by a sign-up hook.** `disableSignUp` blocks every caller; the admin plugin's `auth.api.createUser` accepts a server call without headers. The invitation page's server function validates the invitation, then creates the user. First operator: `npx auth create-admin --role operator`.
+- **Operator TOTP-only needs our code:** Better Auth offers email OTP to every 2FA user; an after-hook refuses operator sessions from `/two-factor/verify-otp`, and `operatorMiddleware` requires a verified TOTP secret.
+- **CSRF: TanStack Start's `createCsrfMiddleware`** in `src/start.ts` (server functions including GET, and all non-GET requests), with the public origin as matcher. Replaces the hand-written origin check.
+- **Every form: `method="post"` and submit disabled until `useHydrated()`**; a pre-hydration click otherwise submits the password as a GET query string.
+- **Routes as built:** `/login`, `/verify-2fa`, `/setup-2fa`, `/_authed`, `/_authed/ops`, `/_authed/account` (tenant portal placeholder).
+- **Tests:** Vitest for units (the `node --test` rule exists because of Credo, which the console never loads); Playwright `npm run e2e` against local Postgres and a local platform-api; outgoing mail can be appended to `MAIL_OUTBOX_FILE` outside production, so tests read real codes.
+- **Pins confirmed:** TanStack Table **v9** (shadcn's data-table targets it); Better Auth CLI is the `auth` package; shadcn preset `nova` on Base UI; `cn` package verified as shadcn's.
+
+### C1 — platform-api: console scope, audit, new routes
+Files: `src/http/auth.ts`, `src/http/app.ts`, `src/config.ts`, `src/db/schema.ts` (+ migration), new `src/http/routes/console.ts`, `routes/admin.ts`.
+
+- **Config:** `CONSOLE_TOKEN` (secret, ≥32 chars, optional; the scope is disabled when unset).
+- **Principal:**
+  - Generalise `TenantContext` to carry `principal: { kind: 'apiKey', apiKeyId } | { kind: 'console', actor, role }`.
+  - New hook `requireTenantPrincipal(db, consoleToken)`:
+    - A bearer API key → as today (`requireApiKey`).
+    - Otherwise `x-console-token` (constant-time via `tokenMatches` from `@12id/credo-base/internal-token.ts`) + `x-console-tenant` (uuid, must exist) + `x-console-actor` → `request.tenant`.
+  - Replace the hook on the customer scope in `app.ts`, so catalogue, exchanges, templates, wallets and webhook routes serve both principals. Idempotency keeps working because it keys on `request.tenant`.
+- **Operator access:**
+  - `/admin/*` accepts either `x-admin-token` (break-glass over SSH, kept) or console token + `x-console-role: operator` + actor.
+  - Update `requireAdminToken` into `requireOperator`.
+- **Audit:** table `console_audit` (`id`, `at`, `actor`, `role`, `tenant_id` nullable, `method`, `route` pattern, `status_code`, `request_id`).
+  - Written in `onResponse` for every console-principal request that mutates, plus key-creation and secret-rotation responses.
+  - `GET /admin/audit?tenantId=&actor=` for operators.
+- **New routes:**
+  - `POST/GET /v1/api-keys`, `DELETE /v1/api-keys/:id`: **console principal only** (403 for API keys, so a leaked key cannot mint more). Reuse `generateSecret`, `hashSecret`, `lookupPrefix` from `src/auth/tokens.ts`. The plaintext is returned once.
+  - `GET /admin/tenants/:id` (detail).
+  - `GET /admin/overview`: per tenant, status, counts of connections / credentials / proofs by state, wallets, dead deliveries, last activity.
+  - `GET /admin/webhook-deliveries?status=dead` across tenants.
+- **Edge:** the `api.` Caddy site answers 404 to any request carrying `x-console-token` or `x-console-*`. The console reaches platform-api at `http://platform-api:3500` on `12id-agent`.
+- Regenerate and commit `openapi.json`. Console routes are tagged `console` and hidden from the customer spec (`hide: true`); `npm run openapi` also emits `openapi.console.json` for the console's typed client.
+- **Tests** (`node --test --test-concurrency=1`):
+  - scope accepts API key / console headers and rejects a missing or wrong token, an unknown tenant, or a missing actor;
+  - an API key calling `/v1/api-keys` → 403;
+  - an operator-role header is required for `/admin/*` via console;
+  - audit rows are written;
+  - responses still strip unknown fields;
+  - no SQL in 500 bodies (Phase 2 regression).
+
+### C2 — Console app skeleton (`12id/console/`)
+The layout follows the TanStack Start docs (project structure, authentication, server functions, middleware) and the Better Auth TanStack Start integration guide, both read 2026-09-14. C0 re-checks them against the pinned versions.
+
+```
+package.json / package-lock.json     exact pins; scripts: dev (vite dev), build (vite build), start (node on the build output),
+                                     typecheck (tsc --noEmit), test, db:generate, db:migrate, openapi:client
+vite.config.ts                       tanstackStart() plugin placed before @vitejs/plugin-react; @tailwindcss/vite
+components.json                      shadcn config (created by `npx shadcn@<pinned> init -t start`, npm, Base UI, `@/*` alias)
+src/styles/app.css                   Tailwind v4 entry + shadcn theme CSS variables (brand tokens overridable per deployment)
+src/components/ui/                   shadcn components added via the CLI (button, card, dialog, field, input, select, table,
+                                     tabs, badge, dropdown-menu, sheet, sonner, skeleton, …); never hand-edited beyond theming
+src/components/                      app components: DataTable (TanStack Table + shadcn table: sorting, filters, pagination),
+                                     IdentifierPair (unqualified + qualified id, copy), StateBadge, SecretOnceDialog (API key /
+                                     webhook secret shown once), InvitationQr (qrcode), TemplateBuilder (TanStack Form)
+src/integrations/query.tsx           QueryClient + TanStack Router SSR-Query integration; route loaders use
+                                     queryClient.ensureQueryData(queryOptions → server functions)
+tsconfig.json                        jsx react-jsx, moduleResolution Bundler, module ESNext, target ES2022,
+                                     verbatimModuleSyntax OFF (docs: prevents server code leaking into client bundles)
+drizzle.config.ts, drizzle/          committed migrations for the `console` database (auth generate → drizzle-kit generate)
+src/router.tsx                       createRouter({ routeTree }); routeTree.gen.ts is generated, committed as the plugin expects
+src/start.ts                         createStart(): global requestMiddleware (request id, security headers) and
+                                     functionMiddleware (logging); NOT auth: auth is attached per server function
+src/routes/__root.tsx                createRootRoute: HeadContent/Scripts/Outlet; beforeLoad loads the session via
+                                     getSessionFn so SSR and client share one auth state
+src/routes/api/auth/$.ts             server route: GET/POST → auth.handler(request)   (Better Auth handler)
+src/routes/api/health.ts             server route for the healthcheck
+src/routes/login.tsx, 2fa.tsx, 2fa.setup.tsx, invite.$id.tsx, reset-password.tsx
+src/routes/_authed.tsx               pathless layout: beforeLoad → redirect to /login without a session,
+                                     to /2fa/setup without 2FA enabled (operators: TOTP)
+src/routes/_authed/ops.tsx + ops/…   operator area; beforeLoad requires role `operator`   (stage 4a)
+src/routes/_authed/t.$orgSlug.tsx + t.$orgSlug/…   tenant portal; beforeLoad sets the active org, requires membership (4b)
+src/lib/permissions.ts               createAccessControl + roles, shared by server and client plugins
+                                     (org: owner/admin/member over apiKey, webhook, catalogue, template, member, invitation;
+                                     admin plugin: operator)
+src/lib/schemas.ts                   zod input schemas shared by forms and server-function validators (client-safe)
+src/lib/auth-client.ts               createAuthClient({ plugins: [organizationClient({ ac, roles }), inferOrgAdditionalFields,
+                                     twoFactorClient({ twoFactorPage: '/2fa' }), adminClient()] })
+src/server/auth.server.ts            betterAuth({ baseURL, secret(s), trustedOrigins, database: drizzleAdapter(db, { provider: 'pg' }),
+                                     emailAndPassword { requireEmailVerification, sendResetPassword }, rateLimit { storage: 'database' },
+                                     advanced.ipAddress, hooks (invite-only sign-up), databaseHooks (active org),
+                                     plugins: [organization(...), twoFactor({ issuer: '12id', otpOptions: { sendOTP } }),
+                                     admin({ adminRoles: ['operator'] }), tanstackStartCookies() /* must be last */] })
+src/server/middleware.ts             authMiddleware (auth.api.getSession({ headers: request.headers }), requires 2FA enabled
+                                     and the session's 2FA verified) → operatorMiddleware / tenantMiddleware(permission)
+                                     (org membership via platformTenantId + auth.api.hasPermission) → context.principal
+src/server/platform.server.ts        openapi-fetch client typed from platform-api's openapi.console.json; platformFor(principal)
+                                     sets the x-console-* headers; maps platform errors to typed results
+src/server/email.server.ts, db.server.ts, env.server.ts (zod: DATABASE_URL, BETTER_AUTH_SECRET(S), BETTER_AUTH_URL,
+                                     PLATFORM_API_URL, CONSOLE_TOKEN, SMTP_URL, MAIL_FROM)
+src/features/<area>/<area>.functions.ts   createServerFn().middleware([tenantMiddleware(...)|operatorMiddleware]).validator(schema)
+                                     areas: tenants, api-keys, catalogue, templates, exchanges, wallets, webhooks, members, audit
+scripts/create-operator.ts           bootstrap first operator through auth.api (one-time set-password link, TOTP enrollment on first login)
+Dockerfile                           build stage → node:22.20.0-bookworm-slim runtime, USER node
+test/                                middleware + isolation tests
+```
+Conventions from the docs:
+- **`.functions.ts`** holds only `createServerFn` wrappers (safe to import anywhere; the client gets RPC stubs).
+- **`.server.ts`** is server-only and is imported only from handlers and middleware.
+- **Plain `.ts`** is client-safe (schemas, permissions, types).
+- **Route guards (`beforeLoad`) are for navigation UX only.** The data boundary is the middleware on every server function, as both docs stress.
+
+Rules on top:
+- **`platformFor` needs a `principal`, and only `middleware.ts` produces one** (a branded type). A test fails if any `createServerFn` in a `.functions.ts` file lacks an auth middleware, or if a `.server.ts` module is imported from a non-server file.
+- **Tenant members:** `tenantId` comes from the org's `platformTenantId`, never from input. Operators pass `tenantId` explicitly, and `operatorMiddleware` checks the role.
+- **2FA:** Better Auth enables it per user, so `authMiddleware` enforces it globally. Operators must use TOTP, so an operator whose only method is email OTP is sent to setup.
+- **Sessions:** operators 12 h, no trusted devices; members 7 days with 24 h refresh, trusted device allowed. "Sign out all sessions" is available.
+
+### C3 — Stage 4a: operator console
+Routes: `/login`, `/2fa`, `/ops`, `/ops/tenants`, `/ops/tenants/$id/*`, `/ops/operators`, `/ops/audit`.
+- **Tenants:**
+  - List from `/admin/overview`: status, DID, last error, activity.
+  - Create: `POST /admin/tenants` → create the organization with `platformTenantId` → optional owner invite.
+  - Onboard retry for `failed`.
+  - Ordering and retry-safety: the tenant is created first. If organization creation fails, the tenant page shows "no organization" with a create action. An organization is never created without a tenant id.
+- **Tenant detail (read views through the console scope):**
+  - API keys: create (shown once), revoke, last used.
+  - Catalogue: schemas and credential definitions with **both** unqualified and qualified ids, and status.
+  - Templates; connections, credentials and proofs (filters by state, `externalId`; proof `verified` + `disclosed`); wallets.
+  - Webhook endpoint; deliveries with body and retry.
+  - Members and invitations.
+- **Cross-tenant:** failed tenants, dead deliveries (`/admin/webhook-deliveries`).
+- **Operators:** invite operator, ban/unban, revoke sessions (admin plugin). Audit log viewer (`/admin/audit`).
+- The SSH `x-admin-token` path stays as break-glass; runbook updated.
+
+### C4 — Stage 4b: tenant portal
+Routes: `/t/$orgSlug/*`. Organization switcher for users in several organizations.
+
+| Role | Can do |
+|---|---|
+| `owner` | everything + member management + delete invitations |
+| `admin` | API keys, webhook, catalogue publish/deprecate, templates |
+| `member` | read-only browsers and delivery log |
+
+Screens:
+- **Members:** invite by email (link fallback), change role, remove; accept-invitation flow with 2FA enrollment.
+- **API keys:** `/v1/api-keys` (shown once).
+- **Catalogue:**
+  - Publish schema: name, version, attributes. The form requires `expiresAt` and explains 4-init §5.2 encoding rules.
+  - Publish credential definition (no revocation, stated in the UI).
+  - Deprecate / reactivate.
+- **Proof template builder:**
+  - Groups with a unique key.
+  - Credential refs by schema name (`versions: all|active`) or credential definition id, picked from the catalogue.
+  - Disclosed attributes from that schema's attribute list.
+  - Integer predicates.
+  - Client-side mirror of `validateTemplate` (`services/platform-api/src/templates.ts`): `expiresAt` never selectable, an attribute not both disclosed and predicated, unique keys. Server 400s are shown inline.
+  - Preview of the expanded unqualified cred def ids.
+- **Webhook:** set the https URL and event filter; the secret is shown once on create/rotate; deliveries log with status filter, body, retry.
+- **Browsers:** connections / credentials / proofs / wallets (read-only), plus "create connection invitation" with a QR image rendered client-side, for testing with the sample app.
+
+### C5 — Staging deploy
+- **`infra/staging/compose.console.yml`:**
+  - `console-migrate` (init: ensure `console` database + Better Auth migrations);
+  - `console` on `127.0.0.1:3600`, network `12id-agent`, `mem_limit 512m`, `stop_grace_period 30s`, healthcheck `/api/health`.
+- **Secrets:**
+  - `secrets/console.sops.env`: `BETTER_AUTH_SECRET`, `CONSOLE_TOKEN`, optional `SMTP_URL`.
+  - `CONSOLE_TOKEN` is added to `platform.sops.env` too (keep in step, as with `MEDIATOR_ADMIN_TOKEN`).
+  - Deploy with `EXTRA_SECRETS="agent platform"`.
+- **Caddy:**
+  - `12id.naziharitsolution.com` (after the owner adds the apex A record): `import hardening`, CSP + `frame-ancestors 'none'`, `per_ip_limit console_per_ip 300`, reverse_proxy 3600.
+  - `api.<domain>`: block `x-console-*` headers.
+  - Recreate the Caddy container after syncing the Caddyfile (Phase 3 trap 29).
+- `infra/scripts/backup-postgres.sh`: add `console`; one restore drill (restored database, a login works).
+- **Monitoring:** blackbox probe `https://console.<domain>/api/health`; container restart alert already covers it.
+- **Runbook** `infra/runbooks/console.md`: bootstrap operator, rotate `CONSOLE_TOKEN`, lost 2FA recovery by an operator, break-glass admin token.
+
+### C6 — Smoke and security checks
+- **`infra/smoke/console.ts`** (Playwright, workstation, against staging):
+  1. Operator logs in with password + TOTP (secret seeded by `create-operator.ts`, code via otplib). An attempt to use email OTP as an operator is refused.
+  2. Creates a tenant and waits for `ready`; invites an owner (link fallback).
+  3. The owner accepts and enrolls 2FA **with email OTP**; the code is read from a test SMTP catcher (e.g. a Mailpit container reachable only from the workstation tunnel). The owner then creates an API key, publishes schema + cred def, builds a template and sets the webhook. A second member enrolls with TOTP.
+  4. Then run the existing **`smoke:platform-credo`** with that API key → must PASS unchanged.
+- **Isolation suite:** two organizations. A member of A calls every tenant server function with B's organization slug, B's record ids, and forged `tenantId` inputs → all denied. A `member` role → mutations denied. An account without 2FA → only enrollment reachable.
+- **From outside:**
+  - `api.` with `x-console-token` → 404;
+  - `:3500`/`:3600` closed;
+  - `/admin/*` still 404;
+  - console routes unauthenticated → redirect to login;
+  - Better Auth rate limit returns 429 on a login burst;
+  - `console_audit` rows present for every mutation in the smoke.
+- No holder change, so no Android run is required for the Phase 4 gate.
+
+## Order
+C0 → C1 (can start in parallel with C0) → C2 → C3 → C5 (deploy 4a) → C6 for 4a (operator smoke + outside checks) → C4 → C5 redeploy → C6 full (portal smoke, isolation suite, `smoke:platform-credo` with a console-created key).
+
+## Verification (gate)
+- `tsc --noEmit` + tests green in `platform-api` and `console`, including the isolation suite and the import-scan rule.
+- Spike C0 recorded with versions and the enforcement mechanism for 2FA.
+- Staging:
+  - `compose ps` healthy;
+  - `smoke:console` PASSED;
+  - `smoke:platform-credo` PASSED with a console-created key;
+  - outside exposure checks as in C6;
+  - restore drill of `console`;
+  - `docker stop` of the console drains cleanly.
+
+## Document updates
+- `12id/implement/11-phase-4.md` (this plan), `12id/implement/12-phase-4-findings.md`.
+- **4-init:**
+  - §10 Phase 4 checklist ticked/amended (two roles, stages 4a/4b);
+  - §2.6 responsibilities (console);
+  - §3 matrix rows: browser → console, console → platform-api console scope;
+  - §6: console token is a high-value secret;
+  - §7 console package pins;
+  - new **§12.14** console auth (Better Auth, 2FA required, no public sign-up, console scope);
+  - new **§12.15** SaaS + self-host product decision (console self-host-ready now, stack packaging later);
+  - traps found during the build.
+
+## Out of scope
+Self-host packaging of the whole stack; OIDC/SSO (Better Auth plugin later); self-signup of tenants; billing; per-API-key rate limits; Swift pass; production ledger (§12.1); Phase 1–3 leftovers (M6 failover, alert email, `indy-node-monitor`, upstream mediator bug report).

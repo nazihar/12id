@@ -1,8 +1,10 @@
 /**
- * Writes openapi.json (the customer artefact, P8) from the route schemas. Builds the app with
- * inert dependencies: nothing is called, only the schema is read.
+ * Writes the OpenAPI documents from the route schemas. Builds the app with inert dependencies:
+ * nothing is called, only the schema is read.
+ *   openapi.json          the customer artefact (P8); console-only and operator routes left out
+ *   openapi.console.json  every route; the typed client of the Phase 4 console is generated from it
  *
- *   node scripts/openapi.ts [out=openapi.json]
+ *   node scripts/openapi.ts
  */
 import { writeFileSync } from 'node:fs'
 
@@ -23,18 +25,23 @@ const config = {
 } as PlatformConfig
 
 const inert = new Proxy({}, { get: () => () => Promise.reject(new Error('inert')) })
-const app = buildApp({
-  config,
-  db: inert as never,
-  agent: inert as never,
-  mediator: inert as never,
-  logger: pino({ level: 'silent' }),
-  readiness: async () => ({ ready: true, draining: false, checks: {} }),
-  wake: async () => 'unknown_connection',
-})
-await app.ready()
-const spec = app.swagger()
-const out = process.argv[2] ?? new URL('../openapi.json', import.meta.url)
-writeFileSync(out, `${JSON.stringify(spec, null, 2)}\n`)
-console.log(`wrote ${out} (${Object.keys((spec as { paths: object }).paths).length} paths)`)
-await app.close()
+
+for (const [spec, file] of [['customer', 'openapi.json'], ['console', 'openapi.console.json']] as const) {
+  const app = buildApp(
+    {
+      config,
+      db: inert as never,
+      agent: inert as never,
+      mediator: inert as never,
+      logger: pino({ level: 'silent' }),
+      readiness: async () => ({ ready: true, draining: false, checks: {} }),
+      wake: async () => 'unknown_connection',
+    },
+    { spec }
+  )
+  await app.ready()
+  const document = app.swagger()
+  writeFileSync(new URL(`../${file}`, import.meta.url), `${JSON.stringify(document, null, 2)}\n`)
+  console.log(`wrote ${file} (${Object.keys((document as { paths: object }).paths).length} paths)`)
+  await app.close()
+}

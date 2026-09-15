@@ -60,11 +60,13 @@ describe('wake path', { skip: db ? false : 'no test database' }, () => {
     await db!.db.delete(webhookDeliveries)
     const [tenant] = await db!.db.insert(tenants).values({ name: 'Acme', agentTenantId: 'agent-tenant-2', status: 'ready' }).returning()
     await db!.db.insert(webhookEndpoints).values({ tenantId: tenant.id, url: 'https://customer.test/hook', secret: 'whsec_s', events: null })
-    await db!.db.insert(webhookDeliveries).values([
-      { tenantId: tenant.id, eventType: 'proof.state_changed', body: '{"n":1}', url: 'https://customer.test/ok' },
-      { tenantId: tenant.id, eventType: 'proof.state_changed', body: '{"n":2}', url: 'https://customer.test/fail' },
-    ])
+    // Due at the injected clock, not at the database's now(): once real time passed this fixed clock,
+    // nothing was due and the test failed (from 2026-09-14 10:00Z).
     let clock = new Date('2026-09-14T10:00:00Z')
+    await db!.db.insert(webhookDeliveries).values([
+      { tenantId: tenant.id, eventType: 'proof.state_changed', body: '{"n":1}', url: 'https://customer.test/ok', nextAttemptAt: clock },
+      { tenantId: tenant.id, eventType: 'proof.state_changed', body: '{"n":2}', url: 'https://customer.test/fail', nextAttemptAt: clock },
+    ])
     const fetchMock = (async (url: string | URL | Request) => new Response('', { status: String(url).endsWith('/ok') ? 200 : 503 })) as typeof fetch
     const dispatcher = createDispatcher({ db: db!.db, logger: silentLogger, timeoutMs: 1000, maxAttempts: 2, fetch: fetchMock, now: () => clock, random: () => 0.5 })
 

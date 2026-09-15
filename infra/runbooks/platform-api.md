@@ -50,9 +50,11 @@ Checks: `curl -s https://api.<domain>/v1/ledger`, `/openapi.json` 200; `/admin/t
 `/internal/x` 404 from outside; `docker compose -p platform ps` healthy; mediator log shows
 `Agent listening` after the roll and no `ADMIN_API_TOKEN` complaints.
 
-## Bootstrapping a customer (until the Phase 4 admin UI)
+## Bootstrapping a customer
 
-Over an SSH tunnel (`ssh -L 13500:127.0.0.1:3500 …`), with `T=$PLATFORM_ADMIN_TOKEN`:
+Normal path since Phase 4: the console (`runbooks/console.md`), Tenants → New tenant. Break-glass
+path over an SSH tunnel (`ssh -L 13500:127.0.0.1:3500 …`), with `T=$PLATFORM_ADMIN_TOKEN`
+(audited as actor `admin-token`):
 
 ```bash
 curl -s -X POST localhost:13500/admin/tenants -H "x-admin-token: $T" -H 'content-type: application/json' -d '{"name":"Acme"}'

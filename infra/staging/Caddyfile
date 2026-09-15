@@ -129,9 +129,27 @@ api.12id.naziharitsolution.com {
 	@private path /internal /internal/* /admin /admin/*
 	respond @private "Not Found" 404
 
+	# Console scope (Phase 4 C1): only the console's server, on the Docker network, may present
+	# this header. platform-api also refuses it without the right token; this keeps it off the internet.
+	@consoleHeader header X-Console-Token *
+	respond @consoleHeader "Not Found" 404
+
 	import per_ip_limit api_per_ip 600
 
 	reverse_proxy 127.0.0.1:3500
+}
+
+# Phase 4 console: operator console and tenant portal (TanStack Start + Better Auth) on the apex.
+# The console's own server functions are the only caller of platform-api's console scope; the
+# browser holds a host-only session cookie. Caddy sets X-Forwarded-For, which Better Auth's rate
+# limiter keys on.
+12id.naziharitsolution.com {
+	import hardening
+	header Content-Security-Policy "frame-ancestors 'none'"
+
+	import per_ip_limit console_per_ip 300
+
+	reverse_proxy 127.0.0.1:3600
 }
 
 # DIDComm mediator (W4). Two replicas; WebSocket upgrades are proxied automatically.

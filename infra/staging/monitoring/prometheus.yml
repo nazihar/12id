@@ -52,6 +52,8 @@ scrape_configs:
           # Phase 2 agent-service readiness (503 while draining or when its database is down).
           - https://agent.12id.naziharitsolution.com/readyz
           - https://api.12id.naziharitsolution.com/v1/health
+          # Phase 4 console liveness.
+          - https://12id.naziharitsolution.com/api/health
     relabel_configs: &blackbox-relabel
       - source_labels: [__address__]
         target_label: __param_target

@@ -164,3 +164,20 @@ export const idempotencyKeys = pgTable('idempotency_keys', {
   responseBody: text('response_body').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [primaryKey({ columns: [table.tenantId, table.key] }), index('idempotency_created_idx').on(table.createdAt)])
+
+/**
+ * Who did what through the console scope or with the break-glass admin token (Phase 4 C1).
+ * `tenant_id` has no foreign key: a refused request for an unknown tenant is still worth a row.
+ */
+export const consoleAudit = pgTable('console_audit', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+  actor: text('actor').notNull(),
+  role: text('role').notNull(),
+  tenantId: uuid('tenant_id'),
+  method: text('method').notNull(),
+  /** Route pattern (`/v1/api-keys/:id`), never the concrete URL with its query string. */
+  route: text('route').notNull(),
+  statusCode: integer('status_code').notNull(),
+  requestId: text('request_id').notNull(),
+}, (table) => [index('console_audit_at_idx').on(table.at), index('console_audit_tenant_idx').on(table.tenantId, table.at)])

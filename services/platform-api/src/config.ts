@@ -24,8 +24,10 @@ const configSchema = z.object({
   /** Secret path segment of the mediator webhook receiver; the mediator sends no other credential. */
   MEDIATOR_WEBHOOK_SECRET: secret,
 
-  /** Operator bootstrap routes (/admin/*): tenants and API keys, until the Phase 4 admin UI. */
+  /** Break-glass operator token for /admin/* over an SSH tunnel; the console is the normal path. */
   PLATFORM_ADMIN_TOKEN: secret,
+  /** Console scope (Phase 4): the console's server acts for a tenant or as an operator. Unset disables it. */
+  CONSOLE_TOKEN: secret.optional(),
 
   // Ledger configuration served to SDKs by GET /v1/ledger (public data; the file itself lives on
   // the genesis host, versioned and minisign-signed since Phase 1).

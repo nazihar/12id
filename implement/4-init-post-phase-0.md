@@ -1,6 +1,6 @@
 # SSI Platform — System Architecture and Implementation Plan
 
-**Status:** Design handover document — **revised after Phase 0 (Android pass), Phase 1 (staging infrastructure), Phase 2 (agent services on staging) and Phase 3 (platform API on staging)**
+**Status:** Design handover document — **revised after Phase 0 (Android pass), Phase 1 (staging infrastructure), Phase 2 (agent services on staging), Phase 3 (platform API on staging) and Phase 4 stage 4a (operator console)**
 **Audience:** Implementation engineer / coding agent
 **Stack decision:** Credo-TS 0.7 + DIDComm v1 + AnonCreds + Hyperledger Indy
 **Evidence:** every Phase 0 claim below is backed by a run or a source read recorded in [`../../phase0/findings.md`](../../phase0/findings.md). The pre-Phase-0 version of this document is kept at [`init.pre-phase0.md`](init.pre-phase0.md).
@@ -40,7 +40,13 @@ Phase 0 ran the stack end to end on Android. Content now falls into these tiers,
 - **The §4.8 wake path's server half:** mediator webhook → wallet lookup through the mediator connection's `out_of_band_id` → debounced `wallet.sync_requested`.
 - **The native Kotlin holder on a phone through the platform API** (`smoke:platform-android`): per-wallet mediator invitation, live and offline credentials, template proof; a message queued while the app was force-stopped produced `wallet.sync_requested` 0.4 s later and was collected 7.2 s after reopen.
 
+**Confirmed (Phase 4, run).** Observed with the console against a local platform-api and, for the platform-api half, on staging (`12-phase-4-findings.md`). Includes:
+- **platform-api console scope** (`x-console-token` + actor/role/tenant): serves the existing `/v1/*` routes and the operator routes, refuses a wrong token, audits every mutation in `console_audit`; the edge answers 404 to any request carrying the header.
+- **Console auth:** invite-only accounts, mandatory 2FA (TOTP or email OTP), operators TOTP-only, TanStack Start's CSRF middleware, Playwright-driven sign-in / enrollment / operator screens.
+- **Tenant portal (local):** organization owners and members through invitation mail, role limits enforced per request, a member refused on another organization's URL, role change and removal effective on the next request.
+
 **Not yet tested.** Stated from documentation or reasoning only. Includes:
+- invited-member acceptance through real SMTP on staging, and a `console` database restore;
 - **everything about the Swift/iOS holder**;
 - the native Kotlin holder against a **tenant** issuer (it was tested against a single-tenant smoke issuer);
 - multi-tenant throughput: inbound messages are processed one at a time across all tenants by default;
@@ -332,6 +338,8 @@ With `QueueAndLiveModeDelivery` the mediator checks for a *live-mode* session (a
 | Holder SDK | Indy pool | Indy client protocol | TCP (non-standard ports, e.g. 9702–9708) | Outbound from device | Reads schema and cred def. See §4.6 for reachability results |
 | Holder SDK | Platform API | HTTPS GET genesis | HTTPS | Outbound from device | Fetched and cached to a file at runtime (confirmed) |
 | Customer backend | Platform API | REST | HTTPS | Inbound | API key auth |
+| Browser (operator / tenant staff) | Console | HTTPS, Better Auth session cookie (host-only) | HTTPS | Inbound | Phase 4; `12id.<domain>` |
+| Console (server functions) | Platform API | REST with the console scope headers | HTTP (Docker network) | Outbound | Phase 4; never reachable from the internet, audited per call |
 | Platform API | Customer backend | HTTPS webhook | HTTPS | Outbound | Signed payloads, with retry |
 
 **Network exposure summary.**
@@ -474,6 +482,7 @@ Write this up once as a customer-facing document — every enterprise customer's
 ## 6. Security notes
 
 - **Store keys** for Askar wallets go in a secrets manager, never in environment variables committed anywhere.
+- **The console token (`CONSOLE_TOKEN`) can act as any tenant and as an operator** (Phase 4). It exists only in the console's and platform-api's environment on the private network, the edge refuses the header, and every use is audited with the acting user. Treat it like the endorser store key.
 - **Endorser DID private key** is the highest-value secret in the system. Anyone with it can publish credential definitions under our name. Consider an HSM or at minimum a separate, tightly-scoped secrets store.
 - **Wallet recovery** is not solved by default. If a user loses their phone, their link secret and credentials are gone. Decide explicitly: accept re-issuance as the recovery path, or build an encrypted backup/export flow. This is a product decision, not a technical one.
 - **Open mediation is confirmed** (§2.3) — access control is ours to build before production.
@@ -758,13 +767,20 @@ Original checklist:
 - [ ] Mediator webhook receiver → token lookup by `connectionId` → de-duplicated FCM/APNs dispatch; network-restricted or authenticated (§6)
 - [ ] OpenAPI spec published for customers
 
-### Phase 4 — Admin UI
+### Phase 4 — Console — **deployed on staging (4a + 4b)**
 
-- [ ] Tenant management
-- [ ] Schema and credential definition catalogue (showing both identifier forms)
-- [ ] Proof template builder (expiry predicate enforced)
-- [ ] Credential and connection browser
-- [ ] Webhook delivery log
+Plan: [`11-phase-4.md`](11-phase-4.md); evidence: [`12-phase-4-findings.md`](12-phase-4-findings.md); code: `console/` (TanStack Start + Better Auth, own package and image), platform-api additions; `infra/staging/compose.console.yml`; runbook `infra/runbooks/console.md`.
+
+One app, two roles: **platform operator** (all tenants) and **tenant member** (own tenant), because the product is SaaS and self-hostable (§12.15).
+
+- [x] platform-api console scope + `console_audit` + console-only API-key routes + cross-tenant operator views (`/admin/overview`, `/admin/webhook-deliveries`, `/admin/audit`)
+- [x] Auth: invite-only accounts, 2FA required (TOTP or email OTP; operators TOTP-only), sessions, password links by mail (§12.14)
+- [x] **Stage 4a, operator console:** tenants (create, onboarding retry, console organization + owner), API keys (shown once), catalogue with both identifier forms, proof templates (read), credential/connection/proof/wallet browsers, webhook endpoint + delivery log with body view and retry, dead deliveries across tenants, audit log, operator accounts
+- [x] **Stage 4b, tenant portal (built, local Playwright 4/4):** `/t/$orgSlug/*` with members and invitations (invite mail → account → 2FA), self-service API keys, schema/cred-def publishing (`expiresAt` always appended), proof template builder (expiry predicate enforced, client mirror of the platform rules), connection invitation with QR, browsers, webhook configuration and delivery log; owner/admin/member roles checked per request
+- [x] Staging: console deployed; `smoke:platform-credo` PASSED with a console-created key; Playwright staging specs pass for the operator console and the tenant portal (catalogue, template builder, exchanges, webhooks, API keys, members, audit)
+- [ ] Left for later: restore drill of the `console` database; invited-member acceptance through real SMTP on staging; operator 12 h session cap observed
+
+Original checklist: tenant management; catalogue (both identifier forms); proof template builder (expiry predicate enforced); credential and connection browser; webhook delivery log.
 
 ### Phase 5 — Holder SDK (gated on the Swift pass)
 
@@ -862,6 +878,18 @@ Original checklist:
 
 30. **The mediator webhook fires during mediation setup** (Phase 3). A fresh wallet triggers `wallet.sync_requested` before it has any customer connection. Customers must treat the event as "sync now", not "a credential arrived".
 
+32. **A form submitted before hydration sends its fields as a GET query string** (Phase 4). The first Playwright run put the password in the URL. Every console form uses `method="post"` and disables its submit until `useHydrated()`.
+
+33. **Defining `src/start.ts` disables TanStack Start's built-in CSRF middleware** (Phase 4). Register `createCsrfMiddleware` yourself, with the public origin as matcher (the internal request URL differs behind the proxy).
+
+34. **Better Auth offers email OTP to every 2FA user once `sendOTP` is configured** (Phase 4). Operator TOTP-only needs an after-hook that deletes sessions created through `/two-factor/verify-otp` for operators, plus middleware requiring a verified TOTP secret.
+
+35. **Idempotency replays store response bodies** (Phase 3/4). A route that returns a secret once (`POST /v1/api-keys`) must opt out (`config: { idempotency: false }`); `POST /v1/wallets` still stores the plaintext wallet token for 24 h (open decision).
+
+36. **Controls outside a form are dead before hydration, and a changed `<select>` keeps its new value** (Phase 4). The page shows a change that was never sent. Disable every action control, not only submits, until `useHydrated()`.
+
+37. **Better Auth rate limits sign-in to 3 requests per 10 s per IP, stored in the database** (Phase 4). Tests from one machine share the budget across files; wait out the window rather than disabling the limit.
+
 31. **A used mediator invitation fails silently** (Phase 3, confirmed on the phone). After an app data wipe, the holder presents the wallet's spent single-use invitation; the mediator logs `Out-of-band record has been already processed` and sends nothing back, and the Kotlin holder reports only `Connection to the mediator timed out` after 20 s. The SDK must fetch a new invitation from `GET /v1/wallet/mediator-invitation` and retry on that timeout (Phase 5).
 
 ---
@@ -953,6 +981,14 @@ The platform never sends FCM/APNs pushes and stores no device tokens. The SDK is
 ### 12.13 Wallet authentication — decided: per-wallet tokens via the customer backend (new, Phase 3)
 
 `POST /v1/wallets` (API key) returns a `walletToken` that the customer backend hands to its app. It authenticates the SDK-facing routes, is revocable per installation, and never links a wallet to an end-user identity on the platform side. A per-tenant key embedded in the app was rejected: extractable, and it leaves wallets anonymous, which would break the wake-up mapping.
+
+### 12.14 Console authentication — decided: Better Auth, invite-only, 2FA for everyone (new, Phase 4)
+
+The console (`console/`) uses Better Auth with the organization (tenant membership and roles), two-factor and admin (operator role) plugins, in its own `console` database. There is no public sign-up: operators come from the CLI or an operator's invitation, tenant owners are created by an operator, members by an owner's invitation. 2FA is mandatory (enforced by the console middleware; Better Auth makes it opt-in) with TOTP or email OTP; **operators must use TOTP** because a mailbox compromise would otherwise turn password reset plus email OTP into a single factor. The console reaches platform-api only through the **console scope** (`x-console-token` + actor/role/tenant), never through customer API keys and never by reading platform-api's database. Better Auth's api-key plugin is not used.
+
+### 12.15 SaaS and self-hosting — decided: both, console self-host-ready first (new, Phase 4)
+
+The product is offered as SaaS and will also be self-hostable by an organization. That is why the console has two roles (operators across tenants for us or a self-hoster's admins; tenant members for SaaS customers). Phase 4 keeps the console free of dependencies a self-hoster cannot have (no Google allowlist, no fixed IPs, everything configured by environment, mail through any SMTP). Packaging the whole stack (ledger, patched mediator, endorser, genesis signing, upgrades) for self-hosters is a later phase.
 
 ## Appendix A — Repository reference
 

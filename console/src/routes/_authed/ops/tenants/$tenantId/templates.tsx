@@ -1,0 +1,56 @@
+import { useSuspenseQuery } from '@tanstack/react-query'
+import { createFileRoute } from '@tanstack/react-router'
+import { createColumnHelper } from '@tanstack/react-table'
+
+import { DataTable } from '@/components/data-table/data-table'
+import type { DataTableFeatures } from '@/components/data-table/data-table-features'
+import { RouteError } from '@/components/route-error'
+import type { listProofTemplates } from '@/features/tenant-data/tenant-data.functions'
+import { proofTemplatesQuery } from '@/features/tenant-data/tenant-data.queries'
+import { formatDateTime } from '@/lib/format'
+
+type TemplateRow = Awaited<ReturnType<typeof listProofTemplates>>[number]
+type Group = TemplateRow['definition']['groups'][number]
+
+function describeCredentials(group: Group) {
+  return group.credentials.map((ref) => ('schemaName' in ref ? `${ref.schemaName} (${ref.versions === 'active' ? 'active versions' : 'all versions'})` : ref.credentialDefinitionId)).join(', ')
+}
+
+const column = createColumnHelper<DataTableFeatures, TemplateRow>()
+const columns = column.columns([
+  column.accessor('name', { header: 'Template' }),
+  column.display({
+    id: 'groups',
+    header: 'Requests',
+    cell: ({ row }) => (
+      <ul className="space-y-1 text-xs">
+        {row.original.definition.groups.map((group) => (
+          <li key={group.key}>
+            <span className="font-medium">{group.key}</span> from {describeCredentials(group)}
+            {group.attributes.length > 0 && <> · discloses {group.attributes.join(', ')}</>}
+            {group.predicates?.map((p) => (
+              <span key={`${p.name}${p.type}${p.value}`}>
+                {' '}
+                · {p.name} {p.type} {p.value}
+              </span>
+            ))}
+            <span className="text-muted-foreground"> · expiresAt checked</span>
+          </li>
+        ))}
+      </ul>
+    ),
+  }),
+  column.accessor('updatedAt', { header: 'Updated', cell: ({ getValue }) => formatDateTime(getValue()) }),
+])
+
+export const Route = createFileRoute('/_authed/ops/tenants/$tenantId/templates')({
+  loader: ({ context, params }) => context.queryClient.ensureQueryData(proofTemplatesQuery(params.tenantId)),
+  errorComponent: RouteError,
+  component: TemplatesPage,
+})
+
+function TemplatesPage() {
+  const { tenantId } = Route.useParams()
+  const { data } = useSuspenseQuery(proofTemplatesQuery(tenantId))
+  return <DataTable columns={columns} data={data} searchPlaceholder="Search templates" emptyMessage="No proof templates." />
+}

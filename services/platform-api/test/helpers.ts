@@ -37,7 +37,7 @@ export async function testDatabase(): Promise<{ db: Database; close: () => Promi
     }
   }
   if (!shared) return null
-  const tables = [schema.webhookDeliveries, schema.webhookEndpoints, schema.idempotencyKeys, schema.proofTemplates, schema.proofs, schema.credentials, schema.connections, schema.wallets, schema.apiKeys, schema.outboxCursor, schema.tenants]
+  const tables = [schema.consoleAudit, schema.webhookDeliveries, schema.webhookEndpoints, schema.idempotencyKeys, schema.proofTemplates, schema.proofs, schema.credentials, schema.connections, schema.wallets, schema.apiKeys, schema.outboxCursor, schema.tenants]
   for (const table of tables) await shared.db.delete(table)
   const pool = shared.pool
   return { db: shared.db, close: async () => void pool }
@@ -56,6 +56,7 @@ export const testConfig: PlatformConfig = {
   MEDIATOR_DRIZZLE_URL: TEST_DATABASE_URL,
   MEDIATOR_WEBHOOK_SECRET: 'w'.repeat(40),
   PLATFORM_ADMIN_TOKEN: 'p'.repeat(40),
+  CONSOLE_TOKEN: 'c'.repeat(40),
   INDY_NAMESPACE: 'twelveid:staging',
   GENESIS_URL: 'https://genesis.test/v1/pool_transactions_genesis',
   GENESIS_SHA256: '0'.repeat(64),

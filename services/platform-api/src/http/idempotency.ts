@@ -13,6 +13,13 @@ import { idempotencyKeys } from '../db/schema.ts'
 export const IDEMPOTENCY_HEADER = 'idempotency-key'
 
 declare module 'fastify' {
+  interface FastifyContextConfig {
+    /** `false` for routes whose response holds a secret that must not be stored for replays. */
+    idempotency?: boolean
+  }
+}
+
+declare module 'fastify' {
   interface FastifyRequest {
     idempotency?: { key: string; requestHash: string }
   }
@@ -26,6 +33,7 @@ export function requestHash(method: string, url: string, body: unknown): string 
 export function useIdempotency(app: FastifyInstance, db: Database) {
   app.addHook('preHandler', async (request: FastifyRequest, reply: FastifyReply) => {
     if (request.method !== 'POST' && request.method !== 'PUT') return
+    if (request.routeOptions.config?.idempotency === false) return
     const key = request.headers[IDEMPOTENCY_HEADER]
     if (typeof key !== 'string' || key.length === 0) return
     if (key.length > 200) return reply.code(400).send({ error: 'bad_request', reason: 'Idempotency-Key is longer than 200 characters' })

@@ -13,7 +13,7 @@ import { notFound } from '../errors.ts'
 
 const errorBody = z.object({ error: z.string(), reason: z.string() })
 const endpointView = z.object({ url: z.string(), events: z.array(z.enum(EVENT_TYPES)).nullable(), createdAt: z.iso.datetime(), updatedAt: z.iso.datetime() })
-const deliveryView = z.object({
+export const deliveryView = z.object({
   id: z.number().int(),
   eventId: z.string(),
   eventType: z.string(),
@@ -26,24 +26,26 @@ const deliveryView = z.object({
   deliveredAt: z.iso.datetime().nullable(),
 })
 
+export const toDeliveryView = (row: typeof webhookDeliveries.$inferSelect) => ({
+  id: row.id,
+  eventId: row.eventId,
+  eventType: row.eventType,
+  status: row.status,
+  attempts: row.attempts,
+  nextAttemptAt: row.nextAttemptAt.toISOString(),
+  lastStatusCode: row.lastStatusCode,
+  lastError: row.lastError,
+  createdAt: row.createdAt.toISOString(),
+  deliveredAt: row.deliveredAt?.toISOString() ?? null,
+})
+
 const httpsUrl = z.url().refine((u) => u.startsWith('https://'), 'webhook URLs must use https')
 const newSecret = () => `whsec_${randomBytes(32).toString('base64url')}`
 
 export const webhookRoutes = (deps: { db: Database }): FastifyPluginAsyncZod => async (app) => {
   const tenant = (request: { tenant?: TenantContext }) => request.tenant as TenantContext
   const endpoint = (row: typeof webhookEndpoints.$inferSelect) => ({ url: row.url, events: row.events as z.infer<typeof endpointView>['events'], createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() })
-  const delivery = (row: typeof webhookDeliveries.$inferSelect) => ({
-    id: row.id,
-    eventId: row.eventId,
-    eventType: row.eventType,
-    status: row.status,
-    attempts: row.attempts,
-    nextAttemptAt: row.nextAttemptAt.toISOString(),
-    lastStatusCode: row.lastStatusCode,
-    lastError: row.lastError,
-    createdAt: row.createdAt.toISOString(),
-    deliveredAt: row.deliveredAt?.toISOString() ?? null,
-  })
+  const delivery = toDeliveryView
 
   app.put(
     '/v1/webhook',
@@ -99,7 +101,8 @@ export const webhookRoutes = (deps: { db: Database }): FastifyPluginAsyncZod => 
     }
   )
 
-  app.get('/v1/webhook/deliveries/:id', { schema: { tags: ['webhooks'], summary: 'Get a delivery, including its body', params: z.object({ id: z.coerce.number().int() }), response: { 200: deliveryView.extend({ body: z.string() }), 404: errorBody } } }, async (request) => {
+  // The body carries credential attributes, so console reads of it are audited.
+  app.get('/v1/webhook/deliveries/:id', { config: { auditRead: true }, schema: { tags: ['webhooks'], summary: 'Get a delivery, including its body', params: z.object({ id: z.coerce.number().int() }), response: { 200: deliveryView.extend({ body: z.string() }), 404: errorBody } } }, async (request) => {
     const [row] = await deps.db.select().from(webhookDeliveries).where(and(eq(webhookDeliveries.tenantId, tenant(request).id), eq(webhookDeliveries.id, request.params.id)))
     if (!row) throw notFound('delivery')
     return { ...delivery(row), body: row.body }
