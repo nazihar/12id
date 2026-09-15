@@ -156,14 +156,20 @@ export const outboxCursor = pgTable('outbox_cursor', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
+/**
+ * `Idempotency-Key` records. Inserted when the request arrives (reserving the key); `completed_at`,
+ * `status_code` and `response_body` are filled when the response is sent. A row without
+ * `completed_at` is a request still in progress (or one that crashed; taken over after a minute).
+ */
 export const idempotencyKeys = pgTable('idempotency_keys', {
   tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
   key: text('key').notNull(),
   requestHash: text('request_hash').notNull(),
-  statusCode: integer('status_code').notNull(),
-  responseBody: text('response_body').notNull(),
+  statusCode: integer('status_code'),
+  responseBody: text('response_body'),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-}, (table) => [primaryKey({ columns: [table.tenantId, table.key] }), index('idempotency_created_idx').on(table.createdAt)])
+},(table) => [primaryKey({ columns: [table.tenantId, table.key] }), index('idempotency_created_idx').on(table.createdAt)])
 
 /**
  * Who did what through the console scope or with the break-glass admin token (Phase 4 C1).

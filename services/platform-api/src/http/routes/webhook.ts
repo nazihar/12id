@@ -77,7 +77,8 @@ export const webhookRoutes = (deps: { db: Database }): FastifyPluginAsyncZod => 
     return endpoint(row)
   })
 
-  app.post('/v1/webhook/rotate-secret', { schema: { tags: ['webhooks'], summary: 'Rotate the signing secret', response: { 200: z.object({ secret: z.string() }), 404: errorBody } } }, async (request) => {
+  // No idempotent replay: it could hand back a secret a later rotation replaced; rotating again is harmless.
+  app.post('/v1/webhook/rotate-secret', { schema: { tags: ['webhooks'], summary: 'Rotate the signing secret', response: { 200: z.object({ secret: z.string() }), 404: errorBody } }, config: { idempotency: false } }, async (request) => {
     const secret = newSecret()
     const rows = await deps.db.update(webhookEndpoints).set({ secret, updatedAt: new Date() }).where(eq(webhookEndpoints.tenantId, tenant(request).id)).returning({ tenantId: webhookEndpoints.tenantId })
     if (rows.length === 0) throw notFound('webhook endpoint')

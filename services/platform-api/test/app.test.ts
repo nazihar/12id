@@ -6,7 +6,10 @@
 import assert from 'node:assert/strict'
 import { before, describe, it } from 'node:test'
 
+import { eq } from 'drizzle-orm'
+
 import type { WakeOutcome } from '../src/wake.ts'
+import { idempotencyKeys } from '../src/db/schema.ts'
 import { buildApp } from '../src/http/app.ts'
 import { fakeAgent, silentLogger, testConfig, testDatabase } from './helpers.ts'
 
@@ -116,6 +119,69 @@ describe('platform-api HTTP', { skip: db ? false : 'no test database' }, () => {
     assert.equal(agent.calls.filter((c) => c.method === 'createInvitation').length, invitations)
     const mismatch = await app.inject({ method: 'POST', url: '/v1/connections/invitations', headers, payload: { multiUse: true } })
     assert.equal(mismatch.statusCode, 422)
+  })
+
+  it('refuses a second request while the first holds the key, takes over a stale one, releases on 5xx', async () => {
+    const auth = { authorization: `Bearer ${apiKey}` }
+    const payload = { multiUse: false }
+    // The stored request hash of an identical completed request, to reserve a key by hand.
+    await app.inject({ method: 'POST', url: '/v1/connections/invitations', headers: { ...auth, 'idempotency-key': 'probe' }, payload })
+    const [probe] = await db!.db.select().from(idempotencyKeys).where(eq(idempotencyKeys.key, 'probe'))
+    await db!.db.insert(idempotencyKeys).values({ tenantId, key: 'busy-1', requestHash: probe.requestHash })
+
+    const busy = await app.inject({ method: 'POST', url: '/v1/connections/invitations', headers: { ...auth, 'idempotency-key': 'busy-1' }, payload })
+    assert.equal(busy.statusCode, 409, busy.body)
+    assert.equal(busy.json().error, 'idempotency_in_progress')
+    assert.equal(busy.headers['retry-after'], '1')
+
+    await db!.db.update(idempotencyKeys).set({ createdAt: new Date(Date.now() - 120_000) }).where(eq(idempotencyKeys.key, 'busy-1'))
+    const takenOver = await app.inject({ method: 'POST', url: '/v1/connections/invitations', headers: { ...auth, 'idempotency-key': 'busy-1' }, payload })
+    assert.equal(takenOver.statusCode, 201, takenOver.body)
+    assert.equal(takenOver.headers['idempotent-replayed'], undefined)
+    const replay = await app.inject({ method: 'POST', url: '/v1/connections/invitations', headers: { ...auth, 'idempotency-key': 'busy-1' }, payload })
+    assert.equal(replay.headers['idempotent-replayed'], 'true')
+
+    const createInvitation = agent.client.createInvitation
+    agent.client.createInvitation = async () => {
+      throw new Error('agent down')
+    }
+    try {
+      const failed = await app.inject({ method: 'POST', url: '/v1/connections/invitations', headers: { ...auth, 'idempotency-key': 'fails-1' }, payload })
+      assert.ok(failed.statusCode >= 500, failed.body)
+      assert.equal((await db!.db.select().from(idempotencyKeys).where(eq(idempotencyKeys.key, 'fails-1'))).length, 0, 'a 5xx releases the key')
+    } finally {
+      agent.client.createInvitation = createInvitation
+    }
+    const retried = await app.inject({ method: 'POST', url: '/v1/connections/invitations', headers: { ...auth, 'idempotency-key': 'fails-1' }, payload })
+    assert.equal(retried.statusCode, 201)
+    assert.equal(retried.headers['idempotent-replayed'], undefined)
+  })
+
+  it('replays wallet creation as the same wallet with a new token, and never stores a token', async () => {
+    const auth = { authorization: `Bearer ${apiKey}` }
+    const phone = { ...auth, 'idempotency-key': 'install-phone' }
+    const first = await app.inject({ method: 'POST', url: '/v1/wallets', headers: phone, payload: { externalId: 'user-8' } })
+    assert.equal(first.statusCode, 201, first.body)
+    const retry = await app.inject({ method: 'POST', url: '/v1/wallets', headers: phone, payload: { externalId: 'user-8' } })
+    assert.equal(retry.statusCode, 201, retry.body)
+    assert.equal(retry.headers['idempotent-replayed'], 'true')
+    assert.equal(retry.json().id, first.json().id, 'same wallet')
+    assert.notEqual(retry.json().walletToken, first.json().walletToken)
+    assert.equal((await app.inject({ method: 'GET', url: '/v1/wallet', headers: { authorization: `Bearer ${first.json().walletToken}` } })).statusCode, 401, 'the earlier token stops working')
+    assert.equal((await app.inject({ method: 'GET', url: '/v1/wallet', headers: { authorization: `Bearer ${retry.json().walletToken}` } })).statusCode, 200)
+
+    // The same user on a second device: another installation id, another wallet.
+    const tablet = await app.inject({ method: 'POST', url: '/v1/wallets', headers: { ...auth, 'idempotency-key': 'install-tablet' }, payload: { externalId: 'user-8' } })
+    assert.equal(tablet.statusCode, 201)
+    assert.notEqual(tablet.json().id, first.json().id)
+
+    const stored = await db!.db.select().from(idempotencyKeys)
+    assert.ok(stored.every((row) => !(row.responseBody ?? '').includes('12id_wt_')), 'no wallet token is stored')
+
+    await app.inject({ method: 'DELETE', url: `/v1/wallets/${first.json().id}`, headers: auth })
+    const afterRevoke = await app.inject({ method: 'POST', url: '/v1/wallets', headers: phone, payload: { externalId: 'user-8' } })
+    assert.equal(afterRevoke.statusCode, 409)
+    assert.equal(afterRevoke.json().error, 'wallet_revoked')
   })
 
   it('requests a proof from a stored template, expanded against the catalogue', async () => {

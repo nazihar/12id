@@ -13,7 +13,11 @@ Never ship an API key in an app. The wallet token is per installation and can be
 
 ## The asynchronous model
 
-Every command returns immediately (`202`) with the exchange record. The holder answers minutes or hours later, so progress arrives by webhook (recommended) or by polling `GET` routes. Pass `externalId` on commands to get your own reference back on every event. Send an `Idempotency-Key` header on POSTs you may retry; a replay returns the original response.
+Every command returns immediately (`202`) with the exchange record. The holder answers minutes or hours later, so progress arrives by webhook (recommended) or by polling `GET` routes. Pass `externalId` on commands to get your own reference back on every event. Send an `Idempotency-Key` header on POSTs you may retry; a replay with the same key and body returns the original response (`Idempotent-Replayed: true`), the same key with a different body answers 422, and a retry that arrives while the first request is still running answers 409 `idempotency_in_progress` (retry after `Retry-After` seconds). A request that failed with a 5xx can be retried with the same key and runs again. Keys are kept for 24 hours.
+
+Responses that carry a secret are never stored for replays:
+- `POST /v1/wallets`: use your app's **installation id** (a UUID the app creates once and keeps) as the key. A retry returns the same wallet with a **new** `walletToken`; earlier tokens for that wallet stop working, so hand the app the most recent one. Each device or reinstall has its own installation id, so a user can have several wallets (share your user id through `externalId`).
+- `POST /v1/webhook/rotate-secret` ignores the header: a retry rotates again and returns the newest secret.
 
 | Exchange | States you will see |
 |---|---|

@@ -78,6 +78,33 @@ Run on the VM as `ubuntu`. This is the drill required by the Phase 1 plan (W9).
    ```
 7. **Record the drill** (date, backup used, results) in the Phase 1 findings.
 
+## Console restore drill (`agent-console.dump.age`)
+Proves the console backup restores **and that accounts can still sign in**: password hashes live in the
+dump, TOTP secrets are encrypted with `BETTER_AUTH_SECRET` (in `console.sops.env`, not in the dump).
+Last run: 2026-09-15, backup `20260915T023447Z`, passed.
+
+1. Checksum as above, then a scratch Postgres on its own network and restore:
+   ```sh
+   docker network create 12id-console-restore-drill
+   docker run -d --name console-restore-pg --network 12id-console-restore-drill -e POSTGRES_PASSWORD=drill postgres:15-alpine
+   age -d -i /opt/12id/secrets/age.key "$B/agent-console.dump.age" \
+     | docker exec -i console-restore-pg pg_restore -U postgres --create --dbname=postgres
+   docker exec console-restore-pg psql -U postgres -d console -tAc 'select email, role, two_factor_enabled from "user"'
+   ```
+2. A throwaway console on the restored copy, on `127.0.0.1:3690`, with the real `BETTER_AUTH_SECRET` from
+   sops written to an env file in `/dev/shm` (deleted right after `docker run`), `DATABASE_URL` pointing at
+   `console-restore-pg`, `BETTER_AUTH_URL=https://12id.naziharitsolution.com`, and dummy
+   `PLATFORM_API_URL`/`CONSOLE_TOKEN`/`SMTP_URL` (no route to platform-api, no mail).
+3. Sign in with a known account through `curl` on the VM (`Origin: https://12id.naziharitsolution.com`):
+   `POST /api/auth/sign-in/email` → 200 `twoFactorRedirect`; `POST /api/auth/two-factor/verify-totp` with a
+   wrong code → 401, with a current code → 200. Confirm the session row appeared in the **restored**
+   database (`select … from session where created_at > now() - interval '15 minutes'`). Send the code on
+   stdin, never on the command line.
+4. Clean up: `docker rm -f console-restore-app console-restore-pg && docker network rm 12id-console-restore-drill`.
+
+A restore under a different `BETTER_AUTH_SECRET` keeps passwords working but every TOTP enrollment fails
+to decrypt: keep the secret with the backups' key material.
+
 ## Real restore (replacing the running databases)
 1. Stop the consumers: `deploy.sh mediator stop mediator-1 mediator-2`.
 2. Drop and recreate the affected databases in `mediator-postgres-1`, then `pg_restore` as in the drill, into the stack's own Postgres.

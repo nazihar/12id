@@ -1502,7 +1502,9 @@ export interface paths {
         put?: never;
         /**
          * Create a wallet
-         * @description One wallet per SDK installation. The returned `walletToken` is shown once; pass it to your app, which gives it to the SDK. The platform never learns who the end user is; `externalId` is your own reference and is echoed in `wallet.sync_requested` webhooks.
+         * @description One wallet per SDK installation. The returned `walletToken` is shown once; pass it to your app, which gives it to the SDK. The platform never learns who the end user is; `externalId` is your own reference (for example your user id, shared by that user's devices) and is echoed in `wallet.sync_requested` webhooks.
+         *
+         *     Retries: send your app's installation id (a UUID the app generates once and keeps) as `Idempotency-Key`. A retry with the same key and body returns the **same wallet with a new `walletToken`**, and earlier tokens for that wallet stop working, so always give the app the most recent token. Tokens are never stored. While the first request is still running, a retry answers 409 `idempotency_in_progress`; retry after `Retry-After` seconds. If that wallet was revoked, a retry answers 409 `wallet_revoked`.
          */
         post: {
             parameters: {
@@ -1534,6 +1536,18 @@ export interface paths {
                             createdAt: string;
                             revokedAt: string | null;
                             walletToken: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
                         };
                     };
                 };

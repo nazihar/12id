@@ -27,9 +27,31 @@ export const walletCustomerRoutes = (deps: { db: Database }): FastifyPluginAsync
       schema: {
         tags: ['wallets'],
         summary: 'Create a wallet',
-        description: 'One wallet per SDK installation. The returned `walletToken` is shown once; pass it to your app, which gives it to the SDK. The platform never learns who the end user is; `externalId` is your own reference and is echoed in `wallet.sync_requested` webhooks.',
+        description:
+          'One wallet per SDK installation. The returned `walletToken` is shown once; pass it to your app, which gives it to the SDK. The platform never learns who the end user is; `externalId` is your own reference (for example your user id, shared by that user\'s devices) and is echoed in `wallet.sync_requested` webhooks.\n\n' +
+          'Retries: send your app\'s installation id (a UUID the app generates once and keeps) as `Idempotency-Key`. A retry with the same key and body returns the **same wallet with a new `walletToken`**, and earlier tokens for that wallet stop working, so always give the app the most recent token. Tokens are never stored. While the first request is still running, a retry answers 409 `idempotency_in_progress`; retry after `Retry-After` seconds. If that wallet was revoked, a retry answers 409 `wallet_revoked`.',
         body: z.object({ externalId: z.string().min(1).max(200).optional() }).default({}),
-        response: { 201: walletView.extend({ walletToken: z.string() }) },
+        response: { 201: walletView.extend({ walletToken: z.string() }), 409: errorBody },
+      },
+      config: {
+        idempotency: {
+          store: (body) => {
+            const { walletToken: _token, ...wallet } = body as Record<string, unknown>
+            return wallet
+          },
+          // Nobody received the first token (that is why the request is retried): mint a new one for the same wallet.
+          replay: async (request, reply, stored) => {
+            const walletId = (stored.body as { id: string }).id
+            const token = generateSecret(WALLET_TOKEN_PREFIX)
+            const [row] = await deps.db
+              .update(wallets)
+              .set({ tokenHash: hashSecret(token) })
+              .where(and(eq(wallets.tenantId, tenant(request).id), eq(wallets.id, walletId), isNull(wallets.revokedAt)))
+              .returning()
+            if (!row) return reply.code(409).send({ error: 'wallet_revoked', reason: 'The wallet created for this Idempotency-Key has been revoked; use a new key to create another wallet' })
+            return reply.code(201).send({ ...toWalletView(row), walletToken: token })
+          },
+        },
       },
     },
     async (request, reply) => {

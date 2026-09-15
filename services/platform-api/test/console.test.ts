@@ -99,7 +99,7 @@ describe('console scope', { skip: db ? false : 'no test database' }, () => {
     assert.notEqual(first.json().apiKey, second.json().apiKey)
     assert.equal(second.headers['idempotent-replayed'], undefined)
     const stored = await db!.db.select().from(idempotencyKeys)
-    assert.ok(stored.every((row) => !row.responseBody.includes('12id_sk_')))
+    assert.ok(stored.every((row) => !(row.responseBody ?? '').includes('12id_sk_')))
   })
 
   it('serves the cross-tenant overview and dead deliveries to operators', async () => {

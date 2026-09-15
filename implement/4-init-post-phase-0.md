@@ -46,7 +46,7 @@ Phase 0 ran the stack end to end on Android. Content now falls into these tiers,
 - **Tenant portal (local):** organization owners and members through invitation mail, role limits enforced per request, a member refused on another organization's URL, role change and removal effective on the next request.
 
 **Not yet tested.** Stated from documentation or reasoning only. Includes:
-- invited-member acceptance through real SMTP on staging, and a `console` database restore;
+- invited-member acceptance through real SMTP on staging;
 - **everything about the Swift/iOS holder**;
 - the native Kotlin holder against a **tenant** issuer (it was tested against a single-tenant smoke issuer);
 - multi-tenant throughput: inbound messages are processed one at a time across all tenants by default;
@@ -778,7 +778,8 @@ One app, two roles: **platform operator** (all tenants) and **tenant member** (o
 - [x] **Stage 4a, operator console:** tenants (create, onboarding retry, console organization + owner), API keys (shown once), catalogue with both identifier forms, proof templates (read), credential/connection/proof/wallet browsers, webhook endpoint + delivery log with body view and retry, dead deliveries across tenants, audit log, operator accounts
 - [x] **Stage 4b, tenant portal (built, local Playwright 4/4):** `/t/$orgSlug/*` with members and invitations (invite mail → account → 2FA), self-service API keys, schema/cred-def publishing (`expiresAt` always appended), proof template builder (expiry predicate enforced, client mirror of the platform rules), connection invitation with QR, browsers, webhook configuration and delivery log; owner/admin/member roles checked per request
 - [x] Staging: console deployed; `smoke:platform-credo` PASSED with a console-created key; Playwright staging specs pass for the operator console and the tenant portal (catalogue, template builder, exchanges, webhooks, API keys, members, audit)
-- [ ] Left for later: restore drill of the `console` database; invited-member acceptance through real SMTP on staging; operator 12 h session cap observed
+- [x] Restore drill of the `console` database (2026-09-15): nightly backup restored to a scratch Postgres; an account signed in with password + TOTP against the restored copy
+- [ ] Left for later: invited-member acceptance through real SMTP on staging; operator 12 h session cap observed
 
 Original checklist: tenant management; catalogue (both identifier forms); proof template builder (expiry predicate enforced); credential and connection browser; webhook delivery log.
 
@@ -884,7 +885,7 @@ Original checklist: tenant management; catalogue (both identifier forms); proof 
 
 34. **Better Auth offers email OTP to every 2FA user once `sendOTP` is configured** (Phase 4). Operator TOTP-only needs an after-hook that deletes sessions created through `/two-factor/verify-otp` for operators, plus middleware requiring a verified TOTP secret.
 
-35. **Idempotency replays store response bodies** (Phase 3/4). A route that returns a secret once (`POST /v1/api-keys`) must opt out (`config: { idempotency: false }`); `POST /v1/wallets` still stores the plaintext wallet token for 24 h (open decision).
+35. **Idempotency replays store response bodies, and a key written only after the response lets duplicates run** (Phase 3/4). Reserve the key on arrival (409 while in progress). A route returning a secret either opts out (`POST /v1/api-keys`, `POST /v1/webhook/rotate-secret`) or stores a redacted body and answers replays itself: `POST /v1/wallets` replays the same wallet with a new token (installation id as the key).
 
 36. **Controls outside a form are dead before hydration, and a changed `<select>` keeps its new value** (Phase 4). The page shows a change that was never sent. Disable every action control, not only submits, until `useHydrated()`.
 
