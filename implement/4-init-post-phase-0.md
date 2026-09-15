@@ -890,6 +890,8 @@ Original checklist: tenant management; catalogue (both identifier forms); proof 
 
 37. **Better Auth rate limits sign-in to 3 requests per 10 s per IP, stored in the database** (Phase 4). Tests from one machine share the budget across files; wait out the window rather than disabling the limit.
 
+38. **A resumable state machine is not safe to run twice at once** (Phase 2 code, found in Phase 4). Tenant onboarding was started both by agent-service's `POST /tenants` and by platform-api's `/onboard` call; two runs created two DIDs, the endorser bound one and the row kept the other, which was never written. Single-flight per tenant plus compare-and-set on the status for every transition.
+
 31. **A used mediator invitation fails silently** (Phase 3, confirmed on the phone). After an app data wipe, the holder presents the wallet's spent single-use invitation; the mediator logs `Out-of-band record has been already processed` and sends nothing back, and the Kotlin holder reports only `Connection to the mediator timed out` after 20 s. The SDK must fetch a new invitation from `GET /v1/wallet/mediator-invitation` and retry on that timeout (Phase 5).
 
 ---

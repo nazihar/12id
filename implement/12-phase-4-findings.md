@@ -151,6 +151,23 @@ Findings:
 4. **Staging redeploy (2026-09-14, 12:45–12:50 UTC).** `12id/console:phase4` rebuilt with the portal, migrate job exited cleanly, container healthy. Test owner `onetwoidadmin+acme-owner@gmail.com` created with console-tools `create-admin --role user` (no mail needed). First `staging-portal.spec.ts` run: the operator created the `acme-platform` organization with that owner; the owner enrolled TOTP; catalogue listed `smoke-badge` schema and credential definition; the template builder saved a `smoke-badge` template through platform-api's validation and deleted it; a connection invitation QR rendered from agent-service; wallets and deliveries loaded; an API key was shown once and revoked; members listed the owner. The audit log held every owner mutation (`POST /v1/api-keys 201`, `DELETE /v1/api-keys/:id 200`, `POST /v1/connections/invitations 201`, `DELETE /v1/proof-templates/:id 200`, role `owner`, tenant `b729f3a6`). The only failed assertion was the spec's own: it looked for the owner's email, but **the audit actor is the Better Auth user id**, unreadable for an operator. The audit page now resolves ids to account emails from the console database (id kept as tooltip and search term). After a second redeploy all three staging specs passed; the portal spec, rerun on its own after the workstation slept through the first attempt (8.3 h wall clock, test timeout exceeded), passed in 6.4 s with both accounts signing in by TOTP. The API key the key spec created was revoked afterwards through the same spec (`STAGING_REVOKE`).
 5. **Catalogue data lives in agent-service** (`GET /v1/schemas` lists through the agent), so catalogue, template and exchange pages cannot run against a local platform-api alone; `staging-portal.spec.ts` covers them.
 
+### Bug found by manual testing (2026-09-15): concurrent tenant onboarding
+**Symptom.** Creating a tenant from the console showed "Onboarding is failed: agent-service POST /tenants/<id>/onboard failed with HTTP 500"; "Retry onboarding" never recovered. All three tenants created that morning ("Test Phase 4", "Test Org", "Test Co 1") failed; the tenants of 2026-09-13/14 are `ready`.
+
+**Cause (logs, ledger and databases on staging).** agent-service's `POST /tenants` starts `onboardTenant` in the background, and platform-api's `POST /admin/tenants` calls `POST /tenants/:id/onboard` a few milliseconds later. Nothing serialized the two runs:
+1. both runs were in `pending` and each created a DID in the tenant wallet (`did_created` logged twice, 15 ms apart);
+2. run A bound its nym `TCrG…` at the endorser; run B had overwritten the row with its nym `5HGx…`, its bind was refused (409 "tenant is already bound to a different nym") and it stopped;
+3. run A got its own NYM request endorsed, reloaded the row (now B's DID) and submitted the endorsed request, which wrote **A's** NYM, then advanced to `nym_written`;
+4. the check reads B's nym, which is not on the ledger, so every retry fails with "NYM … not found on the ledger".
+
+Ledger: `TCrGSiYA3mNfnpvtQgxcFQ` present, `5HGxPwwUpujwwA9bwA2oGN` absent. Endorser bindings for the other two tenants likewise name a different nym than agent-service's row. Earlier tenants won the race by timing.
+
+**Fix (agent-service).** `onboardTenant` joins a run already in flight for the same tenant (`singleFlight`, unit-tested), and each transition is a compare-and-set on the status the run read (`update … where status = <from>`), raising `OnboardingConflictError` instead of overwriting when another run moved the row. agent-service runs as one instance on staging; the compare-and-set also stops a second instance from corrupting the row. Typecheck clean, 43/43 tests.
+
+**Verified on staging (05:03 UTC).** Agent stack rebuilt and restarted (healthy). `POST /admin/tenants` "Onboarding fix check 2026-09-15" answered 201 with status `ready` and DID `7z1vuPtFhbiVPAe1N9Z9hU`; agent-service logged each transition exactly once (`did_created`, `nym_endorsed`, `nym_written`, `ready`) even though both callers still start onboarding.
+
+**Not recovered automatically.** The three affected tenants have a row DID that was never written and a wallet holding a second DID; they hold no data. Their fate is an owner decision.
+
 ### Trap: a form clicked before hydration submits the password in the URL (confirmed, run)
 The first Playwright run clicked "Sign in" before React hydrated the page. The `<form>` had only a React `onSubmit`, so the browser performed a native **GET** submit: the URL became `/login?email=operator%2B…%4012id.test&password=E2e-Operator-…`. On a slow connection a real user does the same, and the password lands in browser history, proxy and access logs and `Referer` headers.
 

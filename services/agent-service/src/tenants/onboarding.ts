@@ -10,17 +10,24 @@
  *   nym_endorsed → submit, unless GET_NYM shows it was already written
  *   nym_written  → GET_NYM confirmed: exists, role-less, expected verkey
  *   ready
+ *
+ * Two runs for one tenant must never overlap: each would create its own DID, the endorser binds
+ * whichever arrives first, and the row can end up naming a DID that is never written (staging,
+ * 2026-09-15: `POST /tenants` starts a run and platform-api calls `/onboard` right after). Calls
+ * in this process join the run in flight, and every transition is a compare-and-set on the status
+ * the run read, so a run that lost the row stops instead of overwriting it.
  */
 import type { IndyVdrDidCreateOptions } from '@credo-ts/indy-vdr'
 import { IndyVdrPoolService } from '@credo-ts/indy-vdr'
 import { GetNymRequest } from '@hyperledger/indy-vdr-nodejs'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import type { Logger as PinoLogger } from 'pino'
 
 import type { RootAgent } from '../agent/root-agent.ts'
 import type { Database } from '../db/client.ts'
 import { type TenantStatus, tenants } from '../db/schema.ts'
 import type { EndorserClient } from '../endorser/endorser-client.ts'
+import { singleFlight } from './single-flight.ts'
 
 export interface OnboardingDeps {
   agent: RootAgent
@@ -56,7 +63,20 @@ export async function createTenantRecord(deps: OnboardingDeps, label: string): P
   return record.id
 }
 
-export async function onboardTenant(deps: OnboardingDeps, tenantId: string): Promise<TenantRow> {
+export class OnboardingConflictError extends Error {
+  public constructor(tenantId: string, expected: TenantStatus) {
+    super(`tenant ${tenantId} left status ${expected} during onboarding; another run is progressing it`)
+    this.name = 'OnboardingConflictError'
+  }
+}
+
+const onboardingFlights = singleFlight<TenantRow>()
+
+export function onboardTenant(deps: OnboardingDeps, tenantId: string): Promise<TenantRow> {
+  return onboardingFlights(tenantId, () => runOnboarding(deps, tenantId))
+}
+
+async function runOnboarding(deps: OnboardingDeps, tenantId: string): Promise<TenantRow> {
   const log = deps.logger.child({ tenantId, flow: 'onboarding' })
 
   const load = async () => {
@@ -64,8 +84,13 @@ export async function onboardTenant(deps: OnboardingDeps, tenantId: string): Pro
     if (!row) throw new Error(`tenant ${tenantId} has no onboarding row`)
     return row
   }
-  const advance = async (status: TenantStatus, fields: Partial<TenantRow> = {}) => {
-    await deps.db.update(tenants).set({ ...fields, status, lastError: null, updatedAt: new Date() }).where(eq(tenants.id, tenantId))
+  const advance = async (from: TenantStatus, status: TenantStatus, fields: Partial<TenantRow> = {}) => {
+    const updated = await deps.db
+      .update(tenants)
+      .set({ ...fields, status, lastError: null, updatedAt: new Date() })
+      .where(and(eq(tenants.id, tenantId), eq(tenants.status, from)))
+      .returning({ id: tenants.id })
+    if (updated.length === 0) throw new OnboardingConflictError(tenantId, from)
     log.info({ status }, 'onboarding advanced')
   }
 
@@ -84,7 +109,7 @@ export async function onboardTenant(deps: OnboardingDeps, tenantId: string): Pro
           if (state.state !== 'action' || !state.did || !state.nymRequest) {
             throw new Error(`DID creation did not return an endorsement action: ${state.reason ?? state.state}`)
           }
-          await advance('did_created', { did: state.did, nym: state.did.split(':').pop() as string, nymRequest: state.nymRequest })
+          await advance('pending', 'did_created', { did: state.did, nym: state.did.split(':').pop() as string, nymRequest: state.nymRequest })
           break
         }
 
@@ -92,7 +117,7 @@ export async function onboardTenant(deps: OnboardingDeps, tenantId: string): Pro
           if (!row.nym || !row.nymRequest) throw new Error('did_created without nym or nymRequest')
           await deps.endorser.bindTenant(tenantId, row.nym)
           const endorsed = await deps.endorser.endorse({ tenantId, kind: 'nym', request: row.nymRequest })
-          await advance('nym_endorsed', { endorsedNymRequest: endorsed })
+          await advance('did_created', 'nym_endorsed', { endorsedNymRequest: endorsed })
           break
         }
 
@@ -113,7 +138,7 @@ export async function onboardTenant(deps: OnboardingDeps, tenantId: string): Pro
           } else {
             log.info({ nym: row.nym }, 'NYM already on the ledger; skipping submission')
           }
-          await advance('nym_written')
+          await advance('nym_endorsed', 'nym_written')
           break
         }
 
@@ -124,7 +149,7 @@ export async function onboardTenant(deps: OnboardingDeps, tenantId: string): Pro
           if (!onLedger) throw new Error(`NYM ${row.nym} not found on the ledger`)
           if (onLedger.role !== null && onLedger.role !== undefined) throw new Error(`tenant NYM has ledger role ${onLedger.role}`)
           if (expectedVerkey && onLedger.verkey !== expectedVerkey) throw new Error('ledger verkey does not match the tenant key')
-          await advance('ready')
+          await advance('nym_written', 'ready')
           break
         }
 
