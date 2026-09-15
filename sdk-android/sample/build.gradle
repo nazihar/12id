@@ -1,0 +1,94 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'org.jetbrains.kotlin.plugin.compose'
+}
+
+// The sample is a stand-in for a customer app: it consumes the SDK only from the local Maven
+// repository (build/m2), never as a project dependency, so the published artifact is what gets
+// tested. Building the sample publishes the fork and the SDK there first.
+tasks.matching { it.name == 'preBuild' }.configureEach {
+    dependsOn ':ariesframework:publishReleasePublicationToLocalRepository', ':sdk:publishReleasePublicationToLocalRepository'
+}
+
+android {
+    namespace 'com.onetwoid.sample'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'com.onetwoid.sample'
+        minSdk 24
+        targetSdk 36
+        versionCode 1
+        versionName '0.1.0'
+
+        // Where this installation gets its wallet token (the customer-backend stand-in) and the platform.
+        buildConfigField 'String', 'PLATFORM_API_URL', "\"${project.findProperty('platformApiUrl') ?: 'https://api.12id.naziharitsolution.com'}\""
+        buildConfigField 'String', 'BACKEND_URL', "\"${project.findProperty('sampleBackendUrl') ?: 'https://smoke-issuer.12id.naziharitsolution.com/sdk'}\""
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    // Phase 0 measured 165.8 MB for seven ABIs vs 51.7 MB for arm64 alone; ndk.abiFilters has no
+    // effect because the native libraries arrive inside AARs. Splits (or an App Bundle) are the lever.
+    // The wrappers' x86_64 libraries fail to load on every Android version (missing __extenddftf2,
+    // Phase 5 findings), so emulators are out until the wrappers are rebuilt; arm64 devices only.
+    splits {
+        abi {
+            enable true
+            reset()
+            include 'arm64-v8a'
+            universalApk false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+
+    buildFeatures {
+        compose true
+        buildConfig true
+    }
+
+    packagingOptions {
+        resources.excludes += ['META-INF/AL2.0', 'META-INF/LGPL2.1']
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11
+    }
+}
+
+dependencies {
+    implementation "com.12id:holder-sdk-android:${project.property('sdkVersion')}"
+
+    implementation platform('androidx.compose:compose-bom:2025.09.01')
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    implementation 'androidx.activity:activity-compose:1.11.0'
+    implementation 'androidx.lifecycle:lifecycle-runtime-compose:2.9.4'
+    implementation 'androidx.core:core-ktx:1.17.0'
+    implementation 'androidx.work:work-runtime-ktx:2.10.5'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2'
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+
+    // Invitation QR scanning.
+    implementation 'androidx.camera:camera-camera2:1.4.2'
+    implementation 'androidx.camera:camera-lifecycle:1.4.2'
+    implementation 'androidx.camera:camera-view:1.4.2'
+    implementation 'com.google.mlkit:barcode-scanning:17.3.0'
+
+    debugImplementation 'androidx.compose.ui:ui-tooling'
+}

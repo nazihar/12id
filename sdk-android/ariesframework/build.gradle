@@ -1,0 +1,97 @@
+plugins {
+    id 'com.android.library'
+    id 'org.jetbrains.kotlin.android'
+    id 'org.jetbrains.kotlin.plugin.serialization'
+    id "org.jlleitschuh.gradle.ktlint" version '13.1.0'
+    id 'maven-publish'
+}
+
+android {
+    namespace 'org.hyperledger.ariesframework'
+    compileSdk 36
+
+    defaultConfig {
+        minSdk 24
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        consumerProguardFiles "consumer-rules.pro"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+    publishing {
+        singleVariant("release") {
+            withSourcesJar()
+        }
+    }
+}
+
+// 12id: Kotlin 2.x refuses the old kotlinOptions block; keep the JVM target equal to compileOptions.
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11
+    }
+}
+
+ktlint {
+    version = "0.49.1"
+    reporters {
+        reporter "checkstyle"
+    }
+}
+
+dependencies {
+    // 12id fork change: the Android artifacts of the wrappers, resolved from third_party/m2.
+    implementation 'org.hyperledger:anoncreds_uniffi-android:0.2.0-wrapper.1'
+    implementation 'org.hyperledger:indy_vdr_uniffi-android:0.2.1-wrapper.2'
+    implementation 'org.hyperledger:askar_uniffi-android:0.2.0-wrapper.1'
+
+    implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.0'
+    implementation 'org.slf4j:slf4j-api:1.7.32'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.0'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-jdk8:1.7.0'
+    implementation 'org.jetbrains.kotlinx:kotlinx-datetime:0.4.0'
+    implementation 'com.squareup.okhttp3:okhttp:4.10.0'
+    implementation 'org.didcommx:peerdid:0.5.0'
+
+    implementation 'androidx.core:core-ktx:1.7.0'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.8.0'
+    // 12id fork change: a library must not choose the app's logging backend; logback is for tests only.
+    testImplementation 'ch.qos.logback:logback-classic:1.2.6'
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.0'
+    androidTestImplementation 'ch.qos.logback:logback-classic:1.2.6'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
+    androidTestImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.0'
+}
+
+// 12id fork change: publish under our coordinates to the project-local repository only
+// (4-init §12.16). Consumers resolve it from build/m2; there is no remote repository yet.
+afterEvaluate {
+    publishing {
+        repositories {
+            maven {
+                name = "local"
+                url = rootProject.layout.buildDirectory.dir("m2")
+            }
+        }
+        publications {
+            release(MavenPublication) {
+                from components.release
+                groupId 'com.12id'
+                artifactId 'aries-framework-kotlin'
+                version project.property('forkVersion')
+            }
+        }
+    }
+}

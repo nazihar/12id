@@ -1,0 +1,41 @@
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+        // 12id fork change: the aries-uniffi-wrappers are only published to GitHub Packages, which
+        // needs a token. scripts/mirror-uniffi.ps1 fills this repo; nothing else resolves from it.
+        maven {
+            name = "uniffiMirror"
+            url = uri("third_party/m2")
+            content { includeGroup("org.hyperledger") }
+        }
+        // org.didcommx:peerdid depends on com.github.multiformats:java-multibase, which is only on
+        // JitPack. Restricted to that group so nothing else can resolve from JitPack.
+        maven {
+            name = "jitpackMultibase"
+            url = uri("https://jitpack.io")
+            content { includeGroup("com.github.multiformats") }
+        }
+        // The published SDK and fork (`./gradlew publishAllPublicationsToLocalRepository`); the sample
+        // consumes them from here like a customer app would (Phase 5 plan P).
+        maven {
+            name = "local"
+            url = uri("build/m2")
+            content { includeGroup("com.12id") }
+        }
+    }
+}
+
+rootProject.name = "12id-sdk-android"
+include ':ariesframework'
+include ':sdk'
+include ':sample'

@@ -1,0 +1,83 @@
+plugins {
+    id 'com.android.library'
+    id 'org.jetbrains.kotlin.android'
+    id 'org.jetbrains.kotlin.plugin.serialization'
+    id 'maven-publish'
+}
+
+android {
+    namespace 'com.onetwoid.sdk'
+    compileSdk 36
+
+    defaultConfig {
+        minSdk 24
+        consumerProguardFiles 'consumer-rules.pro'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+
+    buildFeatures {
+        // No BuildConfig: it would be the one class in the public API nobody asked for.
+        buildConfig = false
+    }
+
+    testOptions {
+        // android.util.Log and friends return defaults in JVM unit tests.
+        unitTests.returnDefaultValues = true
+    }
+
+    publishing {
+        singleVariant('release') {
+            withSourcesJar()
+        }
+    }
+}
+
+kotlin {
+    // Every public declaration must say so: nothing reaches customers by accident.
+    explicitApi()
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11
+    }
+}
+
+dependencies {
+    // implementation, not api: no Aries type is visible to the customer's compiler.
+    implementation project(':ariesframework')
+
+    // The framework logs through slf4j; the SDK provides the binding (org.slf4j.impl) so those lines
+    // reach the customer's LogSink.
+    implementation 'org.slf4j:slf4j-api:1.7.32'
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2'
+    // The fork's records expose kotlinx-datetime 0.4 Instants; keep the same line.
+    implementation 'org.jetbrains.kotlinx:kotlinx-datetime:0.4.0'
+    implementation 'androidx.lifecycle:lifecycle-process:2.9.4'
+
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2'
+    testImplementation 'com.squareup.okhttp3:mockwebserver:4.12.0'
+}
+
+afterEvaluate {
+    publishing {
+        repositories {
+            maven {
+                name = 'local'
+                url = rootProject.layout.buildDirectory.dir('m2')
+            }
+        }
+        publications {
+            release(MavenPublication) {
+                from components.release
+                groupId 'com.12id'
+                artifactId 'holder-sdk-android'
+                version project.property('sdkVersion')
+            }
+        }
+    }
+}

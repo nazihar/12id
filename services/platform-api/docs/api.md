@@ -29,7 +29,7 @@ Responses that carry a secret are never stored for replays:
 
 1. `POST /v1/schemas` → `POST /v1/credential-definitions` (once per credential type/version).
 2. `POST /v1/wallets` for each app installation; hand `walletToken` to the app.
-3. App/SDK: `GET /v1/ledger` (genesis URL + sha256 + signature), `GET /v1/wallet/mediator-invitation` (once, at first launch).
+3. App/SDK: `GET /v1/ledger` (genesis URL + sha256 + signature), `GET /v1/wallet/mediator-invitation` (once, at first launch). The Android SDK does both itself; see `sdk-android/docs/integration.md`.
 4. `POST /v1/connections/invitations` → show `invitationUrl` as a link or QR code → `connection.state_changed: completed`.
 5. `POST /v1/credentials/offer` → `credential.state_changed`.
 6. `POST /v1/proof-templates` once; `POST /v1/proofs/request` → `proof.state_changed: done` with `verified` and `disclosed`.

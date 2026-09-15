@@ -50,11 +50,44 @@ export interface ReceivedEvent {
   event: { id: string; type: string; createdAt: string; tenantId: string; data: Record<string, unknown> }
 }
 
+export interface ReceiverOptions {
+  secret: () => string
+  invitationUrl?: () => string | undefined
+  /**
+   * Customer-backend stand-in for the SDK sample (Phase 5): POST /sdk/wallet {installationId} answers
+   * {walletToken}. Given the platform client (API key), it calls POST /v1/wallets with the installation
+   * id as Idempotency-Key, so a retry rotates the token for the same wallet. Wallets created are recorded.
+   */
+  walletBackend?: { api: PlatformClient; wallets: Map<string, string>; requests: { count: number } }
+}
+
 /** One local HTTP server: POST /webhook collects signed events; GET /phase0/invitation serves the app once. */
-export function startReceiver(port: number, options: { secret: () => string; invitationUrl?: () => string | undefined }) {
+export function startReceiver(port: number, options: ReceiverOptions) {
   const events: ReceivedEvent[] = []
   let invitationServed = false
   const server: Server = createServer((request, response) => {
+    if (request.method === 'POST' && request.url === '/sdk/wallet' && options.walletBackend) {
+      let body = ''
+      request.on('data', (chunk) => (body += chunk))
+      request.on('end', () => {
+        const { installationId } = JSON.parse(body) as { installationId: string }
+        const { api, wallets, requests } = options.walletBackend!
+        requests.count += 1
+        api
+          .call<{ id: string; walletToken: string }>('POST', '/v1/wallets', { externalId: `sdk-sample-${installationId}` }, { 'idempotency-key': installationId })
+          .then(({ status, json }) => {
+            if (status >= 400) throw new Error(`POST /v1/wallets -> ${status} ${JSON.stringify(json)}`)
+            wallets.set(installationId, json.id)
+            console.log(`  [${now()}] backend: wallet ${json.id.slice(0, 8)} token issued for installation ${installationId.slice(0, 8)}`)
+            response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ walletToken: json.walletToken }))
+          })
+          .catch((error) => {
+            console.log(`  [${now()}] backend: wallet creation failed: ${error}`)
+            response.writeHead(502).end('wallet creation failed')
+          })
+      })
+      return
+    }
     if (request.method === 'POST' && request.url === '/webhook') {
       let body = ''
       request.on('data', (chunk) => (body += chunk))

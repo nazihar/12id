@@ -1,0 +1,424 @@
+public final class com/onetwoid/sdk/Connection {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Lcom/onetwoid/sdk/ConnectionStatus;J)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Lcom/onetwoid/sdk/ConnectionStatus;
+	public final fun component4 ()J
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Lcom/onetwoid/sdk/ConnectionStatus;J)Lcom/onetwoid/sdk/Connection;
+	public static synthetic fun copy$default (Lcom/onetwoid/sdk/Connection;Ljava/lang/String;Ljava/lang/String;Lcom/onetwoid/sdk/ConnectionStatus;JILjava/lang/Object;)Lcom/onetwoid/sdk/Connection;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCreatedAtEpochSeconds ()J
+	public final fun getId ()Ljava/lang/String;
+	public final fun getLabel ()Ljava/lang/String;
+	public final fun getStatus ()Lcom/onetwoid/sdk/ConnectionStatus;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/onetwoid/sdk/ConnectionStatus : java/lang/Enum {
+	public static final field Connected Lcom/onetwoid/sdk/ConnectionStatus;
+	public static final field Pending Lcom/onetwoid/sdk/ConnectionStatus;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/onetwoid/sdk/ConnectionStatus;
+	public static fun values ()[Lcom/onetwoid/sdk/ConnectionStatus;
+}
+
+public final class com/onetwoid/sdk/Credential {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;Ljava/lang/Long;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun component5 ()Ljava/util/Map;
+	public final fun component6 ()Ljava/lang/Long;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;Ljava/lang/Long;)Lcom/onetwoid/sdk/Credential;
+	public static synthetic fun copy$default (Lcom/onetwoid/sdk/Credential;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;Ljava/lang/Long;ILjava/lang/Object;)Lcom/onetwoid/sdk/Credential;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAttributes ()Ljava/util/Map;
+	public final fun getCredentialDefinitionId ()Ljava/lang/String;
+	public final fun getExpiresAtEpochSeconds ()Ljava/lang/Long;
+	public final fun getId ()Ljava/lang/String;
+	public final fun getSchemaName ()Ljava/lang/String;
+	public final fun getSchemaVersion ()Ljava/lang/String;
+	public fun hashCode ()I
+	public final fun isExpired (J)Z
+	public static synthetic fun isExpired$default (Lcom/onetwoid/sdk/Credential;JILjava/lang/Object;)Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/onetwoid/sdk/CredentialCandidate {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/util/Map;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;)Lcom/onetwoid/sdk/CredentialCandidate;
+	public static synthetic fun copy$default (Lcom/onetwoid/sdk/CredentialCandidate;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;ILjava/lang/Object;)Lcom/onetwoid/sdk/CredentialCandidate;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAttributes ()Ljava/util/Map;
+	public final fun getCredentialDefinitionId ()Ljava/lang/String;
+	public final fun getCredentialId ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/onetwoid/sdk/CredentialOffer {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;J)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun component5 ()Ljava/util/Map;
+	public final fun component6 ()J
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;J)Lcom/onetwoid/sdk/CredentialOffer;
+	public static synthetic fun copy$default (Lcom/onetwoid/sdk/CredentialOffer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;JILjava/lang/Object;)Lcom/onetwoid/sdk/CredentialOffer;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAttributes ()Ljava/util/Map;
+	public final fun getConnectionId ()Ljava/lang/String;
+	public final fun getConnectionLabel ()Ljava/lang/String;
+	public final fun getCredentialDefinitionId ()Ljava/lang/String;
+	public final fun getId ()Ljava/lang/String;
+	public final fun getReceivedAtEpochSeconds ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/onetwoid/sdk/LogLevel : java/lang/Enum {
+	public static final field Debug Lcom/onetwoid/sdk/LogLevel;
+	public static final field Error Lcom/onetwoid/sdk/LogLevel;
+	public static final field Info Lcom/onetwoid/sdk/LogLevel;
+	public static final field Warn Lcom/onetwoid/sdk/LogLevel;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/onetwoid/sdk/LogLevel;
+	public static fun values ()[Lcom/onetwoid/sdk/LogLevel;
+}
+
+public abstract interface class com/onetwoid/sdk/LogSink {
+	public abstract fun log (Lcom/onetwoid/sdk/LogLevel;Ljava/lang/String;Ljava/lang/Throwable;)V
+}
+
+public final class com/onetwoid/sdk/OneTwoId {
+	public static final field INSTANCE Lcom/onetwoid/sdk/OneTwoId;
+	public final fun acceptOffer (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun addListener (Lcom/onetwoid/sdk/WalletListener;)V
+	public final fun connect (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun connections (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun credential (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun credentials (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun declineOffer (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun declineProofRequest (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun getEvents ()Lkotlinx/coroutines/flow/SharedFlow;
+	public final fun getState ()Lkotlinx/coroutines/flow/StateFlow;
+	public final fun initialize (Landroid/content/Context;Lcom/onetwoid/sdk/OneTwoIdConfig;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun pendingOffers (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun pendingProofRequests (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun proofRequestOptions (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun removeListener (Lcom/onetwoid/sdk/WalletListener;)V
+	public final fun reset (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun respondToProofRequest (Ljava/lang/String;Lcom/onetwoid/sdk/ProofSelection;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun sync-VtjQ1oo (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun sync-VtjQ1oo$default (Lcom/onetwoid/sdk/OneTwoId;JLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+
+public final class com/onetwoid/sdk/OneTwoIdConfig {
+	public fun <init> (Ljava/lang/String;Lkotlin/jvm/functions/Function1;Ljava/lang/String;Lcom/onetwoid/sdk/LogSink;)V
+	public synthetic fun <init> (Ljava/lang/String;Lkotlin/jvm/functions/Function1;Ljava/lang/String;Lcom/onetwoid/sdk/LogSink;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getApiBaseUrl ()Ljava/lang/String;
+	public final fun getLabel ()Ljava/lang/String;
+	public final fun getLogSink ()Lcom/onetwoid/sdk/LogSink;
+	public final fun getWalletTokenProvider ()Lkotlin/jvm/functions/Function1;
+}
+
+public abstract class com/onetwoid/sdk/OneTwoIdException : java/lang/Exception {
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
+public final class com/onetwoid/sdk/OneTwoIdException$Internal : com/onetwoid/sdk/OneTwoIdException {
+	public fun <init> (Ljava/lang/String;Ljava/lang/Throwable;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
+public final class com/onetwoid/sdk/OneTwoIdException$InvalidInvitation : com/onetwoid/sdk/OneTwoIdException {
+	public fun <init> ()V
+	public fun <init> (Ljava/lang/Throwable;)V
+	public synthetic fun <init> (Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
+public final class com/onetwoid/sdk/OneTwoIdException$InvalidSelection : com/onetwoid/sdk/OneTwoIdException {
+	public fun <init> (Ljava/lang/String;)V
+}
+
+public final class com/onetwoid/sdk/OneTwoIdException$LedgerUnavailable : com/onetwoid/sdk/OneTwoIdException {
+	public fun <init> (Ljava/lang/String;Ljava/lang/Throwable;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
+public final class com/onetwoid/sdk/OneTwoIdException$MediatorUnavailable : com/onetwoid/sdk/OneTwoIdException {
+	public fun <init> ()V
+	public fun <init> (Ljava/lang/Throwable;)V
+	public synthetic fun <init> (Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
+public final class com/onetwoid/sdk/OneTwoIdException$NetworkUnavailable : com/onetwoid/sdk/OneTwoIdException {
+	public fun <init> ()V
+	public fun <init> (Ljava/lang/Throwable;)V
+	public synthetic fun <init> (Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
+public final class com/onetwoid/sdk/OneTwoIdException$NotFound : com/onetwoid/sdk/OneTwoIdException {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun getId ()Ljava/lang/String;
+}
+
+public final class com/onetwoid/sdk/OneTwoIdException$NotInitialized : com/onetwoid/sdk/OneTwoIdException {
+	public fun <init> ()V
+}
+
+public final class com/onetwoid/sdk/OneTwoIdException$PlatformError : com/onetwoid/sdk/OneTwoIdException {
+	public fun <init> (ILjava/lang/String;)V
+	public final fun getStatusCode ()I
+}
+
+public final class com/onetwoid/sdk/OneTwoIdException$WalletKeyLost : com/onetwoid/sdk/OneTwoIdException {
+	public fun <init> ()V
+	public fun <init> (Ljava/lang/Throwable;)V
+	public synthetic fun <init> (Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
+public final class com/onetwoid/sdk/OneTwoIdException$WalletTokenRejected : com/onetwoid/sdk/OneTwoIdException {
+	public fun <init> ()V
+}
+
+public final class com/onetwoid/sdk/ProofRequest {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;J)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun component5 ()Ljava/util/List;
+	public final fun component6 ()Ljava/util/List;
+	public final fun component7 ()J
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;J)Lcom/onetwoid/sdk/ProofRequest;
+	public static synthetic fun copy$default (Lcom/onetwoid/sdk/ProofRequest;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Ljava/util/List;JILjava/lang/Object;)Lcom/onetwoid/sdk/ProofRequest;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAttributeGroups ()Ljava/util/List;
+	public final fun getConnectionId ()Ljava/lang/String;
+	public final fun getConnectionLabel ()Ljava/lang/String;
+	public final fun getId ()Ljava/lang/String;
+	public final fun getName ()Ljava/lang/String;
+	public final fun getPredicates ()Ljava/util/List;
+	public final fun getReceivedAtEpochSeconds ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/onetwoid/sdk/ProofRequestOptions {
+	public fun <init> (Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/util/Map;
+	public final fun component3 ()Ljava/util/Map;
+	public final fun copy (Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;)Lcom/onetwoid/sdk/ProofRequestOptions;
+	public static synthetic fun copy$default (Lcom/onetwoid/sdk/ProofRequestOptions;Ljava/lang/String;Ljava/util/Map;Ljava/util/Map;ILjava/lang/Object;)Lcom/onetwoid/sdk/ProofRequestOptions;
+	public final fun defaultSelection ()Lcom/onetwoid/sdk/ProofSelection;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAttributeGroups ()Ljava/util/Map;
+	public final fun getPredicates ()Ljava/util/Map;
+	public final fun getRequestId ()Ljava/lang/String;
+	public fun hashCode ()I
+	public final fun isSatisfiable ()Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/onetwoid/sdk/ProofSelection {
+	public fun <init> (Ljava/util/Map;Ljava/util/Map;)V
+	public final fun component1 ()Ljava/util/Map;
+	public final fun component2 ()Ljava/util/Map;
+	public final fun copy (Ljava/util/Map;Ljava/util/Map;)Lcom/onetwoid/sdk/ProofSelection;
+	public static synthetic fun copy$default (Lcom/onetwoid/sdk/ProofSelection;Ljava/util/Map;Ljava/util/Map;ILjava/lang/Object;)Lcom/onetwoid/sdk/ProofSelection;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAttributeGroups ()Ljava/util/Map;
+	public final fun getPredicates ()Ljava/util/Map;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/onetwoid/sdk/RequestedAttributeGroup {
+	public fun <init> (Ljava/lang/String;Ljava/util/List;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/util/List;
+	public final fun copy (Ljava/lang/String;Ljava/util/List;)Lcom/onetwoid/sdk/RequestedAttributeGroup;
+	public static synthetic fun copy$default (Lcom/onetwoid/sdk/RequestedAttributeGroup;Ljava/lang/String;Ljava/util/List;ILjava/lang/Object;)Lcom/onetwoid/sdk/RequestedAttributeGroup;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAttributeNames ()Ljava/util/List;
+	public final fun getKey ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/onetwoid/sdk/RequestedPredicate {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()I
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)Lcom/onetwoid/sdk/RequestedPredicate;
+	public static synthetic fun copy$default (Lcom/onetwoid/sdk/RequestedPredicate;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IILjava/lang/Object;)Lcom/onetwoid/sdk/RequestedPredicate;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAttributeName ()Ljava/lang/String;
+	public final fun getKey ()Ljava/lang/String;
+	public final fun getOperator ()Ljava/lang/String;
+	public final fun getValue ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/onetwoid/sdk/SyncResult {
+	public fun <init> (IIIZ)V
+	public final fun component1 ()I
+	public final fun component2 ()I
+	public final fun component3 ()I
+	public final fun component4 ()Z
+	public final fun copy (IIIZ)Lcom/onetwoid/sdk/SyncResult;
+	public static synthetic fun copy$default (Lcom/onetwoid/sdk/SyncResult;IIIZILjava/lang/Object;)Lcom/onetwoid/sdk/SyncResult;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCredentialsStored ()I
+	public final fun getDrained ()Z
+	public final fun getOffersReceived ()I
+	public final fun getProofRequestsReceived ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract class com/onetwoid/sdk/WalletEvent {
+}
+
+public final class com/onetwoid/sdk/WalletEvent$ConnectionCompleted : com/onetwoid/sdk/WalletEvent {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/onetwoid/sdk/WalletEvent$ConnectionCompleted;
+	public static synthetic fun copy$default (Lcom/onetwoid/sdk/WalletEvent$ConnectionCompleted;Ljava/lang/String;ILjava/lang/Object;)Lcom/onetwoid/sdk/WalletEvent$ConnectionCompleted;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getConnectionId ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/onetwoid/sdk/WalletEvent$CredentialStored : com/onetwoid/sdk/WalletEvent {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lcom/onetwoid/sdk/WalletEvent$CredentialStored;
+	public static synthetic fun copy$default (Lcom/onetwoid/sdk/WalletEvent$CredentialStored;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/onetwoid/sdk/WalletEvent$CredentialStored;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCredentialId ()Ljava/lang/String;
+	public final fun getOfferId ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/onetwoid/sdk/WalletEvent$ExchangeFailed : com/onetwoid/sdk/WalletEvent {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lcom/onetwoid/sdk/WalletEvent$ExchangeFailed;
+	public static synthetic fun copy$default (Lcom/onetwoid/sdk/WalletEvent$ExchangeFailed;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/onetwoid/sdk/WalletEvent$ExchangeFailed;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getExchangeId ()Ljava/lang/String;
+	public final fun getReason ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/onetwoid/sdk/WalletEvent$OfferReceived : com/onetwoid/sdk/WalletEvent {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/onetwoid/sdk/WalletEvent$OfferReceived;
+	public static synthetic fun copy$default (Lcom/onetwoid/sdk/WalletEvent$OfferReceived;Ljava/lang/String;ILjava/lang/Object;)Lcom/onetwoid/sdk/WalletEvent$OfferReceived;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getOfferId ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/onetwoid/sdk/WalletEvent$ProofRequested : com/onetwoid/sdk/WalletEvent {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/onetwoid/sdk/WalletEvent$ProofRequested;
+	public static synthetic fun copy$default (Lcom/onetwoid/sdk/WalletEvent$ProofRequested;Ljava/lang/String;ILjava/lang/Object;)Lcom/onetwoid/sdk/WalletEvent$ProofRequested;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getRequestId ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/onetwoid/sdk/WalletEvent$ProofSent : com/onetwoid/sdk/WalletEvent {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/onetwoid/sdk/WalletEvent$ProofSent;
+	public static synthetic fun copy$default (Lcom/onetwoid/sdk/WalletEvent$ProofSent;Ljava/lang/String;ILjava/lang/Object;)Lcom/onetwoid/sdk/WalletEvent$ProofSent;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getRequestId ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class com/onetwoid/sdk/WalletListener {
+	public abstract fun onEvent (Lcom/onetwoid/sdk/WalletEvent;)V
+}
+
+public abstract class com/onetwoid/sdk/WalletState {
+}
+
+public final class com/onetwoid/sdk/WalletState$Failed : com/onetwoid/sdk/WalletState {
+	public fun <init> (Lcom/onetwoid/sdk/OneTwoIdException;)V
+	public final fun getError ()Lcom/onetwoid/sdk/OneTwoIdException;
+}
+
+public final class com/onetwoid/sdk/WalletState$Initializing : com/onetwoid/sdk/WalletState {
+	public static final field INSTANCE Lcom/onetwoid/sdk/WalletState$Initializing;
+}
+
+public final class com/onetwoid/sdk/WalletState$Ready : com/onetwoid/sdk/WalletState {
+	public static final field INSTANCE Lcom/onetwoid/sdk/WalletState$Ready;
+}
+
+public final class com/onetwoid/sdk/WalletState$Uninitialized : com/onetwoid/sdk/WalletState {
+	public static final field INSTANCE Lcom/onetwoid/sdk/WalletState$Uninitialized;
+}
+
+public final class org/slf4j/impl/StaticLoggerBinder : org/slf4j/spi/LoggerFactoryBinder {
+	public static final field Companion Lorg/slf4j/impl/StaticLoggerBinder$Companion;
+	public static field REQUESTED_API_VERSION Ljava/lang/String;
+	public fun getLoggerFactory ()Lorg/slf4j/ILoggerFactory;
+	public fun getLoggerFactoryClassStr ()Ljava/lang/String;
+	public static final fun getSingleton ()Lorg/slf4j/impl/StaticLoggerBinder;
+}
+
+public final class org/slf4j/impl/StaticLoggerBinder$Companion {
+	public final fun getSingleton ()Lorg/slf4j/impl/StaticLoggerBinder;
+}
+
+public final class org/slf4j/impl/StaticMDCBinder {
+	public static final field Companion Lorg/slf4j/impl/StaticMDCBinder$Companion;
+	public static final field SINGLETON Lorg/slf4j/impl/StaticMDCBinder;
+	public final fun getMDCA ()Lorg/slf4j/spi/MDCAdapter;
+	public final fun getMDCAdapterClassStr ()Ljava/lang/String;
+	public static final fun getSingleton ()Lorg/slf4j/impl/StaticMDCBinder;
+}
+
+public final class org/slf4j/impl/StaticMDCBinder$Companion {
+	public final fun getSingleton ()Lorg/slf4j/impl/StaticMDCBinder;
+}
+
+public final class org/slf4j/impl/StaticMarkerBinder : org/slf4j/spi/MarkerFactoryBinder {
+	public static final field Companion Lorg/slf4j/impl/StaticMarkerBinder$Companion;
+	public static final field SINGLETON Lorg/slf4j/impl/StaticMarkerBinder;
+	public fun getMarkerFactory ()Lorg/slf4j/IMarkerFactory;
+	public fun getMarkerFactoryClassStr ()Ljava/lang/String;
+	public static final fun getSingleton ()Lorg/slf4j/impl/StaticMarkerBinder;
+}
+
+public final class org/slf4j/impl/StaticMarkerBinder$Companion {
+	public final fun getSingleton ()Lorg/slf4j/impl/StaticMarkerBinder;
+}
+

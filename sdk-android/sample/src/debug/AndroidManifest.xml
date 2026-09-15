@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Debug builds only: lets smoke:sdk-android drive the app over adb (see DebugReceiver). -->
+        <receiver
+            android:name=".DebugReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.onetwoid.sample.SIMULATE_PUSH" />
+                <action android:name="com.onetwoid.sample.CONNECT" />
+                <action android:name="com.onetwoid.sample.ACCEPT_OFFERS" />
+                <action android:name="com.onetwoid.sample.DECLINE_OFFERS" />
+                <action android:name="com.onetwoid.sample.RESPOND_PROOFS" />
+                <action android:name="com.onetwoid.sample.DECLINE_PROOFS" />
+                <action android:name="com.onetwoid.sample.DUMP" />
+                <action android:name="com.onetwoid.sample.WIPE_WALLET_KEEP_STATE" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

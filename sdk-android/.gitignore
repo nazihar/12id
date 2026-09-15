@@ -1,0 +1,14 @@
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+jniLibs
+
+# Mirrored wrapper AARs (scripts/mirror-uniffi.ps1); only the checksums are committed
+/third_party/m2/org/
