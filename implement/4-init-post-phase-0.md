@@ -3,7 +3,7 @@
 **Status:** Design handover document — **revised after Phase 0 (Android pass), Phase 1 (staging infrastructure), Phase 2 (agent services on staging), Phase 3 (platform API on staging), Phase 4 (console) and Phase 5 (Android holder SDK)**
 **Audience:** Implementation engineer / coding agent
 **Stack decision:** Credo-TS 0.7 + DIDComm v1 + AnonCreds + Hyperledger Indy
-**Evidence:** every Phase 0 claim below is backed by a run or a source read recorded in [`../../phase0/findings.md`](../../phase0/findings.md). The pre-Phase-0 version of this document is kept at [`init.pre-phase0.md`](init.pre-phase0.md).
+**Evidence:** every Phase 0 claim below is backed by a run or a source read recorded in [`3-phase-0-findings.md`](3-phase-0-findings.md). The pre-Phase-0 version of this document is kept at [`init.pre-phase0.md`](init.pre-phase0.md).
 
 ---
 
@@ -680,7 +680,7 @@ Published to GitHub Packages as `org.hyperledger:aries-framework-kotlin`, with U
 
 ### Phase 0 — Spike — **Android: conditional pass**
 
-Rig, scripts and full evidence: `phase0/` and [`../../phase0/findings.md`](../../phase0/findings.md).
+Rig, scripts and full evidence: `phase0/` and [`3-phase-0-findings.md`](3-phase-0-findings.md).
 
 - [x] Local Indy pool (`von-network`), endorser DID, schema and credential definition published from Credo 0.7
 - [x] Credo-to-Credo control round trip, v1 end to end (establishes a baseline before involving native code)
@@ -1065,7 +1065,7 @@ Throwaway, but re-runnable, and the fastest way to reproduce any finding above.
 
 | Path | Contents |
 |---|---|
-| `phase0/findings.md` | Evidence log: every run, error text and source reference behind this revision |
+| `12id/implement/3-phase-0-findings.md` (moved out of `phase0/`) | Evidence log: every run, error text and source reference behind this revision |
 | `phase0/von-network/` | Dev ledger (start with `./manage start <LAN-IP>`) |
 | `phase0/mediator/docker-compose.yml` | Mediator stack with the working configuration |
 | `phase0/agent/src/agent.ts`, `bindings.ts`, `bootstrap.ts`, `logger.ts`, `wire-log.ts` | Credo 0.7 agent factory, binding import order, ledger bootstrap with identifier derivation, working logger, wire-level message logger |
