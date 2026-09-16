@@ -45,10 +45,13 @@ Severity is exploitability × impact against the **production** threat model (cu
 | L10 | Low | platform-api | Console audit records route + status only, never the change; a bad edit cannot be reconstructed | 0.5 d |
 | L11 | Low | console | Tenant-member sessions last 7 days sliding (operators 12 h) | 10 min |
 | L12 | Low | all | npm audit: transitive moderates only (valibot via unused `dcql`; esbuild via `drizzle-kit`) | with next Credo bump |
+| L13 | Low | mediator | Valkey runs `noeviction` for what is now a pure cache (streams unused since multi-instance delivery is `none`): it refuses writes instead of evicting when full (§8) | 10 min |
+| L14 | Low | platform-api | Every credential offer and proof request makes an internal HTTP round trip to agent-service for the rarely-changing catalogue; no cache (§8) | 2 h |
+| L15 | Low | platform-api | `GET /v1/ledger` is static config served with no `Cache-Control`, though every SDK installation fetches it (§8) | 10 min |
 | I1 | Info | agent-service | `isProduction: false` in the Indy VDR network config; production checklist item | — |
 | I2 | Info | edge | `per_ip_limit` exempts all of `10.0.0.0/8` (provider hairpin); harmless on this host, wrong on a multi-tenant provider network | — |
 
-**Bucket B cross-check** (every item from the former `15-next-step.md` bucket B appears above): catalogue timeout → M5; orphaned wallets → M10; per-key rate limit → M4; mediator queue retention → M10; minisign on device → M15; SMTP invitation run / 12 h session cap → §8 not checked; upstream bug filing → M17 (CI/release hygiene); alert e-mail → M16; owner items (age key, `ubuntu` password, corrupted tenants) → M13, L8, §8.
+**Bucket B cross-check** (every item from the former `15-next-step.md` bucket B appears above): catalogue timeout → M5; orphaned wallets → M10; per-key rate limit → M4; mediator queue retention → M10; minisign on device → M15; SMTP invitation run / 12 h session cap → §9 not checked; upstream bug filing → M17 (CI/release hygiene); alert e-mail → M16; owner items (age key, `ubuntu` password, corrupted tenants) → M13, L8, §9.
 
 **Corrections to earlier notes:** the plan assumed "no non-root containers" — wrong, both images run `USER node` (`services/Dockerfile:24`, `console/Dockerfile:21`). The plan also placed trap 44 in the platform-api client (10 s); the client default is already 30 s (`agent-client.ts:96`) and the real cause is in agent-service (M5).
 
@@ -309,7 +312,56 @@ No action beyond tracking the next Credo release; add `npm audit --audit-level=h
 
 ---
 
-## 8. Not checked
+## 8. Shared cache / Valkey — should the other services use it?
+
+**Short answer: do not share the mediator's Valkey, and do not add Redis to any service yet.** Nothing in the platform currently needs it; the things people normally put in Redis are already solved better here. It becomes worth adding — as a **separate instance** — the day a second replica of platform-api, agent-service or the console starts.
+
+### What Valkey actually does today (run)
+`compose.mediator.yml:94-104`: `valkey/valkey:8-alpine`, `maxmemory 200mb`, `--maxmemory-policy noeviction`, `--appendonly yes`, `mem_limit 256m`, no `requirepass`, no TLS, reachable to anything on the `12id-mediator` network. The mediator reaches it through `CACHE__TYPE: redis` → `apps/mediator/build/config/cacheLoader.js`, which builds `CacheModule({ cache: new RedisCache(ioredis), useCachedStorageService: true })`. Since `MESSAGE_PICKUP__MULTI_INSTANCE_DELIVERY__TYPE` is pinned to `none` (§2.3), the Redis **streams** path is not in use, so Valkey holds **only Credo's cache** — the compose comment "Delivery uses streams; evicting them would drop messages" is stale.
+
+### Why not share it
+1. **`noeviction` + 200 MB is a shared failure mode.** When the instance hits its limit, Valkey refuses *writes* — for every client, not just the one that filled it. The mediator is the single point of failure for every mobile user (trap 8); a console session burst or a rate-limit key flood would take DIDComm delivery with it.
+2. **Sharing means widening the network.** The console and agent-service are not on `12id-mediator` today. Putting them there to reach Valkey is the opposite of **H2/H3**, which exist to *reduce* what the internet-facing services can reach. Valkey has no password, so anything on that network can `KEYS *` or `FLUSHALL` the mediator's cache.
+3. **Logical DBs are not isolation.** `SELECT 1..15` namespaces keys but shares memory, the AOF file and the single command loop. It prevents key collisions, nothing else.
+
+### Why nothing needs Redis yet (source read)
+| Would-be Redis job | How it is done now | Verdict |
+|---|---|---|
+| Webhook queue | Postgres `FOR UPDATE SKIP LOCKED` + backoff (`dispatcher.ts:82-93`) | Keep. Durable and replica-safe; Redis would trade that away. The §7.1 design note suggesting bullmq was superseded by this, correctly |
+| Idempotency | Postgres, reserved on arrival, TTL sweep (`idempotency.ts`) | Keep — it must survive a restart |
+| Wake debounce | Compare-and-set on the wallet row (`wake.ts:48-56`) | Keep — durable and exactly-once across replicas already |
+| Outbox cursor | Postgres (`outbox_cursor`) | Keep |
+| Tenant id resolution | In-process `Map` (`outbox-consumer.ts:31`) | Fine — one entry per tenant |
+| Dispatcher `inFlight` | In-process counter (`dispatcher.ts:78`) | Correct as per-replica; it feeds that replica's drain |
+| Tenant onboarding single-flight | In-process `Map` (`tenants/single-flight.ts`) **on top of** a compare-and-set on `tenants.status` per transition (`onboarding.ts:91`) | Multi-replica is already *safe* (trap 38's real guard is the CAS); the map only saves duplicate work |
+
+### The three triggers that would justify it (each needs its own instance)
+1. **platform-api ≥ 2 replicas** → per-API-key / per-wallet rate limiting (**M4**) needs shared counters. With one replica, an in-process limiter is enough — build M4 in-process now, behind an interface, and swap the store later.
+2. **agent-service ≥ 2 replicas** → the Credo ledger cache (`credo-base/src/cache.ts`, `InMemoryLruCache`) is per-replica, so each replica re-reads schemas and cred-defs from the ledger. **`@credo-ts/redis-cache@0.7.0` is published and pins `@credo-ts/core@0.7.0`** (our exact version) with `ioredis ^5.10.1`, so this is a config change, not an implementation. **Caveat: keep `useCachedStorageService: false`** — the mediator sets it `true`, but it is single-tenant; with our tenants it would cache connection records under keys that ignore the tenant context (trap 26). That trap is about the *storage service*, not the backing store, so it applies to Redis exactly as it does to the in-memory cache.
+3. **console ≥ 2 replicas** → Better Auth 1.7.4 supports `secondaryStorage` (verified in the installed package) for sessions and rate limiting; today `rateLimit.storage: 'database'` and sessions in Postgres are correct and durable.
+
+### Sessions, short-lived data, and hot reads — the three usual Redis arguments
+
+Checked each against the actual code paths. Only the third has anything in it, and its answer is an in-process cache, not Redis.
+
+**(a) User sessions — no.** Sessions exist only in the console, whose users are invite-only staff (operators and tenant members): tens, maybe low hundreds, ever. Each server function does `auth.api.getSession` (`middleware.ts:55`, unique index on `session.token`), and the operator/tenant middleware adds one or two more indexed lookups (`twoFactor` by `user_id`, `member ⋈ organization`). That is 2–3 index hits per human click — microseconds, and the durability matters (a lost session table logs everyone out mid-task). If console latency ever needs attention, the right lever is **Better Auth's `cookieCache`** (present in 1.7.4), a short-lived signed cookie that skips the session read entirely — no new infrastructure. **Caveat if you enable it:** Phase 4 promises "role change and removal effective on the next request". `tenantMiddleware` re-reads `member` live so tenant roles keep that property, but the **operator** role rides on the session's `user.role`, so an operator demotion would lag by the cache TTL. Keep the TTL at 30–60 s, or leave it off.
+
+**(b) Short-lived data — no, and the reason is durability, not size.** Sort it by whether loss is tolerable:
+- **Not tolerable:** idempotency keys (`idempotency_keys`, 24 h) exist precisely so a retry after a crash gets the stored response — losing them creates duplicate wallets and duplicate offers. Password-reset and OTP verification rows likewise. These belong in Postgres.
+- **Tolerable:** the 30 s wake debounce (`wake.ts:48-56`) — a lost timestamp just means one extra `wallet.sync_requested`, and the app polls once more. But it is a column on a wallet row the handler **already reads and writes**, so moving it to Redis *adds* a network round trip instead of removing one.
+
+**(c) Frequent reads of rarely-changing data — yes, there is one, and it is not a database problem.** `POST /v1/credentials/offer` (`exchanges.ts:90` → `resolveCredentialDefinition`) and `POST /v1/proofs/request` (`exchanges.ts:149`) each call `agent.listCatalogue(...)` — an **internal HTTP round trip to agent-service plus a DB query there** — on the critical path of every issuance and verification command, to read a catalogue that changes only when someone publishes a schema or credential definition. That is the best caching target in the platform. Fix it with an in-process TTL cache keyed by `agentTenantId` (30–60 s, invalidated on publish/deprecate, which platform-api already routes), not Redis — one replica, no new failure mode (**L14**).
+
+The two per-request credential lookups (`requireApiKey`, `requireWalletToken`) are single indexed reads on small tables and are **deliberately left uncached**: caching them puts a TTL between `DELETE /v1/api-keys/{id}` and the key actually stopping, which trades immediate revocation for microseconds. Not worth it.
+
+Two cheap adjacent wins while in here: `GET /v1/ledger` returns static, env-derived config with **no `Cache-Control`** (verified: `curl -I` shows none) although every SDK installation fetches it — `public, max-age=300` costs nothing (**L15**); and the outbox and webhook workers each poll Postgres every second whether or not there is work (`OUTBOX_POLL_MS` / `WEBHOOK_POLL_MS` default 1000, about 172 k idle queries a day per worker) — cheap, but `LISTEN/NOTIFY` would make both event-driven if the Phase 7 load test says it matters.
+
+### What to do in this phase
+- **Nothing shared.** Leave Valkey to the mediator.
+- **One small fix (L13):** with streams unused, `noeviction` is the wrong policy for a pure cache — the mediator errors instead of evicting when it fills. Set `--maxmemory-policy allkeys-lru` and correct the stale comment. Revisit if multi-instance delivery ever moves off `none` (it cannot today: `redis` silently disables the webhooks, §2.3).
+- **When scaling out:** add a second Valkey to the `12id-agent` network with `requirepass`, its own `mem_limit`, `allkeys-lru`, and `appendonly no` (it is a cache — losing it must be survivable). Do not reuse the mediator's.
+
+## 9. Not checked
 
 - Anything requiring SSH to the VM: `docker inspect` contents (M11 is reasoned from compose), actual Postgres `max_connections`, `EXPLAIN` / `pg_stat_statements` on the hot queries (index coverage in §7 is a source read of schema vs query, not measured plans), on-disk backup permissions, the state of the 12 dead-holder queue rows, whether alert e-mail is configured, the `ubuntu` password rotation, the three corrupted tenants from the onboarding race.
 - TLS 1.0/1.1 refusal (the local OpenSSL 3.5 does not offer them); Caddy's default minimum is 1.2.
@@ -320,7 +372,7 @@ No action beyond tracking the next Credo release; add `npm audit --audit-level=h
 
 ---
 
-## 9. Recommended fix set — Phase 6: pre-production hardening
+## 10. Recommended fix set — Phase 6: pre-production hardening
 
 **Build now (each under a day unless noted), in this order:**
 
@@ -336,15 +388,17 @@ No action beyond tracking the next Credo release; add `npm audit --audit-level=h
 | 8 | M12: nonce CSP | Playwright CSP spec |
 | 9 | M14: SDK log floor + https check | JVM tests |
 | 10 | H1: deletion routes + retention job + the §5.3 customer document (2–3 d) | staging issue → delete → grep every store |
-| 11 | L1, L4, L5, L6, L7, I2 | probes / unit tests |
+| 11 | L1, L4, L5, L6, L7, L13, L14, L15, I2 | probes / unit tests; `valkey-cli config get maxmemory-policy` returns `allkeys-lru`; one agent-service call per offer instead of two; `curl -I /v1/ledger` shows `Cache-Control` |
 
 **Owner decisions (not code):** M13 off-site backups and a second age recipient; M16 alert channel; M17 / 5b.3 CI and tag policy; L2 whether Grafana and the ledger browser exist in production at all; L8 rotate the `.staging` credentials; §12.1 ledger topology, a clean production host, TAA (bucket C).
 
 **Defer to their phases:** M15 with 5b.1 (the wrapper rebuild changes the size budget); L9, M1's concurrency switch and M2's numbers with the Phase 7 load tests; L3, L10, L11 when those surfaces are next touched.
 
+**Explicitly not doing:** sharing the mediator's Valkey with the other services, or adding Redis anywhere (§8). Build M4's rate limiter in-process behind a small store interface so it can move to Redis the day platform-api runs a second replica.
+
 ---
 
-## 10. Document updates made with this review (2026-09-16)
+## 11. Document updates made with this review (2026-09-16)
 - `4-init-post-phase-0.md` §0.1 and §10: pointer to this file; the review fix set is **Phase 6 — Pre-production hardening** and the former Phase 6 (load tests, failover, key rotation, DR) is now **Phase 7 — Hardening**.
 - `15-next-step.md` removed; this file takes its number. Its Phase 5b recommendation (Android SDK release) is preserved in Appendix A and follows Phase 6.
 
