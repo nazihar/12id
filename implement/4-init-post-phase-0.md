@@ -62,6 +62,8 @@ Phase 0 ran the stack end to end on Android. Content now falls into these tiers,
 - production (non-von-network) ledgers and the TAA;
 - a real FCM push (the smoke simulates it with a broadcast on the same code path).
 
+**Reviewed, not fixed (2026-09-16).** [`15-pre-production-review.md`](15-pre-production-review.md) audited every component above for security gaps and optimisation opportunities: 3 High (data retention/deletion, shared internal token + network reaching the endorser, Postgres superuser everywhere), 18 Medium, 12 Low. Its §9 is the Phase 6 fix set; nothing in it has been built.
+
 Phase 0 found that the architecture holds. It also found that **three configuration switches, two holder fork changes and one mediator setting** must all be right, and each fails silently when wrong (§2.7.1, §2.7.4, §2.3). Treat those as load-bearing.
 
 ### 0.2 Ledger object identifiers — resolved
@@ -313,7 +315,7 @@ With `QueueAndLiveModeDelivery` the mediator checks for a *live-mode* session (a
 **Consequences:**
 - Pin `PickUpV1` in the SDK. The sample app's `Implicit` default must not ship.
 - Live delivery latency is bounded by `mediatorPollingInterval` (default 10 s) — observed immediate in practice while the socket was open, but do not promise sub-second delivery.
-- Every open wallet polls the mediator on that interval. That is the load profile to test (§10 Phase 6).
+- Every open wallet polls the mediator on that interval. That is the load profile to test (§10 Phase 7).
 - The pre-Phase-0 guidance ("implicit → `DirectDelivery` **or** `QueueAndLiveModeDelivery`") was wrong in both directions.
 
 ### 2.7.4 Required holder fork changes
@@ -826,7 +828,11 @@ Plan: [`13-phase-5-android.md`](13-phase-5-android.md); evidence: [`14-phase-5-a
 - [ ] Parity test suite running both SDKs against the same issuer in CI, including the offline-delivery scenario
 - [ ] Strip unused architectures; integration guide + sample app
 
-### Phase 6 — Hardening
+### Phase 6 — Pre-production hardening (from the review; not started)
+
+Findings and the ordered fix set: [`15-pre-production-review.md`](15-pre-production-review.md) §9. Highest first: per-hop internal tokens and an endorser-only network (H2); per-service Postgres roles and the endorser store off the mediator instance (H3); file-based secrets (M11); DIDComm body cap (M1); the trap 44 root cause is agent-service's `connectionTimeout`, not the platform client (M5); deletion routes and a retention job so §5.3 is true (H1).
+
+### Phase 7 — Hardening
 
 - [ ] Load test the mediator with the real profile: N open wallets each polling every 10 s (`PickUpV1`), plus one webhook per queued message
 - [ ] Failover test: kill one Indy validator, confirm reads and writes continue
@@ -956,7 +962,7 @@ Decided before Phase 0. Consequences now designed in: no tails server; credentia
 
 ### 12.4 Issuer/verifier deployment split — decided: one codebase, one deployment
 
-**Decision (Phase 2 planning):** `agent-service` issues and verifies in one process (`AGENT_ROLES=issuer,verifier`, splittable later). DIDComm connections live in the tenant's wallet inside one agent; separate issuer and verifier processes would need either two connections per end user or a shared tenant store that Credo does not coordinate. Revisit if verification load ever starves issuance (Phase 6 load test).
+**Decision (Phase 2 planning):** `agent-service` issues and verifies in one process (`AGENT_ROLES=issuer,verifier`, splittable later). DIDComm connections live in the tenant's wallet inside one agent; separate issuer and verifier processes would need either two connections per end user or a shared tenant store that Credo does not coordinate. Revisit if verification load ever starves issuance (Phase 7 load test).
 
 ### 12.5 Identifier format — decided: legacy unqualified on the wire
 

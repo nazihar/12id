@@ -47,7 +47,7 @@ const configSchema = z.object({
   TENANT_SESSION_ACQUIRE_TIMEOUT_MS: z.coerce.number().int().positive().default(5_000),
 
   // Off by default, as in Credo: all tenants' inbound messages are processed one at a time (T1
-  // trap 4). Turn on only after the Phase 6 load test shows it is safe.
+  // trap 4). Turn on only after the Phase 7 load test shows it is safe.
   PROCESS_MESSAGES_CONCURRENTLY: z.stringbool().default(false),
 
   // Stuck-exchange reconciliation (T3a): waiting records older than the TTL are abandoned.
