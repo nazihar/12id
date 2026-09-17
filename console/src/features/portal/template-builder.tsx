@@ -1,40 +1,75 @@
-import { useHydrated } from '@tanstack/react-router'
-import { PlusIcon, XIcon } from 'lucide-react'
-import { type FormEvent, useState } from 'react'
+import { useBlocker } from '@tanstack/react-router'
+import { PlusIcon, Trash2Icon, XIcon } from 'lucide-react'
+import { useRef, useState } from 'react'
 
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { type ChoiceOption, ComboboxControl, Form, formValidation, toErrors, useAppForm } from '@/components/form/form'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
 import type { SchemaRow } from '@/features/tenant-data/types'
-import { EXPIRY_ATTRIBUTE, type TemplateCredentialRef, type TemplateDefinition, type TemplatePredicate, templateProblems } from '@/lib/template-schema'
+import { EXPIRY_ATTRIBUTE, PREDICATE_TYPES, type TemplateDefinition, type TemplateFormValues, type TemplatePredicate, templateDefinitionForm } from '@/lib/template-schema'
 
-interface GroupState {
-  key: string
-  credentials: TemplateCredentialRef[]
-  attributes: string[]
-  predicates: TemplatePredicate[]
-}
+type PredicateType = TemplatePredicate['type']
+type GroupValues = TemplateFormValues['groups'][number]
+type CredentialRef = GroupValues['credentials'][number]
 
-const nativeSelect = 'h-8 rounded-lg border border-input bg-transparent px-2 text-sm'
-const PREDICATE_TYPES = ['>=', '>', '<=', '<'] as const
+const PREDICATE_OPTIONS: ChoiceOption<PredicateType>[] = PREDICATE_TYPES.map((type) => ({ value: type, label: type }))
+const VERSION_OPTIONS: ChoiceOption<'all' | 'active'>[] = [
+  { value: 'all', label: 'all versions', description: 'credentials issued under a deprecated version stay valid' },
+  { value: 'active', label: 'active versions only' },
+]
 
-function describeRef(ref: TemplateCredentialRef) {
+function describeRef(ref: CredentialRef) {
   return 'schemaName' in ref ? `${ref.schemaName} · ${ref.versions === 'active' ? 'active versions' : 'all versions'}` : `definition ${ref.credentialDefinitionId}`
 }
+
+function toValues(schemas: SchemaRow[], initial?: TemplateDefinition): TemplateFormValues {
+  if (initial) {
+    return {
+      name: initial.name,
+      groups: initial.groups.map((group) => ({ key: group.key, credentials: group.credentials, attributes: group.attributes, predicates: group.predicates ?? [] })),
+    }
+  }
+  const firstSchema = [...new Set(schemas.map((schema) => schema.name))].sort()[0]
+  return { name: '', groups: [{ key: 'credential', credentials: firstSchema ? [{ schemaName: firstSchema, versions: 'all' }] : [], attributes: [], predicates: [] }] }
+}
+
+function toDefinition(values: TemplateFormValues): TemplateDefinition {
+  const parsed = templateDefinitionForm.parse(values)
+  return { ...parsed, groups: parsed.groups.map((group) => ({ ...group, predicates: group.predicates.length > 0 ? group.predicates : undefined })) }
+}
+
+function useTemplateForm(defaultValues: TemplateFormValues, onSubmit: (values: TemplateFormValues) => Promise<void>) {
+  return useAppForm({
+    defaultValues,
+    validationLogic: formValidation,
+    validators: { onDynamic: templateDefinitionForm },
+    onSubmit: ({ value }) => onSubmit(value),
+  })
+}
+type TemplateForm = ReturnType<typeof useTemplateForm>
 
 /**
  * Builds a proof request template: which credential types each group accepts, which attributes are
  * disclosed, and which integer predicates apply. `expiresAt >= now` is added to every group by the
- * platform and cannot be disclosed or edited.
+ * platform and cannot be disclosed or edited. Every rule is checked on submit and shown at the field
+ * it concerns; leaving with unsaved changes asks first.
  */
 export function TemplateBuilder({
   schemas,
   initial,
   submitLabel,
-  pending,
   error,
   onSubmit,
   onCancel,
@@ -42,224 +77,196 @@ export function TemplateBuilder({
   schemas: SchemaRow[]
   initial?: TemplateDefinition
   submitLabel: string
-  pending: boolean
-  error?: string
-  onSubmit: (definition: TemplateDefinition) => void
+  error?: Error | null
+  /** Resolves once saved; a rejection is shown through `error` and keeps the page. */
+  onSubmit: (definition: TemplateDefinition) => Promise<unknown>
   onCancel: () => void
 }) {
-  const hydrated = useHydrated()
   const schemaNames = [...new Set(schemas.map((schema) => schema.name))].sort()
-  const [name, setName] = useState(initial?.name ?? '')
-  const [groups, setGroups] = useState<GroupState[]>(
-    initial?.groups.map((group) => ({ key: group.key, credentials: group.credentials, attributes: group.attributes, predicates: group.predicates ?? [] })) ?? [
-      { key: 'credential', credentials: schemaNames[0] ? [{ schemaName: schemaNames[0], versions: 'all' }] : [], attributes: [], predicates: [] },
-    ]
-  )
-  const [problems, setProblems] = useState<string[]>([])
+  const saved = useRef(false)
+  const form = useTemplateForm(toValues(schemas, initial), async (values) => {
+    // Marked before the call: the page navigates away from inside `onSubmit` once saved, and the
+    // unsaved-changes guard must not stop that. A failure un-marks it.
+    saved.current = true
+    try {
+      await onSubmit(toDefinition(values))
+    } catch {
+      saved.current = false // shown through the `error` prop
+    }
+  })
 
-  const update = (index: number, change: Partial<GroupState>) => setGroups((current) => current.map((group, i) => (i === index ? { ...group, ...change } : group)))
-
-  const attributesFor = (group: GroupState) => {
+  const attributesFor = (group: GroupValues) => {
     const names = new Set(group.credentials.flatMap((ref) => ('schemaName' in ref ? schemas.filter((s) => s.name === ref.schemaName).flatMap((s) => s.attributes ?? []) : [])))
     names.delete(EXPIRY_ATTRIBUTE)
     return [...names].sort()
   }
 
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const definition: TemplateDefinition = {
-      name: name.trim(),
-      groups: groups.map((group) => ({ key: group.key.trim(), credentials: group.credentials, attributes: group.attributes, predicates: group.predicates.length > 0 ? group.predicates : undefined })),
-    }
-    const found = templateProblems(definition)
-    setProblems(found)
-    if (found.length === 0) onSubmit(definition)
-  }
-
   return (
-    <form method="post" onSubmit={submit} className="space-y-4" data-testid="template-builder">
-      <Field className="max-w-md">
-        <FieldLabel htmlFor="template-name">Template name</FieldLabel>
-        <Input id="template-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={100} required />
-        <FieldDescription>Shown to the holder in their wallet app as the request title.</FieldDescription>
-      </Field>
+    <Form form={form} data-testid="template-builder" className="gap-5">
+      <UnsavedChangesGuard isDirty={() => form.state.isDirty && !saved.current} />
+      <form.FormError error={error} />
+      <form.AppField name="name">{(field) => <field.TextField label="Template name" description="Shown to the holder in their wallet app as the request title." className="max-w-md" autoFocus={!initial} />}</form.AppField>
 
-      {groups.map((group, index) => {
-        const available = attributesFor(group)
-        return (
-          <Card key={index} size="sm">
-            <CardHeader className="flex flex-row items-center justify-between gap-3">
-              <CardTitle>Requested credential {index + 1}</CardTitle>
-              {groups.length > 1 && (
-                <Button type="button" variant="ghost" size="sm" onClick={() => setGroups((current) => current.filter((_, i) => i !== index))}>
-                  Remove
-                </Button>
-              )}
-            </CardHeader>
-            <CardContent>
-              <FieldGroup>
-                <Field className="max-w-xs">
-                  <FieldLabel htmlFor={`group-key-${index}`}>Key</FieldLabel>
-                  <Input id={`group-key-${index}`} value={group.key} onChange={(event) => update(index, { key: event.target.value })} maxLength={50} required />
-                  <FieldDescription>Name of this part of the response, e.g. employee.</FieldDescription>
-                </Field>
+      <form.AppField name="groups" mode="array">
+        {(groupsField) => (
+          <div className="flex flex-col gap-4">
+            <FieldError errors={toErrors(groupsField.state.meta.errors)} />
+            {groupsField.state.value.map((_, index) => (
+              <form.Subscribe key={index} selector={(state) => state.values.groups[index]}>
+                {(group) => {
+                  const available = attributesFor(group)
+                  const disclosed = new Set(group.attributes)
+                  const predicated = new Set(group.predicates.map((p) => p.name))
+                  const free = available.filter((attribute) => !disclosed.has(attribute))
+                  const nextPredicate = free.find((attribute) => !predicated.has(attribute))
+                  return (
+                    <Card size="sm">
+                      <CardHeader>
+                        <CardTitle>Requested credential {index + 1}</CardTitle>
+                        <CardDescription>The holder presents one credential matching this group.</CardDescription>
+                        {groupsField.state.value.length > 1 && (
+                          <CardAction>
+                            <Button type="button" variant="ghost" size="icon-sm" aria-label={`Remove requested credential ${index + 1}`} onClick={() => groupsField.removeValue(index)}>
+                              <Trash2Icon />
+                            </Button>
+                          </CardAction>
+                        )}
+                      </CardHeader>
+                      <CardContent className="flex flex-col gap-5">
+                        <form.AppField name={`groups[${index}].key`}>{(field) => <field.TextField label="Key" description="Name of this part of the response, e.g. employee." className="max-w-xs" />}</form.AppField>
 
-                <Field>
-                  <FieldLabel>Accepted credentials</FieldLabel>
-                  <div className="flex flex-wrap gap-1">
-                    {group.credentials.map((ref, refIndex) => (
-                      <Badge key={refIndex} variant="outline" className="gap-1">
-                        {describeRef(ref)}
-                        <button type="button" aria-label="Remove credential type" onClick={() => update(index, { credentials: group.credentials.filter((_, i) => i !== refIndex) })}>
-                          <XIcon />
-                        </button>
-                      </Badge>
-                    ))}
-                  </div>
-                  <AddCredentialRef schemaNames={schemaNames} onAdd={(ref) => update(index, { credentials: [...group.credentials, ref] })} />
-                  <FieldDescription>"All versions" keeps credentials issued under a deprecated schema version valid.</FieldDescription>
-                </Field>
+                        <form.AppField name={`groups[${index}].credentials`} mode="array">
+                          {(field) => (
+                            <Field data-invalid={field.state.meta.errors.length > 0 || undefined}>
+                              <FieldLabel>Accepted credentials</FieldLabel>
+                              {field.state.value.length > 0 && (
+                                <div className="flex flex-wrap gap-1">
+                                  {field.state.value.map((ref, refIndex) => (
+                                    <Badge key={refIndex} variant="outline" className="gap-1 pr-1">
+                                      {describeRef(ref)}
+                                      <button type="button" className="rounded-sm opacity-60 hover:opacity-100" aria-label="Remove credential type" onClick={() => field.removeValue(refIndex)}>
+                                        <XIcon className="size-3" />
+                                      </button>
+                                    </Badge>
+                                  ))}
+                                </div>
+                              )}
+                              <AddCredentialRef schemaNames={schemaNames} onAdd={(ref) => field.pushValue(ref)} />
+                              <FieldDescription>"All versions" keeps credentials issued under a deprecated schema version valid.</FieldDescription>
+                              <FieldError errors={toErrors(field.state.meta.errors)} />
+                            </Field>
+                          )}
+                        </form.AppField>
 
-                <Field>
-                  <FieldLabel>Disclosed attributes</FieldLabel>
-                  {available.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">Choose a credential type first.</p>
-                  ) : (
-                    <div className="flex flex-wrap gap-3">
-                      {available.map((attribute) => {
-                        const predicated = group.predicates.some((p) => p.name === attribute)
-                        return (
-                          <label key={attribute} className="flex items-center gap-1.5 text-sm">
-                            <input
-                              type="checkbox"
-                              checked={group.attributes.includes(attribute)}
-                              disabled={predicated}
-                              onChange={(event) => update(index, { attributes: event.target.checked ? [...group.attributes, attribute] : group.attributes.filter((a) => a !== attribute) })}
+                        <form.AppField name={`groups[${index}].attributes`}>
+                          {(field) => (
+                            <field.CheckboxGroupField
+                              label="Disclosed attributes"
+                              emptyMessage="Choose a credential type first."
+                              options={available.map((attribute) => ({ value: attribute, label: attribute, disabled: predicated.has(attribute), description: predicated.has(attribute) ? 'used in a predicate' : undefined }))}
                             />
-                            {attribute}
-                          </label>
-                        )
-                      })}
-                    </div>
-                  )}
-                </Field>
+                          )}
+                        </form.AppField>
 
-                <Field>
-                  <FieldLabel>Predicates (integer attributes, value stays hidden)</FieldLabel>
-                  {group.predicates.map((predicate, predicateIndex) => (
-                    <div key={predicateIndex} className="flex flex-wrap items-center gap-2">
-                      <select
-                        className={nativeSelect}
-                        value={predicate.name}
-                        onChange={(event) => update(index, { predicates: group.predicates.map((p, i) => (i === predicateIndex ? { ...p, name: event.target.value } : p)) })}
-                        aria-label="Predicate attribute"
-                      >
-                        {available
-                          .filter((attribute) => attribute === predicate.name || !group.attributes.includes(attribute))
-                          .map((attribute) => (
-                            <option key={attribute} value={attribute}>
-                              {attribute}
-                            </option>
-                          ))}
-                      </select>
-                      <select
-                        className={nativeSelect}
-                        value={predicate.type}
-                        onChange={(event) => update(index, { predicates: group.predicates.map((p, i) => (i === predicateIndex ? { ...p, type: event.target.value as TemplatePredicate['type'] } : p)) })}
-                        aria-label="Predicate comparison"
-                      >
-                        {PREDICATE_TYPES.map((type) => (
-                          <option key={type} value={type}>
-                            {type}
-                          </option>
-                        ))}
-                      </select>
-                      <Input
-                        type="number"
-                        step={1}
-                        className="w-32"
-                        value={Number.isFinite(predicate.value) ? predicate.value : ''}
-                        onChange={(event) => update(index, { predicates: group.predicates.map((p, i) => (i === predicateIndex ? { ...p, value: Number.parseInt(event.target.value, 10) } : p)) })}
-                        aria-label="Predicate value"
-                      />
-                      <Button type="button" variant="ghost" size="sm" onClick={() => update(index, { predicates: group.predicates.filter((_, i) => i !== predicateIndex) })}>
-                        Remove
-                      </Button>
-                    </div>
-                  ))}
-                  <div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={available.filter((a) => !group.attributes.includes(a)).length === 0}
-                      onClick={() => {
-                        const first = available.find((a) => !group.attributes.includes(a) && !group.predicates.some((p) => p.name === a))
-                        if (first) update(index, { predicates: [...group.predicates, { name: first, type: '>=', value: 0 }] })
-                      }}
-                    >
-                      <PlusIcon />
-                      Add predicate
-                    </Button>
-                  </div>
-                  <FieldDescription>{EXPIRY_ATTRIBUTE} ≥ now is always checked and never disclosed.</FieldDescription>
-                </Field>
-              </FieldGroup>
-            </CardContent>
-          </Card>
-        )
-      })}
-
-      <Button type="button" variant="outline" onClick={() => setGroups((current) => [...current, { key: `credential${current.length + 1}`, credentials: [], attributes: [], predicates: [] }])}>
-        <PlusIcon />
-        Request another credential
-      </Button>
-
-      {(problems.length > 0 || error) && (
-        <Alert variant="destructive">
-          <AlertDescription>
-            <ul className="list-disc pl-4" data-testid="template-problems">
-              {problems.map((problem) => (
-                <li key={problem}>{problem}</li>
-              ))}
-              {error && <li>{error}</li>}
-            </ul>
-          </AlertDescription>
-        </Alert>
-      )}
+                        <form.AppField name={`groups[${index}].predicates`} mode="array">
+                          {(field) => (
+                            <Field data-invalid={field.state.meta.errors.length > 0 || undefined}>
+                              <FieldLabel>Predicates</FieldLabel>
+                              <FieldDescription>Integer comparisons the holder proves without revealing the value. {EXPIRY_ATTRIBUTE} ≥ now is always checked and never disclosed.</FieldDescription>
+                              {field.state.value.map((predicate, predicateIndex) => (
+                                <PredicateRow
+                                  key={predicateIndex}
+                                  form={form}
+                                  groupIndex={index}
+                                  predicateIndex={predicateIndex}
+                                  attributes={free.filter((a) => a === predicate.name || !predicated.has(a))}
+                                  onRemove={() => field.removeValue(predicateIndex)}
+                                />
+                              ))}
+                              <div>
+                                <Button type="button" variant="outline" size="sm" disabled={!nextPredicate} onClick={() => nextPredicate && field.pushValue({ name: nextPredicate, type: '>=', value: 0 })}>
+                                  <PlusIcon />
+                                  Add predicate
+                                </Button>
+                              </div>
+                              <FieldError errors={toErrors(field.state.meta.errors)} />
+                            </Field>
+                          )}
+                        </form.AppField>
+                      </CardContent>
+                    </Card>
+                  )
+                }}
+              </form.Subscribe>
+            ))}
+            <div>
+              <Button type="button" variant="outline" onClick={() => groupsField.pushValue({ key: `credential${groupsField.state.value.length + 1}`, credentials: [], attributes: [], predicates: [] })}>
+                <PlusIcon />
+                Request another credential
+              </Button>
+            </div>
+          </div>
+        )}
+      </form.AppField>
 
       <div className="flex gap-2">
-        <Button type="submit" disabled={!hydrated || pending}>
-          {submitLabel}
-        </Button>
+        <form.SubmitButton pendingLabel="Saving…">{submitLabel}</form.SubmitButton>
         <Button type="button" variant="ghost" onClick={onCancel}>
           Cancel
         </Button>
       </div>
-    </form>
+    </Form>
   )
 }
 
-function AddCredentialRef({ schemaNames, onAdd }: { schemaNames: string[]; onAdd: (ref: TemplateCredentialRef) => void }) {
-  const [schemaName, setSchemaName] = useState(schemaNames[0] ?? '')
-  const [versions, setVersions] = useState<'all' | 'active'>('all')
+function PredicateRow({ form, groupIndex, predicateIndex, attributes, onRemove }: { form: TemplateForm; groupIndex: number; predicateIndex: number; attributes: string[]; onRemove: () => void }) {
+  const base = `groups[${groupIndex}].predicates[${predicateIndex}]` as const
+  return (
+    <div className="grid gap-2 sm:grid-cols-[minmax(10rem,2fr)_minmax(6rem,1fr)_minmax(6rem,1fr)_auto] sm:items-start">
+      <form.AppField name={`${base}.name`}>{(field) => <field.ComboboxField label="Attribute" options={attributes.map((attribute) => ({ value: attribute, label: attribute }))} />}</form.AppField>
+      <form.AppField name={`${base}.type`}>{(field) => <field.ComboboxField label="Comparison" options={PREDICATE_OPTIONS} />}</form.AppField>
+      <form.AppField name={`${base}.value`}>{(field) => <field.NumberField label="Value" />}</form.AppField>
+      <Button type="button" variant="ghost" size="icon-sm" className="sm:mt-6" aria-label="Remove predicate" onClick={onRemove}>
+        <Trash2Icon />
+      </Button>
+    </div>
+  )
+}
+
+function AddCredentialRef({ schemaNames, onAdd }: { schemaNames: string[]; onAdd: (ref: CredentialRef) => void }) {
+  const [schemaName, setSchemaName] = useState<string>(schemaNames[0] ?? '')
+  const [versions, setVersions] = useState<'all' | 'active' | ''>('all')
   if (schemaNames.length === 0) return <p className="text-sm text-muted-foreground">Publish a schema first.</p>
+  const options = schemaNames.map((name) => ({ value: name, label: name }))
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <select className={nativeSelect} value={schemaName} onChange={(event) => setSchemaName(event.target.value)} aria-label="Schema">
-        {schemaNames.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
-      </select>
-      <select className={nativeSelect} value={versions} onChange={(event) => setVersions(event.target.value as 'all' | 'active')} aria-label="Schema versions">
-        <option value="all">all versions</option>
-        <option value="active">active versions only</option>
-      </select>
-      <Button type="button" variant="outline" size="sm" onClick={() => onAdd({ schemaName, versions })}>
+      <ComboboxControl aria-label="Schema" options={options} value={schemaName} onChange={setSchemaName} className="w-56" />
+      <ComboboxControl aria-label="Schema versions" options={VERSION_OPTIONS} value={versions} onChange={setVersions} className="w-44" />
+      <Button type="button" variant="outline" size="sm" disabled={!schemaName || !versions} onClick={() => schemaName && versions && onAdd({ schemaName, versions })}>
         Add
       </Button>
     </div>
+  )
+}
+
+/** Blocks navigation away from unsaved changes, with a confirmation dialog. */
+function UnsavedChangesGuard({ isDirty }: { isDirty: () => boolean }) {
+  const blocker = useBlocker({ shouldBlockFn: () => isDirty(), withResolver: true, enableBeforeUnload: isDirty })
+  const blocked = blocker.status === 'blocked'
+  return (
+    <AlertDialog open={blocked} onOpenChange={(open) => !open && blocked && blocker.reset()}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Discard unsaved changes?</AlertDialogTitle>
+          <AlertDialogDescription>The template has changes that are not saved. Leaving this page discards them.</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Keep editing</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" onClick={() => blocked && blocker.proceed()}>
+            Discard changes
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }

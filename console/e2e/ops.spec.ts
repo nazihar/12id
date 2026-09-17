@@ -25,8 +25,9 @@ test('operator screens load through the console scope', async ({ page }) => {
   await expect(page.getByTestId('operators-table')).toContainText(operator().email)
   await expect(page.getByTestId('operators-table')).toContainText('you')
 
-  // Inviting an operator creates the account and emails a set-password link.
+  // Inviting an operator (dialog) creates the account and emails a set-password link.
   const invitee = `invited+${Date.now()}@12id.test`
+  await page.getByRole('button', { name: 'Add operator' }).click()
   await page.getByLabel('Name', { exact: true }).fill('Invited Operator')
   await page.getByLabel('Email', { exact: true }).fill(invitee)
   await page.getByRole('button', { name: 'Send invitation' }).click()
@@ -37,8 +38,11 @@ test('operator screens load through the console scope', async ({ page }) => {
 
   // Tenant creation reaches platform-api, which cannot onboard without agent-service: the error is shown, no crash.
   await page.getByRole('link', { name: 'Tenants', exact: true }).click()
-  await page.getByRole('link', { name: 'New tenant' }).click()
+  await page.getByRole('button', { name: 'New tenant' }).click()
+  // Submitting the empty dialog shows a field error, not a browser bubble.
+  await page.getByRole('button', { name: 'Create tenant' }).click()
+  await expect(page.getByRole('dialog').getByRole('alert').first()).toContainText('Enter the organization name.')
   await page.getByLabel('Organization name').fill('Acme E2E')
   await page.getByRole('button', { name: 'Create tenant' }).click()
-  await expect(page.getByRole('alert').or(page.getByText(/onboarding|created|Acme E2E/i).first())).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByRole('dialog').getByRole('alert').or(page.getByText(/onboarding|created|Acme E2E/i).first())).toBeVisible({ timeout: 30_000 })
 })

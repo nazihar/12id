@@ -6,15 +6,18 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
-import { DELIVERY_STATUSES, WEBHOOK_EVENT_TYPES } from '@/features/tenant-data/types'
-import { EXPIRY_ATTRIBUTE, templateDefinition } from '@/lib/template-schema'
+import { publishSchemaInput } from '@/features/portal/catalogue.schemas'
+import { connectionInvitationInput } from '@/features/portal/exchanges.schemas'
+import { webhookEndpointInput } from '@/features/portal/webhook.schemas'
+import { DELIVERY_STATUSES } from '@/features/tenant-data/types'
+import { apiKeyLabel } from '@/features/tenants/tenants.schemas'
+import { EXPIRY_ATTRIBUTE, templateDefinitionInput } from '@/lib/template-schema'
 import { tenantMiddleware } from '@/server/middleware'
 import { PlatformCallError, platformFor, unwrap } from '@/server/platform.server'
 
 import { assertSameOrganization, organizationInput } from './organization-input'
 
 const LIST_LIMIT = 200
-const attributeName = z.string().regex(/^[A-Za-z0-9_.-]{1,100}$/, 'attribute names are 1-100 characters of letters, digits, _ . -')
 
 // --- catalogue ------------------------------------------------------------------------------
 
@@ -29,13 +32,7 @@ export const getPortalCatalogue = createServerFn({ method: 'GET' })
 /** Publishes a schema on the ledger. `expiresAt` is always included: v1 credentials expire instead of being revoked. */
 export const publishSchema = createServerFn({ method: 'POST' })
   .middleware([tenantMiddleware({ catalogue: ['publish'] })])
-  .validator(
-    organizationInput.extend({
-      name: z.string().trim().min(1).max(200),
-      version: z.string().regex(/^\d+(\.\d+){0,2}$/, 'use a version like 1.0'),
-      attributes: z.array(attributeName).min(1).max(124),
-    })
-  )
+  .validator(organizationInput.extend(publishSchemaInput.shape))
   .handler(async ({ context, data }) => {
     assertSameOrganization(context.organization.id, data.organizationId)
     const attributes = [...new Set([...data.attributes.filter((a) => a !== EXPIRY_ATTRIBUTE), EXPIRY_ATTRIBUTE])]
@@ -66,7 +63,7 @@ export const listPortalTemplates = createServerFn({ method: 'GET' })
 
 export const createPortalTemplate = createServerFn({ method: 'POST' })
   .middleware([tenantMiddleware({ template: ['create'] })])
-  .validator(organizationInput.extend({ definition: templateDefinition }))
+  .validator(organizationInput.extend({ definition: templateDefinitionInput }))
   .handler(async ({ context, data }) => {
     assertSameOrganization(context.organization.id, data.organizationId)
     return unwrap(await platformFor(context.principal).POST('/v1/proof-templates', { body: data.definition }))
@@ -74,7 +71,7 @@ export const createPortalTemplate = createServerFn({ method: 'POST' })
 
 export const updatePortalTemplate = createServerFn({ method: 'POST' })
   .middleware([tenantMiddleware({ template: ['update'] })])
-  .validator(organizationInput.extend({ templateId: z.uuid(), definition: templateDefinition }))
+  .validator(organizationInput.extend({ templateId: z.uuid(), definition: templateDefinitionInput }))
   .handler(async ({ context, data }) => {
     assertSameOrganization(context.organization.id, data.organizationId)
     return unwrap(await platformFor(context.principal).PUT('/v1/proof-templates/{id}', { params: { path: { id: data.templateId } }, body: data.definition }))
@@ -109,7 +106,7 @@ export const listPortalWallets = createServerFn({ method: 'GET' })
 /** A connection invitation for testing with a holder app (the customer backend normally creates these). */
 export const createPortalInvitation = createServerFn({ method: 'POST' })
   .middleware([tenantMiddleware({ exchange: ['create'] })])
-  .validator(organizationInput.extend({ multiUse: z.boolean(), alias: z.string().trim().max(200).optional() }))
+  .validator(organizationInput.extend(connectionInvitationInput.shape))
   .handler(async ({ context, data }) => {
     assertSameOrganization(context.organization.id, data.organizationId)
     return unwrap(await platformFor(context.principal).POST('/v1/connections/invitations', { body: { multiUse: data.multiUse, alias: data.alias || undefined } }))
@@ -131,12 +128,7 @@ export const getPortalWebhook = createServerFn({ method: 'GET' })
 /** Returns the signing secret only when the endpoint is created. */
 export const setPortalWebhook = createServerFn({ method: 'POST' })
   .middleware([tenantMiddleware({ webhook: ['update'] })])
-  .validator(
-    organizationInput.extend({
-      url: z.url().refine((url) => url.startsWith('https://'), 'webhook URLs must use https'),
-      events: z.array(z.enum(WEBHOOK_EVENT_TYPES)).min(1).optional(),
-    })
-  )
+  .validator(organizationInput.extend(webhookEndpointInput.shape))
   .handler(async ({ context, data }) => {
     assertSameOrganization(context.organization.id, data.organizationId)
     return unwrap(await platformFor(context.principal).PUT('/v1/webhook', { body: { url: data.url, events: data.events } }))
@@ -184,7 +176,7 @@ export const listPortalApiKeys = createServerFn({ method: 'GET' })
 
 export const createPortalApiKey = createServerFn({ method: 'POST' })
   .middleware([tenantMiddleware({ apiKey: ['create'] })])
-  .validator(organizationInput.extend({ label: z.string().trim().min(1).max(100) }))
+  .validator(organizationInput.extend({ label: apiKeyLabel }))
   .handler(async ({ context, data }) => {
     assertSameOrganization(context.organization.id, data.organizationId)
     return unwrap(await platformFor(context.principal).POST('/v1/api-keys', { body: { label: data.label } }))

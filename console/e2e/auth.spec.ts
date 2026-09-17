@@ -86,7 +86,8 @@ test('operator: mandatory TOTP, console data, and no emailed codes', async ({ pa
   await expect(page.getByTestId('tenants-empty').or(page.getByTestId('tenants-table'))).toBeVisible()
 
   // Better Auth offers emailed codes to every 2FA user; the console refuses them for operators.
-  await page.getByRole('button', { name: 'Sign out' }).click()
+  await page.getByRole('button', { name: 'Account menu' }).click()
+  await page.getByRole('menuitem', { name: 'Sign out' }).click()
   await expect(page).toHaveURL(/\/login/)
   // Better Auth allows 3 sign-in requests per 10 s per IP (this file has made 3 so far); wait out the window.
   await page.waitForTimeout(10_500)

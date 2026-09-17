@@ -61,9 +61,10 @@ test('owners run their tenant, members are limited by role and organization', as
     [tenantB, ownerB],
   ]) {
     await page.goto(`/ops/tenants/${tenantId}`)
+    await page.getByRole('button', { name: 'Create organization' }).click()
     await page.getByLabel('Owner name').fill('E2E Owner')
     await page.getByLabel('Owner email').fill(ownerEmail)
-    await page.getByRole('button', { name: 'Create organization' }).click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Create organization' }).click()
     await expect(page.getByTestId('members-table')).toContainText(ownerEmail)
   }
 
@@ -86,20 +87,27 @@ test('owners run their tenant, members are limited by role and organization', as
   await expect(owner.getByText('This page could not be loaded')).toBeVisible()
 
   await tab(owner, 'API keys').click()
-  await owner.getByLabel('New key label').fill('e2e-backend')
   await owner.getByRole('button', { name: 'Create API key' }).click()
+  await owner.getByLabel('New key label').fill('e2e-backend')
+  await owner.getByRole('dialog').getByRole('button', { name: 'Create API key' }).click()
   await expect(owner.getByTestId('secret-value')).toContainText('12id_sk_')
   await owner.getByRole('button', { name: 'I have stored it' }).click()
   await expect(owner.getByTestId('api-keys-table')).toContainText('e2e-backend')
 
   await tab(owner, 'Webhooks').click()
-  await owner.getByLabel('HTTPS URL').fill('https://backend.example.com/12id/webhooks')
   await owner.getByRole('button', { name: 'Create endpoint' }).click()
+  await owner.getByLabel('HTTPS URL').fill('http://backend.example.com/12id/webhooks')
+  await owner.getByRole('dialog').getByRole('button', { name: 'Create endpoint' }).click()
+  // Validation is per field: the https rule shows under the URL and the dialog stays open.
+  await expect(owner.getByRole('dialog').getByRole('alert').first()).toContainText('https')
+  await owner.getByLabel('HTTPS URL').fill('https://backend.example.com/12id/webhooks')
+  await owner.getByRole('dialog').getByRole('button', { name: 'Create endpoint' }).click()
   await expect(owner.getByTestId('secret-value')).toContainText('whsec_')
   await owner.getByRole('button', { name: 'I have stored it' }).click()
   await expect(owner.getByText('https://backend.example.com/12id/webhooks').first()).toBeVisible()
 
   await tab(owner, 'Members').click()
+  await owner.getByRole('button', { name: 'Invite member' }).click()
   await owner.getByLabel('Email', { exact: true }).fill(memberEmail)
   await owner.getByRole('button', { name: 'Send invitation' }).click()
   await expect(owner.getByTestId('invitations-table')).toContainText(memberEmail)
@@ -131,15 +139,19 @@ test('owners run their tenant, members are limited by role and organization', as
   await member.goto(`/t/${slugFor(nameB, tenantB)}/api-keys`)
   await expect(member.getByText('You are not a member of this organization.')).toBeVisible()
 
-  // Owner promotes the member: the next request carries the new role.
+  // Owner promotes the member (dialog with a searchable role): the next request carries the new role.
   await owner.reload()
-  await owner.getByLabel(`Role of ${memberEmail}`).selectOption('admin')
+  await owner.getByRole('button', { name: `Change role of ${memberEmail}` }).click()
+  await owner.getByRole('dialog').getByLabel('Role').fill('adm')
+  await owner.getByRole('option', { name: /^admin/ }).click()
+  await owner.getByRole('dialog').getByRole('button', { name: 'Save role' }).click()
   await expect(owner.getByText('Role changed.')).toBeVisible()
   await member.goto(`${memberBase}/api-keys`)
   await expect(member.getByRole('button', { name: 'Create API key' })).toBeVisible()
 
-  // Removal ends access to the organization immediately.
+  // Removal (confirmed in a dialog) ends access to the organization immediately.
   await owner.getByTestId('members-table').getByRole('row').filter({ hasText: memberEmail }).getByRole('button', { name: 'Remove' }).click()
+  await owner.getByRole('alertdialog').getByRole('button', { name: 'Remove member' }).click()
   await expect(owner.getByText('Member removed.')).toBeVisible()
   await member.goto(`${memberBase}/api-keys`)
   await expect(member.getByText('You are not a member of this organization.')).toBeVisible()

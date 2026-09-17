@@ -7,14 +7,13 @@ import { getRequestHeaders } from '@tanstack/react-start/server'
 import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
 
+import { inviteMemberInput, tenantRole } from '@/features/portal/members.schemas'
 import { auth } from '@/server/auth.server'
 import { consoleDb } from '@/server/db.server'
 import { invitation, member, user } from '@/server/db/auth-schema'
 import { tenantMiddleware } from '@/server/middleware'
 
 import { assertSameOrganization, organizationInput } from './organization-input'
-
-const tenantRole = z.enum(['owner', 'admin', 'member'])
 
 export const listMembers = createServerFn({ method: 'GET' })
   .middleware([tenantMiddleware()])
@@ -39,7 +38,7 @@ export const listMembers = createServerFn({ method: 'GET' })
 
 export const inviteMember = createServerFn({ method: 'POST' })
   .middleware([tenantMiddleware({ invitation: ['create'] })])
-  .validator(organizationInput.extend({ email: z.email().transform((email) => email.toLowerCase()), role: tenantRole }))
+  .validator(organizationInput.extend(inviteMemberInput.shape))
   .handler(async ({ context, data }) => {
     assertSameOrganization(context.organization.id, data.organizationId)
     await auth.api.createInvitation({ headers: getRequestHeaders(), body: { email: data.email, role: data.role, organizationId: data.organizationId } })

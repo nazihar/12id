@@ -4,6 +4,7 @@ import { createColumnHelper } from '@tanstack/react-table'
 
 import { DataTable } from '@/components/data-table/data-table'
 import type { DataTableFeatures } from '@/components/data-table/data-table-features'
+import { PageHeader } from '@/components/page-header'
 import { RouteError } from '@/components/route-error'
 import { StateBadge } from '@/components/state-badge'
 import type { listAuditLog } from '@/features/ops/ops.functions'
@@ -53,9 +54,8 @@ export const Route = createFileRoute('/_authed/ops/audit')({
 function AuditPage() {
   const { data } = useSuspenseQuery(auditLogQuery())
   return (
-    <section className="space-y-3">
-      <h1 className="font-heading text-lg font-medium">Audit log</h1>
-      <p className="text-sm text-muted-foreground">Every change made through the console and the break-glass token, plus reads of webhook bodies. The latest 200 entries.</p>
+    <section className="space-y-4">
+      <PageHeader title="Audit log" description="Every change made through the console and the break-glass token, plus reads of webhook bodies. The latest 200 entries." />
       <DataTable columns={columns} data={data} searchPlaceholder="Search actor, route or tenant" emptyMessage="No audit entries." />
     </section>
   )

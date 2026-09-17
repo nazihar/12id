@@ -4,6 +4,7 @@ import { createColumnHelper } from '@tanstack/react-table'
 
 import { DataTable } from '@/components/data-table/data-table'
 import type { DataTableFeatures } from '@/components/data-table/data-table-features'
+import { PageHeader } from '@/components/page-header'
 import { RouteError } from '@/components/route-error'
 import type { listProofTemplates } from '@/features/tenant-data/tenant-data.functions'
 import { proofTemplatesQuery } from '@/features/tenant-data/tenant-data.queries'
@@ -52,5 +53,10 @@ export const Route = createFileRoute('/_authed/ops/tenants/$tenantId/templates')
 function TemplatesPage() {
   const { tenantId } = Route.useParams()
   const { data } = useSuspenseQuery(proofTemplatesQuery(tenantId))
-  return <DataTable columns={columns} data={data} searchPlaceholder="Search templates" emptyMessage="No proof templates." />
+  return (
+    <section className="space-y-4">
+      <PageHeader title="Proof templates" description="What the tenant's backend can ask holders to prove. Templates are edited in the tenant portal." />
+      <DataTable columns={columns} data={data} searchPlaceholder="Search templates" emptyMessage="No proof templates." />
+    </section>
+  )
 }

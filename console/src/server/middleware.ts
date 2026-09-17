@@ -9,16 +9,15 @@
  *   tenantMiddleware    membership of the session's active organization (never an id from input),
  *                       optional permission check against the member's role
  */
+import { redirect } from '@tanstack/react-router'
 import { createMiddleware } from '@tanstack/react-start'
 import { getRequestHeaders, setResponseHeader, setResponseStatus } from '@tanstack/react-start/server'
 import { and, eq } from 'drizzle-orm'
 
-import { OPERATOR_ROLE, type TenantRole, hasPlatformRole, tenantRoles } from '../lib/permissions'
+import { OPERATOR_ROLE, type TenantRole, hasPlatformRole, operatorSessionExpired, tenantRoles } from '../lib/permissions'
 import { auth } from './auth.server'
 import { consoleDb } from './db.server'
 import { member, organization, twoFactor } from './db/auth-schema'
-
-const OPERATOR_SESSION_MAX_AGE_MS = 12 * 60 * 60 * 1000
 
 declare const principalBrand: unique symbol
 
@@ -49,11 +48,20 @@ function refuse(status: 401 | 403, message: string): never {
   throw new ConsoleAuthError(status, message)
 }
 
+/**
+ * No usable session: the caller must sign in again. Thrown as a router redirect, which the client
+ * follows from a loader, and which `followRedirects` in router.tsx follows from a query or mutation;
+ * an error message on the page would leave the person stuck with no way forward.
+ */
+function signInAgain(): never {
+  throw redirect({ to: '/login' })
+}
+
 type TenantPermissions = Parameters<(typeof tenantRoles)['owner']['authorize']>[0]
 
 export const authMiddleware = createMiddleware({ type: 'function' }).server(async ({ next }) => {
   const session = await auth.api.getSession({ headers: getRequestHeaders() })
-  if (!session) refuse(401, 'sign in required')
+  if (!session) signInAgain()
   if (!session.user.twoFactorEnabled) refuse(403, 'set up two-factor authentication first')
   // Everything behind this middleware depends on who is asking.
   setResponseHeader('Cache-Control', 'no-store')
@@ -65,7 +73,7 @@ export const operatorMiddleware = createMiddleware({ type: 'function' })
   .server(async ({ next, context }) => {
     const { user, session } = context.session
     if (!hasPlatformRole(user.role, OPERATOR_ROLE)) refuse(403, 'operator role required')
-    if (Date.now() - new Date(session.createdAt).getTime() > OPERATOR_SESSION_MAX_AGE_MS) refuse(401, 'operator session expired; sign in again')
+    if (operatorSessionExpired(session.createdAt)) signInAgain()
     const [totp] = await consoleDb().db.select({ verified: twoFactor.verified }).from(twoFactor).where(eq(twoFactor.userId, user.id))
     if (!totp?.verified) refuse(403, 'operators must use an authenticator app')
     return next({ context: { principal: principal({ actor: user.id, role: OPERATOR_ROLE, tenantId: null }) } })

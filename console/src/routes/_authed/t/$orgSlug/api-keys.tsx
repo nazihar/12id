@@ -19,14 +19,11 @@ function PortalApiKeysPage() {
   const { data: keys } = useSuspenseQuery(portalApiKeysQuery(orgSlug))
   const organizationId = organization.id
   return (
-    <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">Your backend calls the 12id API with these keys (Authorization: Bearer). Never put a key in an app.</p>
-      <ApiKeysPanel
-        keys={keys}
-        invalidateKey={portalKey(orgSlug, 'api-keys')}
-        createKey={tenantCan(organization.role, { apiKey: ['create'] }) ? (label) => createPortalApiKey({ data: { organizationId, label } }) : undefined}
-        revokeKey={tenantCan(organization.role, { apiKey: ['revoke'] }) ? (apiKeyId) => revokePortalApiKey({ data: { organizationId, apiKeyId } }) : undefined}
-      />
-    </div>
+    <ApiKeysPanel
+      keys={keys}
+      invalidateKey={portalKey(orgSlug, 'api-keys')}
+      createKey={tenantCan(organization.role, { apiKey: ['create'] }) ? (label) => createPortalApiKey({ data: { organizationId, label } }) : undefined}
+      revokeKey={tenantCan(organization.role, { apiKey: ['revoke'] }) ? (apiKeyId) => revokePortalApiKey({ data: { organizationId, apiKeyId } }) : undefined}
+    />
   )
 }

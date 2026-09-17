@@ -1,9 +1,9 @@
 import { createFileRoute, useHydrated, useRouter } from '@tanstack/react-router'
 import { type FormEvent, useState } from 'react'
 
+import { AuthLayout } from '@/components/shell/auth-layout'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { FieldGroup } from '@/components/ui/field'
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp'
 import { authClient } from '@/lib/auth-client'
@@ -48,43 +48,35 @@ function VerifyTwoFactorPage() {
   }
 
   return (
-    <main className="flex min-h-svh items-center justify-center p-6">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle>Two-factor verification</CardTitle>
-          <CardDescription>{method === 'totp' ? 'Enter the 6-digit code from your authenticator app.' : 'Enter the 6-digit code we emailed you.'}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form method="post" onSubmit={onSubmit}>
-            <FieldGroup>
-              {error && (
-                <Alert variant="destructive">
-                  <AlertDescription data-testid="verify-error">{error}</AlertDescription>
-                </Alert>
-              )}
-              <InputOTP maxLength={6} value={code} onChange={setCode} inputMode="numeric" autoComplete="one-time-code" data-testid="otp-code">
-                <InputOTPGroup>
-                  {[0, 1, 2, 3, 4, 5].map((index) => (
-                    <InputOTPSlot key={index} index={index} />
-                  ))}
-                </InputOTPGroup>
-              </InputOTP>
-              <Button type="submit" disabled={!hydrated || pending || code.length !== 6}>
-                Verify
-              </Button>
-              {method === 'totp' ? (
-                <Button type="button" variant="link" onClick={emailCode} disabled={!hydrated || pending}>
-                  Email me a code instead
-                </Button>
-              ) : (
-                <Button type="button" variant="link" onClick={() => setMethod('totp')} disabled={!hydrated || pending}>
-                  Use my authenticator app
-                </Button>
-              )}
-            </FieldGroup>
-          </form>
-        </CardContent>
-      </Card>
-    </main>
+    <AuthLayout title="Two-factor verification" description={method === 'totp' ? 'Enter the 6-digit code from your authenticator app.' : 'Enter the 6-digit code we emailed you.'}>
+      <form method="post" onSubmit={onSubmit}>
+        <FieldGroup>
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription data-testid="verify-error">{error}</AlertDescription>
+            </Alert>
+          )}
+          <InputOTP maxLength={6} value={code} onChange={setCode} inputMode="numeric" autoComplete="one-time-code" data-testid="otp-code">
+            <InputOTPGroup>
+              {[0, 1, 2, 3, 4, 5].map((index) => (
+                <InputOTPSlot key={index} index={index} />
+              ))}
+            </InputOTPGroup>
+          </InputOTP>
+          <Button type="submit" disabled={!hydrated || pending || code.length !== 6}>
+            Verify
+          </Button>
+          {method === 'totp' ? (
+            <Button type="button" variant="link" onClick={emailCode} disabled={!hydrated || pending}>
+              Email me a code instead
+            </Button>
+          ) : (
+            <Button type="button" variant="link" onClick={() => setMethod('totp')} disabled={!hydrated || pending}>
+              Use my authenticator app
+            </Button>
+          )}
+        </FieldGroup>
+      </form>
+    </AuthLayout>
   )
 }

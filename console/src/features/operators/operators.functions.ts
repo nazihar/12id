@@ -7,6 +7,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { z } from 'zod'
 
+import { inviteOperatorInput } from '@/features/operators/operators.schemas'
 import { OPERATOR_ROLE } from '@/lib/permissions'
 import { auth } from '@/server/auth.server'
 import { operatorMiddleware } from '@/server/middleware'
@@ -31,7 +32,7 @@ export const listOperators = createServerFn({ method: 'GET' })
 
 export const inviteOperator = createServerFn({ method: 'POST' })
   .middleware([operatorMiddleware])
-  .validator(z.object({ email: z.email().transform((email) => email.toLowerCase()), name: z.string().trim().min(1).max(200) }))
+  .validator(inviteOperatorInput)
   .handler(async ({ data }) => {
     await auth.api.createUser({ headers: getRequestHeaders(), body: { email: data.email, name: data.name, role: OPERATOR_ROLE } })
     await auth.api.requestPasswordReset({ body: { email: data.email, redirectTo: '/reset-password' } })

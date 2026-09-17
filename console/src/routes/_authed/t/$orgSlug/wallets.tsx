@@ -1,6 +1,7 @@
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 
+import { PageHeader } from '@/components/page-header'
 import { RouteError } from '@/components/route-error'
 import { portalWalletsQuery } from '@/features/portal/portal.queries'
 import { WalletsTable } from '@/features/tenant-data/panels'
@@ -15,9 +16,9 @@ function PortalWalletsPage() {
   const { orgSlug } = Route.useParams()
   const { data } = useSuspenseQuery(portalWalletsQuery(orgSlug))
   return (
-    <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">One wallet per app installation, created by your backend. The platform does not know who the user is; the external id is yours.</p>
+    <section className="space-y-4">
+      <PageHeader title="Wallets" description="One wallet per app installation, created by your backend. The platform does not know who the user is; the external id is yours." />
       <WalletsTable wallets={data} />
-    </div>
+    </section>
   )
 }

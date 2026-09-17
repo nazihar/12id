@@ -1,19 +1,14 @@
-import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
-import { createFileRoute, useHydrated } from '@tanstack/react-router'
+import { useSuspenseQuery } from '@tanstack/react-query'
+import { createFileRoute } from '@tanstack/react-router'
 import { createColumnHelper } from '@tanstack/react-table'
-import type { FormEvent } from 'react'
-import { toast } from 'sonner'
 
 import { DataTable } from '@/components/data-table/data-table'
 import type { DataTableFeatures } from '@/components/data-table/data-table-features'
 import { RouteError } from '@/components/route-error'
 import { StateBadge } from '@/components/state-badge'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
-import { createTenantOrganization, type getTenantOrganization } from '@/features/tenants/tenant-owner.functions'
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { CreateTenantOrganizationDialog } from '@/features/tenants/create-tenant-organization-dialog'
+import type { getTenantOrganization } from '@/features/tenants/tenant-owner.functions'
 import { tenantOrganizationQuery, tenantQuery } from '@/features/tenants/tenants.queries'
 import { formatDateTime } from '@/lib/format'
 
@@ -61,61 +56,20 @@ function TenantOverviewPage() {
         <CardHeader>
           <CardTitle>Console organization</CardTitle>
           <CardDescription>{organization ? `/${organization.slug}` : 'Customer staff sign in to the tenant portal through this organization.'}</CardDescription>
+          {!organization && (
+            <CardAction>
+              <CreateTenantOrganizationDialog tenantId={tenantId} ready={tenant.status === 'ready'} />
+            </CardAction>
+          )}
         </CardHeader>
         <CardContent>
           {organization ? (
             <DataTable columns={memberColumns} data={organization.members} emptyMessage="No members." pageSize={10} testId="members-table" />
           ) : (
-            <CreateOrganizationForm tenantId={tenantId} ready={tenant.status === 'ready'} />
+            <p className="text-sm text-muted-foreground">No organization yet. Create one with its first owner; the owner invites the rest of the team from the portal.</p>
           )}
         </CardContent>
       </Card>
     </div>
-  )
-}
-
-function CreateOrganizationForm({ tenantId, ready }: { tenantId: string; ready: boolean }) {
-  const hydrated = useHydrated()
-  const queryClient = useQueryClient()
-  const create = useMutation({
-    mutationFn: (owner: { ownerEmail: string; ownerName: string }) => createTenantOrganization({ data: { tenantId, ...owner } }),
-    onSuccess: async (result) => {
-      await queryClient.invalidateQueries({ queryKey: ['ops', 'tenant', tenantId, 'organization'] })
-      toast.success(result.passwordLinkSent ? `Organization created. ${result.ownerEmail} received a link to set a password.` : `Organization created with ${result.ownerEmail} as owner.`)
-    },
-  })
-
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const form = new FormData(event.currentTarget)
-    create.mutate({ ownerEmail: String(form.get('ownerEmail')), ownerName: String(form.get('ownerName')) })
-  }
-
-  return (
-    <form method="post" onSubmit={onSubmit}>
-      <FieldGroup>
-        {!ready && (
-          <Alert>
-            <AlertDescription>Finish onboarding before creating the organization.</AlertDescription>
-          </Alert>
-        )}
-        {create.error && (
-          <Alert variant="destructive">
-            <AlertDescription>{create.error.message}</AlertDescription>
-          </Alert>
-        )}
-        <Field>
-          <FieldLabel htmlFor="ownerName">Owner name</FieldLabel>
-          <Input id="ownerName" name="ownerName" maxLength={200} required />
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="ownerEmail">Owner email</FieldLabel>
-          <Input id="ownerEmail" name="ownerEmail" type="email" required />
-        </Field>
-        <Button type="submit" disabled={!hydrated || !ready || create.isPending}>
-          {create.isPending ? 'Creating…' : 'Create organization'}
-        </Button>
-      </FieldGroup>
-    </form>
   )
 }

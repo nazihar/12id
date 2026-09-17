@@ -8,16 +8,13 @@
  */
 import { createServerFn } from '@tanstack/react-start'
 import { eq } from 'drizzle-orm'
-import { z } from 'zod'
-
+import { createTenantOrganizationInput, tenantInput } from '@/features/tenants/tenants.schemas'
 import { OPERATOR_ROLE, hasPlatformRole } from '@/lib/permissions'
 import { auth } from '@/server/auth.server'
 import { consoleDb } from '@/server/db.server'
 import { member, organization, user } from '@/server/db/auth-schema'
 import { operatorMiddleware } from '@/server/middleware'
 import { platformFor, unwrap } from '@/server/platform.server'
-
-const tenantInput = z.object({ tenantId: z.uuid() })
 
 function slugFor(name: string, tenantId: string) {
   const base = name
@@ -46,7 +43,7 @@ export const getTenantOrganization = createServerFn({ method: 'GET' })
 
 export const createTenantOrganization = createServerFn({ method: 'POST' })
   .middleware([operatorMiddleware])
-  .validator(tenantInput.extend({ ownerEmail: z.email().transform((email) => email.toLowerCase()), ownerName: z.string().trim().min(1).max(200) }))
+  .validator(tenantInput.extend(createTenantOrganizationInput.shape))
   .handler(async ({ context, data }) => {
     const tenant = unwrap(await platformFor(context.principal).GET('/admin/tenants/{id}', { params: { path: { id: data.tenantId } } }))
     if (tenant.status !== 'ready') throw new Error(`The tenant is ${tenant.status}; finish onboarding first.`)

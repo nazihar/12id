@@ -26,13 +26,11 @@ import { Route as AuthedOpsOperatorsRouteImport } from './routes/_authed/ops/ope
 import { Route as AuthedTOrgSlugRouteImport } from './routes/_authed/t/$orgSlug'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as AuthedOpsTenantsTenantIdRouteImport } from './routes/_authed/ops/tenants/$tenantId'
-import { Route as AuthedOpsTenantsNewRouteImport } from './routes/_authed/ops/tenants/new'
 import { Route as AuthedTOrgSlugIndexRouteImport } from './routes/_authed/t/$orgSlug/index'
 import { Route as AuthedTOrgSlugApiKeysRouteImport } from './routes/_authed/t/$orgSlug/api-keys'
 import { Route as AuthedTOrgSlugCatalogueRouteImport } from './routes/_authed/t/$orgSlug/catalogue'
 import { Route as AuthedTOrgSlugExchangesRouteImport } from './routes/_authed/t/$orgSlug/exchanges'
 import { Route as AuthedTOrgSlugMembersRouteImport } from './routes/_authed/t/$orgSlug/members'
-import { Route as AuthedTOrgSlugTemplatesRouteImport } from './routes/_authed/t/$orgSlug/templates'
 import { Route as AuthedTOrgSlugWalletsRouteImport } from './routes/_authed/t/$orgSlug/wallets'
 import { Route as AuthedTOrgSlugWebhooksRouteImport } from './routes/_authed/t/$orgSlug/webhooks'
 import { Route as AuthedOpsTenantsTenantIdIndexRouteImport } from './routes/_authed/ops/tenants/$tenantId/index'
@@ -42,6 +40,9 @@ import { Route as AuthedOpsTenantsTenantIdExchangesRouteImport } from './routes/
 import { Route as AuthedOpsTenantsTenantIdTemplatesRouteImport } from './routes/_authed/ops/tenants/$tenantId/templates'
 import { Route as AuthedOpsTenantsTenantIdWalletsRouteImport } from './routes/_authed/ops/tenants/$tenantId/wallets'
 import { Route as AuthedOpsTenantsTenantIdWebhooksRouteImport } from './routes/_authed/ops/tenants/$tenantId/webhooks'
+import { Route as AuthedTOrgSlugTemplatesIndexRouteImport } from './routes/_authed/t/$orgSlug/templates/index'
+import { Route as AuthedTOrgSlugTemplatesNewRouteImport } from './routes/_authed/t/$orgSlug/templates/new'
+import { Route as AuthedTOrgSlugTemplatesTemplateIdEditRouteImport } from './routes/_authed/t/$orgSlug/templates/$templateId.edit'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -128,11 +129,6 @@ const AuthedOpsTenantsTenantIdRoute =
     path: '/tenants/$tenantId',
     getParentRoute: () => AuthedOpsRoute,
   } as any)
-const AuthedOpsTenantsNewRoute = AuthedOpsTenantsNewRouteImport.update({
-  id: '/tenants/new',
-  path: '/tenants/new',
-  getParentRoute: () => AuthedOpsRoute,
-} as any)
 const AuthedTOrgSlugIndexRoute = AuthedTOrgSlugIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -156,11 +152,6 @@ const AuthedTOrgSlugExchangesRoute = AuthedTOrgSlugExchangesRouteImport.update({
 const AuthedTOrgSlugMembersRoute = AuthedTOrgSlugMembersRouteImport.update({
   id: '/members',
   path: '/members',
-  getParentRoute: () => AuthedTOrgSlugRoute,
-} as any)
-const AuthedTOrgSlugTemplatesRoute = AuthedTOrgSlugTemplatesRouteImport.update({
-  id: '/templates',
-  path: '/templates',
   getParentRoute: () => AuthedTOrgSlugRoute,
 } as any)
 const AuthedTOrgSlugWalletsRoute = AuthedTOrgSlugWalletsRouteImport.update({
@@ -215,6 +206,24 @@ const AuthedOpsTenantsTenantIdWebhooksRoute =
     path: '/webhooks',
     getParentRoute: () => AuthedOpsTenantsTenantIdRoute,
   } as any)
+const AuthedTOrgSlugTemplatesIndexRoute =
+  AuthedTOrgSlugTemplatesIndexRouteImport.update({
+    id: '/templates/',
+    path: '/templates/',
+    getParentRoute: () => AuthedTOrgSlugRoute,
+  } as any)
+const AuthedTOrgSlugTemplatesNewRoute =
+  AuthedTOrgSlugTemplatesNewRouteImport.update({
+    id: '/templates/new',
+    path: '/templates/new',
+    getParentRoute: () => AuthedTOrgSlugRoute,
+  } as any)
+const AuthedTOrgSlugTemplatesTemplateIdEditRoute =
+  AuthedTOrgSlugTemplatesTemplateIdEditRouteImport.update({
+    id: '/templates/$templateId/edit',
+    path: '/templates/$templateId/edit',
+    getParentRoute: () => AuthedTOrgSlugRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -233,12 +242,10 @@ export interface FileRoutesByFullPath {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/ops/': typeof AuthedOpsIndexRoute
   '/ops/tenants/$tenantId': typeof AuthedOpsTenantsTenantIdRouteWithChildren
-  '/ops/tenants/new': typeof AuthedOpsTenantsNewRoute
   '/t/$orgSlug/api-keys': typeof AuthedTOrgSlugApiKeysRoute
   '/t/$orgSlug/catalogue': typeof AuthedTOrgSlugCatalogueRoute
   '/t/$orgSlug/exchanges': typeof AuthedTOrgSlugExchangesRoute
   '/t/$orgSlug/members': typeof AuthedTOrgSlugMembersRoute
-  '/t/$orgSlug/templates': typeof AuthedTOrgSlugTemplatesRoute
   '/t/$orgSlug/wallets': typeof AuthedTOrgSlugWalletsRoute
   '/t/$orgSlug/webhooks': typeof AuthedTOrgSlugWebhooksRoute
   '/t/$orgSlug/': typeof AuthedTOrgSlugIndexRoute
@@ -248,7 +255,10 @@ export interface FileRoutesByFullPath {
   '/ops/tenants/$tenantId/templates': typeof AuthedOpsTenantsTenantIdTemplatesRoute
   '/ops/tenants/$tenantId/wallets': typeof AuthedOpsTenantsTenantIdWalletsRoute
   '/ops/tenants/$tenantId/webhooks': typeof AuthedOpsTenantsTenantIdWebhooksRoute
+  '/t/$orgSlug/templates/new': typeof AuthedTOrgSlugTemplatesNewRoute
   '/ops/tenants/$tenantId/': typeof AuthedOpsTenantsTenantIdIndexRoute
+  '/t/$orgSlug/templates/': typeof AuthedTOrgSlugTemplatesIndexRoute
+  '/t/$orgSlug/templates/$templateId/edit': typeof AuthedTOrgSlugTemplatesTemplateIdEditRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -264,12 +274,10 @@ export interface FileRoutesByTo {
   '/ops/operators': typeof AuthedOpsOperatorsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/ops': typeof AuthedOpsIndexRoute
-  '/ops/tenants/new': typeof AuthedOpsTenantsNewRoute
   '/t/$orgSlug/api-keys': typeof AuthedTOrgSlugApiKeysRoute
   '/t/$orgSlug/catalogue': typeof AuthedTOrgSlugCatalogueRoute
   '/t/$orgSlug/exchanges': typeof AuthedTOrgSlugExchangesRoute
   '/t/$orgSlug/members': typeof AuthedTOrgSlugMembersRoute
-  '/t/$orgSlug/templates': typeof AuthedTOrgSlugTemplatesRoute
   '/t/$orgSlug/wallets': typeof AuthedTOrgSlugWalletsRoute
   '/t/$orgSlug/webhooks': typeof AuthedTOrgSlugWebhooksRoute
   '/t/$orgSlug': typeof AuthedTOrgSlugIndexRoute
@@ -279,7 +287,10 @@ export interface FileRoutesByTo {
   '/ops/tenants/$tenantId/templates': typeof AuthedOpsTenantsTenantIdTemplatesRoute
   '/ops/tenants/$tenantId/wallets': typeof AuthedOpsTenantsTenantIdWalletsRoute
   '/ops/tenants/$tenantId/webhooks': typeof AuthedOpsTenantsTenantIdWebhooksRoute
+  '/t/$orgSlug/templates/new': typeof AuthedTOrgSlugTemplatesNewRoute
   '/ops/tenants/$tenantId': typeof AuthedOpsTenantsTenantIdIndexRoute
+  '/t/$orgSlug/templates': typeof AuthedTOrgSlugTemplatesIndexRoute
+  '/t/$orgSlug/templates/$templateId/edit': typeof AuthedTOrgSlugTemplatesTemplateIdEditRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -300,12 +311,10 @@ export interface FileRoutesById {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/_authed/ops/': typeof AuthedOpsIndexRoute
   '/_authed/ops/tenants/$tenantId': typeof AuthedOpsTenantsTenantIdRouteWithChildren
-  '/_authed/ops/tenants/new': typeof AuthedOpsTenantsNewRoute
   '/_authed/t/$orgSlug/api-keys': typeof AuthedTOrgSlugApiKeysRoute
   '/_authed/t/$orgSlug/catalogue': typeof AuthedTOrgSlugCatalogueRoute
   '/_authed/t/$orgSlug/exchanges': typeof AuthedTOrgSlugExchangesRoute
   '/_authed/t/$orgSlug/members': typeof AuthedTOrgSlugMembersRoute
-  '/_authed/t/$orgSlug/templates': typeof AuthedTOrgSlugTemplatesRoute
   '/_authed/t/$orgSlug/wallets': typeof AuthedTOrgSlugWalletsRoute
   '/_authed/t/$orgSlug/webhooks': typeof AuthedTOrgSlugWebhooksRoute
   '/_authed/t/$orgSlug/': typeof AuthedTOrgSlugIndexRoute
@@ -315,7 +324,10 @@ export interface FileRoutesById {
   '/_authed/ops/tenants/$tenantId/templates': typeof AuthedOpsTenantsTenantIdTemplatesRoute
   '/_authed/ops/tenants/$tenantId/wallets': typeof AuthedOpsTenantsTenantIdWalletsRoute
   '/_authed/ops/tenants/$tenantId/webhooks': typeof AuthedOpsTenantsTenantIdWebhooksRoute
+  '/_authed/t/$orgSlug/templates/new': typeof AuthedTOrgSlugTemplatesNewRoute
   '/_authed/ops/tenants/$tenantId/': typeof AuthedOpsTenantsTenantIdIndexRoute
+  '/_authed/t/$orgSlug/templates/': typeof AuthedTOrgSlugTemplatesIndexRoute
+  '/_authed/t/$orgSlug/templates/$templateId/edit': typeof AuthedTOrgSlugTemplatesTemplateIdEditRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -336,12 +348,10 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/ops/'
     | '/ops/tenants/$tenantId'
-    | '/ops/tenants/new'
     | '/t/$orgSlug/api-keys'
     | '/t/$orgSlug/catalogue'
     | '/t/$orgSlug/exchanges'
     | '/t/$orgSlug/members'
-    | '/t/$orgSlug/templates'
     | '/t/$orgSlug/wallets'
     | '/t/$orgSlug/webhooks'
     | '/t/$orgSlug/'
@@ -351,7 +361,10 @@ export interface FileRouteTypes {
     | '/ops/tenants/$tenantId/templates'
     | '/ops/tenants/$tenantId/wallets'
     | '/ops/tenants/$tenantId/webhooks'
+    | '/t/$orgSlug/templates/new'
     | '/ops/tenants/$tenantId/'
+    | '/t/$orgSlug/templates/'
+    | '/t/$orgSlug/templates/$templateId/edit'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -367,12 +380,10 @@ export interface FileRouteTypes {
     | '/ops/operators'
     | '/api/auth/$'
     | '/ops'
-    | '/ops/tenants/new'
     | '/t/$orgSlug/api-keys'
     | '/t/$orgSlug/catalogue'
     | '/t/$orgSlug/exchanges'
     | '/t/$orgSlug/members'
-    | '/t/$orgSlug/templates'
     | '/t/$orgSlug/wallets'
     | '/t/$orgSlug/webhooks'
     | '/t/$orgSlug'
@@ -382,7 +393,10 @@ export interface FileRouteTypes {
     | '/ops/tenants/$tenantId/templates'
     | '/ops/tenants/$tenantId/wallets'
     | '/ops/tenants/$tenantId/webhooks'
+    | '/t/$orgSlug/templates/new'
     | '/ops/tenants/$tenantId'
+    | '/t/$orgSlug/templates'
+    | '/t/$orgSlug/templates/$templateId/edit'
   id:
     | '__root__'
     | '/'
@@ -402,12 +416,10 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/_authed/ops/'
     | '/_authed/ops/tenants/$tenantId'
-    | '/_authed/ops/tenants/new'
     | '/_authed/t/$orgSlug/api-keys'
     | '/_authed/t/$orgSlug/catalogue'
     | '/_authed/t/$orgSlug/exchanges'
     | '/_authed/t/$orgSlug/members'
-    | '/_authed/t/$orgSlug/templates'
     | '/_authed/t/$orgSlug/wallets'
     | '/_authed/t/$orgSlug/webhooks'
     | '/_authed/t/$orgSlug/'
@@ -417,7 +429,10 @@ export interface FileRouteTypes {
     | '/_authed/ops/tenants/$tenantId/templates'
     | '/_authed/ops/tenants/$tenantId/wallets'
     | '/_authed/ops/tenants/$tenantId/webhooks'
+    | '/_authed/t/$orgSlug/templates/new'
     | '/_authed/ops/tenants/$tenantId/'
+    | '/_authed/t/$orgSlug/templates/'
+    | '/_authed/t/$orgSlug/templates/$templateId/edit'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -553,13 +568,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedOpsTenantsTenantIdRouteImport
       parentRoute: typeof AuthedOpsRoute
     }
-    '/_authed/ops/tenants/new': {
-      id: '/_authed/ops/tenants/new'
-      path: '/tenants/new'
-      fullPath: '/ops/tenants/new'
-      preLoaderRoute: typeof AuthedOpsTenantsNewRouteImport
-      parentRoute: typeof AuthedOpsRoute
-    }
     '/_authed/t/$orgSlug/': {
       id: '/_authed/t/$orgSlug/'
       path: '/'
@@ -593,13 +601,6 @@ declare module '@tanstack/react-router' {
       path: '/members'
       fullPath: '/t/$orgSlug/members'
       preLoaderRoute: typeof AuthedTOrgSlugMembersRouteImport
-      parentRoute: typeof AuthedTOrgSlugRoute
-    }
-    '/_authed/t/$orgSlug/templates': {
-      id: '/_authed/t/$orgSlug/templates'
-      path: '/templates'
-      fullPath: '/t/$orgSlug/templates'
-      preLoaderRoute: typeof AuthedTOrgSlugTemplatesRouteImport
       parentRoute: typeof AuthedTOrgSlugRoute
     }
     '/_authed/t/$orgSlug/wallets': {
@@ -665,6 +666,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedOpsTenantsTenantIdWebhooksRouteImport
       parentRoute: typeof AuthedOpsTenantsTenantIdRoute
     }
+    '/_authed/t/$orgSlug/templates/': {
+      id: '/_authed/t/$orgSlug/templates/'
+      path: '/templates'
+      fullPath: '/t/$orgSlug/templates/'
+      preLoaderRoute: typeof AuthedTOrgSlugTemplatesIndexRouteImport
+      parentRoute: typeof AuthedTOrgSlugRoute
+    }
+    '/_authed/t/$orgSlug/templates/new': {
+      id: '/_authed/t/$orgSlug/templates/new'
+      path: '/templates/new'
+      fullPath: '/t/$orgSlug/templates/new'
+      preLoaderRoute: typeof AuthedTOrgSlugTemplatesNewRouteImport
+      parentRoute: typeof AuthedTOrgSlugRoute
+    }
+    '/_authed/t/$orgSlug/templates/$templateId/edit': {
+      id: '/_authed/t/$orgSlug/templates/$templateId/edit'
+      path: '/templates/$templateId/edit'
+      fullPath: '/t/$orgSlug/templates/$templateId/edit'
+      preLoaderRoute: typeof AuthedTOrgSlugTemplatesTemplateIdEditRouteImport
+      parentRoute: typeof AuthedTOrgSlugRoute
+    }
   }
 }
 
@@ -704,7 +726,6 @@ interface AuthedOpsRouteChildren {
   AuthedOpsOperatorsRoute: typeof AuthedOpsOperatorsRoute
   AuthedOpsIndexRoute: typeof AuthedOpsIndexRoute
   AuthedOpsTenantsTenantIdRoute: typeof AuthedOpsTenantsTenantIdRouteWithChildren
-  AuthedOpsTenantsNewRoute: typeof AuthedOpsTenantsNewRoute
 }
 
 const AuthedOpsRouteChildren: AuthedOpsRouteChildren = {
@@ -713,7 +734,6 @@ const AuthedOpsRouteChildren: AuthedOpsRouteChildren = {
   AuthedOpsOperatorsRoute: AuthedOpsOperatorsRoute,
   AuthedOpsIndexRoute: AuthedOpsIndexRoute,
   AuthedOpsTenantsTenantIdRoute: AuthedOpsTenantsTenantIdRouteWithChildren,
-  AuthedOpsTenantsNewRoute: AuthedOpsTenantsNewRoute,
 }
 
 const AuthedOpsRouteWithChildren = AuthedOpsRoute._addFileChildren(
@@ -725,10 +745,12 @@ interface AuthedTOrgSlugRouteChildren {
   AuthedTOrgSlugCatalogueRoute: typeof AuthedTOrgSlugCatalogueRoute
   AuthedTOrgSlugExchangesRoute: typeof AuthedTOrgSlugExchangesRoute
   AuthedTOrgSlugMembersRoute: typeof AuthedTOrgSlugMembersRoute
-  AuthedTOrgSlugTemplatesRoute: typeof AuthedTOrgSlugTemplatesRoute
   AuthedTOrgSlugWalletsRoute: typeof AuthedTOrgSlugWalletsRoute
   AuthedTOrgSlugWebhooksRoute: typeof AuthedTOrgSlugWebhooksRoute
   AuthedTOrgSlugIndexRoute: typeof AuthedTOrgSlugIndexRoute
+  AuthedTOrgSlugTemplatesNewRoute: typeof AuthedTOrgSlugTemplatesNewRoute
+  AuthedTOrgSlugTemplatesIndexRoute: typeof AuthedTOrgSlugTemplatesIndexRoute
+  AuthedTOrgSlugTemplatesTemplateIdEditRoute: typeof AuthedTOrgSlugTemplatesTemplateIdEditRoute
 }
 
 const AuthedTOrgSlugRouteChildren: AuthedTOrgSlugRouteChildren = {
@@ -736,10 +758,13 @@ const AuthedTOrgSlugRouteChildren: AuthedTOrgSlugRouteChildren = {
   AuthedTOrgSlugCatalogueRoute: AuthedTOrgSlugCatalogueRoute,
   AuthedTOrgSlugExchangesRoute: AuthedTOrgSlugExchangesRoute,
   AuthedTOrgSlugMembersRoute: AuthedTOrgSlugMembersRoute,
-  AuthedTOrgSlugTemplatesRoute: AuthedTOrgSlugTemplatesRoute,
   AuthedTOrgSlugWalletsRoute: AuthedTOrgSlugWalletsRoute,
   AuthedTOrgSlugWebhooksRoute: AuthedTOrgSlugWebhooksRoute,
   AuthedTOrgSlugIndexRoute: AuthedTOrgSlugIndexRoute,
+  AuthedTOrgSlugTemplatesNewRoute: AuthedTOrgSlugTemplatesNewRoute,
+  AuthedTOrgSlugTemplatesIndexRoute: AuthedTOrgSlugTemplatesIndexRoute,
+  AuthedTOrgSlugTemplatesTemplateIdEditRoute:
+    AuthedTOrgSlugTemplatesTemplateIdEditRoute,
 }
 
 const AuthedTOrgSlugRouteWithChildren = AuthedTOrgSlugRoute._addFileChildren(

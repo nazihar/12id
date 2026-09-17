@@ -1,13 +1,13 @@
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { createColumnHelper } from '@tanstack/react-table'
-import { PlusIcon } from 'lucide-react'
 
 import { DataTable } from '@/components/data-table/data-table'
 import type { DataTableFeatures } from '@/components/data-table/data-table-features'
+import { PageHeader } from '@/components/page-header'
 import { RouteError } from '@/components/route-error'
 import { StateBadge } from '@/components/state-badge'
-import { buttonVariants } from '@/components/ui/button'
+import { CreateTenantDialog } from '@/features/tenants/create-tenant-dialog'
 import type { getTenantOverview } from '@/features/tenants/tenants.functions'
 import { tenantOverviewQuery } from '@/features/tenants/tenants.queries'
 import { formatDateTime } from '@/lib/format'
@@ -45,13 +45,7 @@ function TenantsPage() {
   const { data: tenants } = useSuspenseQuery(tenantOverviewQuery())
   return (
     <section className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="font-heading text-lg font-medium">Tenants</h1>
-        <Link to="/ops/tenants/new" className={buttonVariants({ size: 'sm' })}>
-          <PlusIcon />
-          New tenant
-        </Link>
-      </div>
+      <PageHeader title="Tenants" description="Every customer tenant on the platform with its onboarding state and activity." actions={<CreateTenantDialog />} />
       <DataTable columns={columns} data={tenants} searchPlaceholder="Search tenants" emptyMessage="No tenants yet." testId="tenants-table" />
     </section>
   )

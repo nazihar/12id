@@ -1,25 +1,22 @@
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
-import { createFileRoute, useHydrated } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import { createColumnHelper } from '@tanstack/react-table'
-import { type FormEvent, useState } from 'react'
+import { ArchiveIcon, ArchiveRestoreIcon, FileBadgeIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { DataTable } from '@/components/data-table/data-table'
 import type { DataTableFeatures } from '@/components/data-table/data-table-features'
 import { IdentifierPair } from '@/components/identifier-pair'
+import { PageHeader } from '@/components/page-header'
 import { RouteError } from '@/components/route-error'
+import { RowAction, RowActions } from '@/components/row-action'
 import { StateBadge } from '@/components/state-badge'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
-import { publishCredentialDefinition, publishSchema, setSchemaDeprecated } from '@/features/portal/portal-data.functions'
+import { publishCredentialDefinition, setSchemaDeprecated } from '@/features/portal/portal-data.functions'
 import { portalCatalogueQuery, portalKey } from '@/features/portal/portal.queries'
+import { PublishSchemaDialog } from '@/features/portal/publish-schema-dialog'
 import type { CredentialDefinitionRow, SchemaRow } from '@/features/tenant-data/types'
 import { tenantCan } from '@/lib/permissions'
-import { EXPIRY_ATTRIBUTE } from '@/lib/template-schema'
 
 export const Route = createFileRoute('/_authed/t/$orgSlug/catalogue')({
   loader: ({ context, params }) => context.queryClient.ensureQueryData(portalCatalogueQuery(params.orgSlug)),
@@ -78,15 +75,17 @@ function PortalCataloguePage() {
   ])
 
   return (
-    <div className="space-y-6">
-      {canPublish && <PublishSchemaCard organizationId={organization.id} orgSlug={orgSlug} />}
-      <section className="space-y-2">
-        <h2 className="font-heading font-medium">Schemas</h2>
+    <div className="space-y-8">
+      <section className="space-y-4">
+        <PageHeader
+          title="Catalogue"
+          description="The schemas and credential definitions this organization has published on the ledger. Offers and proof requests use the wire identifier."
+          actions={canPublish && <PublishSchemaDialog organizationId={organization.id} orgSlug={orgSlug} />}
+        />
         <DataTable columns={schemaColumns} data={data.schemas} searchPlaceholder="Search schemas" emptyMessage="No schemas published." testId="schemas-table" />
       </section>
-      <section className="space-y-2">
-        <h2 className="font-heading font-medium">Credential definitions</h2>
-        <p className="text-sm text-muted-foreground">Offers and proof requests use the wire identifier.</p>
+      <section className="space-y-3">
+        <PageHeader level={2} title="Credential definitions" description="One per schema; publishing it lets your backend issue credentials of that schema." />
         <DataTable columns={definitionColumns} data={data.credentialDefinitions} emptyMessage="No credential definitions published." testId="definitions-table" />
       </section>
     </div>
@@ -94,7 +93,6 @@ function PortalCataloguePage() {
 }
 
 function SchemaActions({ schema, organizationId, orgSlug, canPublishDefinition, canDeprecate }: { schema: SchemaRow; organizationId: string; orgSlug: string; canPublishDefinition: boolean; canDeprecate: boolean }) {
-  const hydrated = useHydrated()
   const queryClient = useQueryClient()
   const refresh = () => queryClient.invalidateQueries({ queryKey: portalKey(orgSlug, 'catalogue') })
   const define = useMutation({
@@ -103,7 +101,6 @@ function SchemaActions({ schema, organizationId, orgSlug, canPublishDefinition, 
       toast.success(`Credential definition for ${schema.name} ${schema.version} published.`)
       await refresh()
     },
-    onError: (error) => toast.error(error.message),
   })
   const deprecate = useMutation({
     mutationFn: (deprecated: boolean) => setSchemaDeprecated({ data: { organizationId, schemaId: schema.id, deprecated } }),
@@ -111,105 +108,48 @@ function SchemaActions({ schema, organizationId, orgSlug, canPublishDefinition, 
       toast.success(deprecated ? `${schema.name} ${schema.version} no longer accepts new offers.` : `${schema.name} ${schema.version} is active again.`)
       await refresh()
     },
-    onError: (error) => toast.error(error.message),
   })
+  const label = `${schema.name} ${schema.version}`
   return (
-    <div className="flex flex-wrap gap-1">
+    <RowActions>
       {canPublishDefinition && (
-        <Button size="sm" variant="outline" onClick={() => define.mutate()} disabled={!hydrated || define.isPending}>
-          {define.isPending ? 'Publishing…' : 'Publish credential definition'}
-        </Button>
+        <RowAction
+          label="Publish credential definition"
+          icon={FileBadgeIcon}
+          confirm={{
+            title: `Publish the credential definition for ${label}?`,
+            description: 'Writes the definition on the ledger, which cannot be undone. Credentials of this schema can be issued afterwards; they expire instead of being revoked.',
+            confirmLabel: 'Publish on the ledger',
+            pendingLabel: 'Publishing…',
+            onConfirm: () => define.mutateAsync(),
+          }}
+        />
       )}
-      {canDeprecate && (
-        <Button size="sm" variant="ghost" onClick={() => deprecate.mutate(schema.status !== 'deprecated')} disabled={!hydrated || deprecate.isPending}>
-          {schema.status === 'deprecated' ? 'Reactivate' : 'Deprecate'}
-        </Button>
-      )}
-    </div>
-  )
-}
-
-function PublishSchemaCard({ organizationId, orgSlug }: { organizationId: string; orgSlug: string }) {
-  const hydrated = useHydrated()
-  const queryClient = useQueryClient()
-  const [open, setOpen] = useState(false)
-  const publish = useMutation({
-    mutationFn: (input: { name: string; version: string; attributes: string[] }) => publishSchema({ data: { organizationId, ...input } }),
-    onSuccess: async (schema) => {
-      toast.success(`${schema.name} ${schema.version} published. Publish its credential definition to start issuing.`)
-      setOpen(false)
-      await queryClient.invalidateQueries({ queryKey: portalKey(orgSlug, 'catalogue') })
-    },
-  })
-
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const form = new FormData(event.currentTarget)
-    const attributes = String(form.get('attributes'))
-      .split(/[\s,]+/)
-      .map((attribute) => attribute.trim())
-      .filter((attribute) => attribute && attribute !== EXPIRY_ATTRIBUTE)
-    publish.mutate({ name: String(form.get('name')).trim(), version: String(form.get('version')).trim(), attributes: [...new Set(attributes)] })
-  }
-
-  if (!open) {
-    return (
-      <Button variant="outline" onClick={() => setOpen(true)} disabled={!hydrated}>
-        Publish a schema
-      </Button>
-    )
-  }
-
-  return (
-    <Card size="sm">
-      <CardHeader>
-        <CardTitle>Publish a schema</CardTitle>
-        <CardDescription>
-          Schemas are public and permanent on the ledger: you cannot add or rename attributes later, only publish a new version. Values are strings; attributes used in predicates must hold whole
-          numbers.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form method="post" onSubmit={onSubmit}>
-          <FieldGroup>
-            {publish.error && (
-              <Alert variant="destructive">
-                <AlertDescription>{publish.error.message}</AlertDescription>
-              </Alert>
-            )}
-            <div className="grid gap-4 sm:grid-cols-[2fr_1fr]">
-              <Field>
-                <FieldLabel htmlFor="schema-name">Name</FieldLabel>
-                <Input id="schema-name" name="name" placeholder="employee-badge" maxLength={200} required />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="schema-version">Version</FieldLabel>
-                <Input id="schema-version" name="version" defaultValue="1.0" pattern="\d+(\.\d+){0,2}" required />
-              </Field>
-            </div>
-            <Field>
-              <FieldLabel htmlFor="schema-attributes">Attributes</FieldLabel>
-              <textarea
-                id="schema-attributes"
-                name="attributes"
-                rows={4}
-                required
-                placeholder={'name\ndepartment\nemployeeNumber'}
-                className="w-full rounded-lg border border-input bg-transparent px-2.5 py-1.5 font-mono text-sm"
-              />
-              <FieldDescription>One per line or separated by commas. {EXPIRY_ATTRIBUTE} (epoch seconds) is added to every schema: credentials expire instead of being revoked.</FieldDescription>
-            </Field>
-            <div className="flex gap-2">
-              <Button type="submit" disabled={!hydrated || publish.isPending}>
-                {publish.isPending ? 'Publishing on the ledger…' : 'Publish schema'}
-              </Button>
-              <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-                Cancel
-              </Button>
-            </div>
-          </FieldGroup>
-        </form>
-      </CardContent>
-    </Card>
+      {canDeprecate &&
+        (schema.status === 'deprecated' ? (
+          <RowAction
+            label="Reactivate"
+            icon={ArchiveRestoreIcon}
+            confirm={{
+              title: `Reactivate ${label}?`,
+              description: 'New credential offers with this schema are accepted again.',
+              confirmLabel: 'Reactivate',
+              onConfirm: () => deprecate.mutateAsync(false),
+            }}
+          />
+        ) : (
+          <RowAction
+            label="Deprecate"
+            icon={ArchiveIcon}
+            confirm={{
+              title: `Deprecate ${label}?`,
+              description: 'New credential offers with this schema are refused. Credentials already issued stay valid, and proof templates that accept all versions keep working. You can reactivate it later.',
+              confirmLabel: 'Deprecate',
+              destructive: true,
+              onConfirm: () => deprecate.mutateAsync(true),
+            }}
+          />
+        ))}
+    </RowActions>
   )
 }

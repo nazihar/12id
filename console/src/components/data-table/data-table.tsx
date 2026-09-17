@@ -1,6 +1,6 @@
 import { type ColumnDef, type PaginationState, type RowData, type SortingState, useTable } from '@tanstack/react-table'
 import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon } from 'lucide-react'
-import { useState } from 'react'
+import { type ReactNode, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,10 +17,12 @@ interface DataTableProps<TData extends RowData> {
   emptyMessage?: string
   pageSize?: number
   testId?: string
+  /** Filters or actions shown on the search row, right-aligned. */
+  toolbar?: ReactNode
 }
 
 // shadcn's TanStack Table v9 data-table recipe, with client-side sorting, search and pagination.
-export function DataTable<TData extends RowData>({ columns, data, searchPlaceholder, emptyMessage = 'Nothing here yet.', pageSize = 25, testId }: DataTableProps<TData>) {
+export function DataTable<TData extends RowData>({ columns, data, searchPlaceholder, emptyMessage = 'Nothing here yet.', pageSize = 25, testId, toolbar }: DataTableProps<TData>) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [globalFilter, setGlobalFilter] = useState('')
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize })
@@ -40,10 +42,18 @@ export function DataTable<TData extends RowData>({ columns, data, searchPlacehol
 
   return (
     <div className="space-y-3" data-testid={testId}>
-      {searchPlaceholder && (
-        <Input value={globalFilter} onChange={(event) => table.setGlobalFilter(event.target.value)} placeholder={searchPlaceholder} aria-label={searchPlaceholder} className="max-w-xs" />
+      {(searchPlaceholder || toolbar) && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          {searchPlaceholder ? (
+            <Input value={globalFilter} onChange={(event) => table.setGlobalFilter(event.target.value)} placeholder={searchPlaceholder} aria-label={searchPlaceholder} className="max-w-xs" />
+          ) : (
+            <span />
+          )}
+          {toolbar}
+        </div>
       )}
-      <div className="overflow-hidden rounded-lg border">
+      {/* The table scrolls inside this box; the page itself never grows wider than the window. */}
+      <div className="w-full max-w-full overflow-x-auto rounded-lg border">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((group) => (

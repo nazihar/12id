@@ -5,6 +5,7 @@ import { createColumnHelper } from '@tanstack/react-table'
 import { DataTable } from '@/components/data-table/data-table'
 import type { DataTableFeatures } from '@/components/data-table/data-table-features'
 import { IdentifierPair } from '@/components/identifier-pair'
+import { PageHeader } from '@/components/page-header'
 import { RouteError } from '@/components/route-error'
 import { StateBadge } from '@/components/state-badge'
 import { Badge } from '@/components/ui/badge'
@@ -54,14 +55,13 @@ function CataloguePage() {
   const { tenantId } = Route.useParams()
   const { data } = useSuspenseQuery(catalogueQuery(tenantId))
   return (
-    <div className="space-y-6">
-      <section className="space-y-2">
-        <h2 className="font-heading font-medium">Schemas</h2>
-        <p className="text-sm text-muted-foreground">Offers and proof requests use the wire identifier. Publishing happens in the tenant portal.</p>
+    <div className="space-y-8">
+      <section className="space-y-3">
+        <PageHeader level={2} title="Schemas" description="Offers and proof requests use the wire identifier. Publishing happens in the tenant portal." />
         <DataTable columns={schemaColumns} data={data.schemas} searchPlaceholder="Search schemas" emptyMessage="No schemas published." />
       </section>
-      <section className="space-y-2">
-        <h2 className="font-heading font-medium">Credential definitions</h2>
+      <section className="space-y-3">
+        <PageHeader level={2} title="Credential definitions" />
         <DataTable columns={definitionColumns} data={data.credentialDefinitions} emptyMessage="No credential definitions published." />
       </section>
     </div>

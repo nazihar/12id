@@ -14,6 +14,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { type Page, expect, test } from '@playwright/test'
 import { generateSync } from 'otplib'
 
+import { submitSignIn } from './staging-signin'
+
 const url = process.env.STAGING_URL ?? 'https://12id.naziharitsolution.com'
 const operatorEmail = process.env.STAGING_EMAIL ?? ''
 const operatorPassword = process.env.STAGING_PASSWORD ?? ''
@@ -30,7 +32,7 @@ async function signIn(page: Page, email: string, password: string, secretFile: s
   await page.goto('/login')
   await page.getByLabel('Email').fill(email)
   await page.getByLabel('Password').fill(password)
-  await page.getByRole('button', { name: 'Sign in' }).click()
+  await submitSignIn(page)
   await expect(page).toHaveURL(/\/(setup-2fa|verify-2fa)/)
   if (page.url().includes('/setup-2fa')) {
     await page.getByLabel('Confirm your password').fill(password)
@@ -61,9 +63,10 @@ test('staging: tenant owner works through the portal', async ({ browser, page })
   const members = page.getByTestId('members-table')
   await expect(createOrganization.or(members)).toBeVisible()
   if (await createOrganization.isVisible()) {
+    await createOrganization.click()
     await page.getByLabel('Owner name').fill('Staging Owner')
     await page.getByLabel('Owner email').fill(ownerEmail)
-    await createOrganization.click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Create organization' }).click()
   }
   await expect(members).toContainText(ownerEmail)
 
@@ -81,11 +84,16 @@ test('staging: tenant owner works through the portal', async ({ browser, page })
   // Template builder → platform-api validation → delete again.
   const templateName = `staging-portal-${stamp}`
   await tab(owner, 'Proof templates').click()
-  await owner.getByRole('button', { name: 'New template' }).click()
+  await owner.getByRole('link', { name: 'New template' }).click()
   const builder = owner.getByTestId('template-builder')
   const removeRef = builder.getByRole('button', { name: 'Remove credential type' })
   while ((await removeRef.count()) > 0) await removeRef.first().click()
-  await builder.getByLabel('Schema', { exact: true }).selectOption('smoke-badge')
+  // The first schema is preselected; the combobox opens its list only for a different query.
+  const schema = builder.getByLabel('Schema', { exact: true })
+  if ((await schema.inputValue()) !== 'smoke-badge') {
+    await schema.fill('smoke-badge')
+    await owner.getByRole('option', { name: 'smoke-badge' }).click()
+  }
   await builder.getByRole('button', { name: 'Add', exact: true }).click()
   await builder.getByRole('checkbox').first().check()
   await owner.getByLabel('Template name').fill(templateName)
@@ -93,11 +101,14 @@ test('staging: tenant owner works through the portal', async ({ browser, page })
   const templates = owner.getByTestId('templates-table')
   await expect(templates).toContainText(templateName)
   await templates.getByRole('row').filter({ hasText: templateName }).getByRole('button', { name: 'Delete' }).click()
+  await owner.getByRole('alertdialog').getByRole('button', { name: 'Delete template' }).click()
   await expect(templates).not.toContainText(templateName)
 
   await tab(owner, 'Exchanges').click()
   await owner.getByRole('button', { name: 'Create invitation' }).click()
+  await owner.getByRole('dialog').getByRole('button', { name: 'Create invitation' }).click()
   await expect(owner.getByTestId('invitation-qr')).toBeVisible({ timeout: 30_000 })
+  await owner.getByRole('button', { name: 'Done' }).click()
 
   await tab(owner, 'Wallets').click()
   await expect(owner.getByRole('table').first()).toBeVisible()
@@ -108,13 +119,14 @@ test('staging: tenant owner works through the portal', async ({ browser, page })
   // API key: shown once, then revoked.
   const keyLabel = `staging-portal-${stamp}`
   await tab(owner, 'API keys').click()
-  await owner.getByLabel('New key label').fill(keyLabel)
   await owner.getByRole('button', { name: 'Create API key' }).click()
+  await owner.getByLabel('New key label').fill(keyLabel)
+  await owner.getByRole('dialog').getByRole('button', { name: 'Create API key' }).click()
   await expect(owner.getByTestId('secret-value')).toContainText('12id_sk_')
   await owner.getByRole('button', { name: 'I have stored it' }).click()
   const keyRow = owner.getByTestId('api-keys-table').getByRole('row').filter({ hasText: keyLabel })
   await keyRow.getByRole('button', { name: 'Revoke' }).click()
-  await keyRow.getByRole('button', { name: 'Confirm revoke' }).click()
+  await owner.getByRole('alertdialog').getByRole('button', { name: 'Revoke key' }).click()
   await expect(keyRow).toContainText('revoked')
 
   await tab(owner, 'Members').click()

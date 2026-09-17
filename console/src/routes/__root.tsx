@@ -1,9 +1,11 @@
 /// <reference types="vite/client" />
 import type { QueryClient } from '@tanstack/react-query'
 import { HeadContent, Outlet, Scripts, createRootRouteWithContext } from '@tanstack/react-router'
+import { ThemeProvider } from 'next-themes'
 import type { ReactNode } from 'react'
 
 import { Toaster } from '@/components/ui/sonner'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { getViewer } from '@/features/session/session.functions'
 import appCss from '@/styles/app.css?url'
 
@@ -15,7 +17,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
   // The viewer drives route guards (UX). Server functions re-check through their own middleware.
   beforeLoad: async () => ({ viewer: await getViewer() }),
   head: () => ({
-    meta: [{ charSet: 'utf-8' }, { name: 'viewport', content: 'width=device-width, initial-scale=1' }, { title: '12id Console' }],
+    meta: [{ charSet: 'utf-8' }, { name: 'viewport', content: 'width=device-width, initial-scale=1' }, { title: '12iD' }],
     links: [{ rel: 'stylesheet', href: appCss }],
   }),
   component: RootComponent,
@@ -31,13 +33,17 @@ function RootComponent() {
 
 function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="en">
+    // next-themes sets the `dark` class on <html> before paint from an inline script; the
+    // server cannot know the choice, hence the hydration warning is suppressed on this element only.
+    <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>
       <body>
-        {children}
-        <Toaster />
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+          <TooltipProvider>{children}</TooltipProvider>
+          <Toaster />
+        </ThemeProvider>
         <Scripts />
       </body>
     </html>

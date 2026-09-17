@@ -8,6 +8,8 @@ import { setResponseHeader } from '@tanstack/react-start/server'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 
+import { personName } from '@/features/operators/operators.schemas'
+import { password } from '@/features/session/auth.schemas'
 import { auth } from '@/server/auth.server'
 import { consoleDb } from '@/server/db.server'
 import { invitation, organization, user } from '@/server/db/auth-schema'
@@ -36,7 +38,7 @@ export const getInvitationPreview = createServerFn({ method: 'GET' })
 
 /** Creates the invitee's account. The email counts as verified: the invitation reached that mailbox. */
 export const createInvitedAccount = createServerFn({ method: 'POST' })
-  .validator(invitationInput.extend({ name: z.string().trim().min(1).max(200), password: z.string().min(12, 'use at least 12 characters').max(128) }))
+  .validator(invitationInput.extend({ name: personName, password }))
   .handler(async ({ data }) => {
     const pending = await pendingInvitation(data.invitationId)
     if (!pending) throw new Error('This invitation has expired or was already used. Ask the organization owner for a new one.')

@@ -58,6 +58,16 @@ export const platformRoles = {
   user: platformAc.newRole({ ...userAc.statements }),
 }
 
+/**
+ * Operator sessions are capped (plan C2: operators 12 h, no trusted devices). The cap is ours, not
+ * Better Auth's, so both the route guards and `operatorMiddleware` measure it from the same constant.
+ */
+export const OPERATOR_SESSION_MAX_AGE_MS = 12 * 60 * 60 * 1000
+
+export function operatorSessionExpired(createdAt: Date | string | number) {
+  return Date.now() - new Date(createdAt).getTime() > OPERATOR_SESSION_MAX_AGE_MS
+}
+
 /** Better Auth stores roles as a comma-separated string. */
 export function hasPlatformRole(role: string | null | undefined, wanted: string) {
   return (role ?? '').split(',').map((r) => r.trim()).includes(wanted)

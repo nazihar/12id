@@ -49,8 +49,9 @@ EXTRA_SECRETS=agent infra/scripts/deploy.sh console run --rm console-tools \
   --email you@example.com --password "$(openssl rand -base64 18)" --name 'Your Name' --role operator --yes
 ```
 
-Then, in the console: "Forgot password" is not on the login page yet; use the temporary password,
-and the console forces authenticator-app enrollment before anything else. Operators cannot use
+Then, in the console: sign in with the temporary password (or use **Forgot your password?** on the
+login page, which emails the same set-password link), and the console forces authenticator-app
+enrollment before anything else. Operators cannot use
 emailed codes. Further operators are invited from **Operators** in the console (they receive a
 set-password link; the link works once and expires in one hour).
 
@@ -65,6 +66,9 @@ set-password link; the link works once and expires in one hour).
   read-only. Role changes and removals apply on the member's next request.
 - **A test owner without mail** (staging only): `console-tools` `npx auth create-admin … --role user`,
   then make that email the owner in the console. `console/e2e/staging-portal.spec.ts` uses one.
+- **Automation operator** (staging only): `onetwoidadmin+e2e-operator@gmail.com`, role operator, created
+  the same way on 2026-09-17 for `npm run e2e:staging`; its password and TOTP secret live in the
+  workstation's gitignored `console/.staging/`. Ban it from **Operators** if that workstation is lost.
 - **Lost authenticator (members).** Same SQL as for operators below; members may also have chosen
   emailed codes, which recover through the mailbox.
 

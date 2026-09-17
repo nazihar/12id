@@ -1,6 +1,6 @@
 import { Badge } from '@/components/ui/badge'
 
-type Tone = 'good' | 'active' | 'bad' | 'neutral'
+type Tone = 'good' | 'active' | 'bad' | 'neutral' | 'role'
 
 const TONES: Record<string, Tone> = {
   ready: 'good',
@@ -26,11 +26,15 @@ const TONES: Record<string, Tone> = {
   revoked: 'bad',
   banned: 'bad',
   deprecated: 'neutral',
+  owner: 'role',
+  admin: 'role',
+  member: 'role',
+  operator: 'role',
 }
 
-const VARIANTS = { good: 'secondary', active: 'outline', bad: 'destructive', neutral: 'ghost' } as const
+const VARIANTS = { good: 'secondary', active: 'outline', bad: 'destructive', neutral: 'ghost', role: 'outline' } as const
 
-/** One look for tenant, exchange, delivery, schema and account states. Unknown states render neutral. */
+/** One look for tenant, exchange, delivery, schema, account and role states. Unknown states render neutral. */
 export function StateBadge({ state }: { state: string }) {
   return <Badge variant={VARIANTS[TONES[state] ?? 'neutral']}>{state}</Badge>
 }

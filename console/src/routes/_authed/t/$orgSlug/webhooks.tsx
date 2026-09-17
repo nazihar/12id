@@ -1,19 +1,21 @@
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
-import { createFileRoute, useHydrated } from '@tanstack/react-router'
-import { type FormEvent, useState } from 'react'
+import { createFileRoute } from '@tanstack/react-router'
+import { KeyRoundIcon, Trash2Icon } from 'lucide-react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 
+import { ConfirmDialog } from '@/components/confirm-dialog'
+import { PageHeader } from '@/components/page-header'
 import { RouteError } from '@/components/route-error'
 import { SecretOnceDialog } from '@/components/secret-once-dialog'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
-import { deletePortalWebhook, getPortalDelivery, retryPortalDelivery, rotatePortalWebhookSecret, setPortalWebhook } from '@/features/portal/portal-data.functions'
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { deletePortalWebhook, getPortalDelivery, retryPortalDelivery, rotatePortalWebhookSecret } from '@/features/portal/portal-data.functions'
 import { portalDeliveriesQuery, portalKey, portalWebhookQuery } from '@/features/portal/portal.queries'
+import { WebhookEndpointDialog } from '@/features/portal/webhook-endpoint-dialog'
 import { DeliveriesPanel } from '@/features/tenant-data/panels'
-import { WEBHOOK_EVENT_TYPES, type WebhookEndpoint, type WebhookEventType } from '@/features/tenant-data/types'
+import type { WebhookEndpoint } from '@/features/tenant-data/types'
 import { formatDateTime } from '@/lib/format'
 import { tenantCan } from '@/lib/permissions'
 
@@ -33,8 +35,11 @@ function PortalWebhooksPage() {
   const organizationId = organization.id
 
   return (
-    <div className="space-y-6">
-      <EndpointCard endpoint={endpoint} organizationId={organizationId} orgSlug={orgSlug} canUpdate={canUpdate} canRotate={canRotate} />
+    <div className="space-y-8">
+      <section className="space-y-4">
+        <PageHeader title="Webhooks" description="Where the platform sends connection, credential, proof and wallet events for this organization." />
+        <EndpointCard endpoint={endpoint} organizationId={organizationId} orgSlug={orgSlug} canUpdate={canUpdate} canRotate={canRotate} />
+      </section>
       <DeliveriesPanel
         queryFor={(status) => portalDeliveriesQuery(orgSlug, status)}
         invalidateKey={portalKey(orgSlug, 'webhook-deliveries')}
@@ -46,111 +51,87 @@ function PortalWebhooksPage() {
 }
 
 function EndpointCard({ endpoint, organizationId, orgSlug, canUpdate, canRotate }: { endpoint: WebhookEndpoint | null; organizationId: string; orgSlug: string; canUpdate: boolean; canRotate: boolean }) {
-  const hydrated = useHydrated()
   const queryClient = useQueryClient()
   const [secret, setSecret] = useState<string | null>(null)
-  const [confirmRemove, setConfirmRemove] = useState(false)
   const refresh = () => queryClient.invalidateQueries({ queryKey: portalKey(orgSlug, 'webhook') })
 
-  const save = useMutation({
-    mutationFn: (input: { url: string; events?: WebhookEventType[] }) => setPortalWebhook({ data: { organizationId, ...input } }),
-    onSuccess: async (saved) => {
-      if (saved.secret) setSecret(saved.secret)
-      else toast.success('Webhook endpoint updated.')
-      await refresh()
-    },
-  })
   const rotate = useMutation({
     mutationFn: () => rotatePortalWebhookSecret({ data: { organizationId } }),
     onSuccess: (rotated) => setSecret(rotated.secret),
-    onError: (error) => toast.error(error.message),
   })
   const remove = useMutation({
     mutationFn: () => deletePortalWebhook({ data: { organizationId } }),
     onSuccess: async () => {
       toast.success('Webhook endpoint removed. Events are no longer delivered.')
-      setConfirmRemove(false)
       await refresh()
     },
-    onError: (error) => toast.error(error.message),
   })
-
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const form = new FormData(event.currentTarget)
-    const events = WEBHOOK_EVENT_TYPES.filter((type) => form.get(`event-${type}`) === 'on')
-    save.mutate({ url: String(form.get('url')).trim(), events: events.length === 0 || events.length === WEBHOOK_EVENT_TYPES.length ? undefined : events })
-  }
 
   return (
     <Card size="sm">
       <CardHeader>
-        <CardTitle>Webhook endpoint</CardTitle>
-        <CardDescription>
-          Events are POSTed as signed JSON (<code>X-12id-Signature</code>, HMAC-SHA256 with your secret). Answer 2xx within 10 seconds; failures are retried with backoff for about a day.
-        </CardDescription>
+        <CardTitle>Endpoint</CardTitle>
+        <CardDescription>{endpoint ? `Updated ${formatDateTime(endpoint.updatedAt)}.` : 'No webhook endpoint configured; events are not delivered.'}</CardDescription>
+        {canUpdate && (
+          <CardAction>
+            <WebhookEndpointDialog organizationId={organizationId} orgSlug={orgSlug} endpoint={endpoint} onSecret={setSecret} />
+          </CardAction>
+        )}
       </CardHeader>
-      <CardContent className="space-y-4">
-        {endpoint && (
-          <p className="text-sm text-muted-foreground">
-            Current: <span className="font-mono text-xs break-all text-foreground">{endpoint.url}</span> · {endpoint.events?.join(', ') ?? 'all events'} · updated {formatDateTime(endpoint.updatedAt)}
-          </p>
-        )}
-        {canUpdate ? (
-          <form method="post" onSubmit={onSubmit}>
-            <FieldGroup>
-              {save.error && (
-                <Alert variant="destructive">
-                  <AlertDescription>{save.error.message}</AlertDescription>
-                </Alert>
+      {endpoint && (
+        <CardContent className="space-y-4 text-sm">
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2">
+            <dt className="text-muted-foreground">URL</dt>
+            <dd className="font-mono text-xs break-all">{endpoint.url}</dd>
+            <dt className="text-muted-foreground">Events</dt>
+            <dd className="flex flex-wrap gap-1">
+              {endpoint.events ? (
+                endpoint.events.map((type) => (
+                  <Badge key={type} variant="outline" className="font-mono text-xs">
+                    {type}
+                  </Badge>
+                ))
+              ) : (
+                <Badge variant="secondary">all events</Badge>
               )}
-              <Field>
-                <FieldLabel htmlFor="webhook-url">HTTPS URL</FieldLabel>
-                <Input id="webhook-url" name="url" type="url" defaultValue={endpoint?.url} placeholder="https://backend.example.com/12id/webhooks" required />
-              </Field>
-              <Field>
-                <FieldLabel>Events</FieldLabel>
-                <div className="flex flex-wrap gap-3">
-                  {WEBHOOK_EVENT_TYPES.map((type) => (
-                    <label key={type} className="flex items-center gap-1.5 text-sm">
-                      <input type="checkbox" name={`event-${type}`} defaultChecked={!endpoint?.events || endpoint.events.includes(type)} />
-                      <span className="font-mono text-xs">{type}</span>
-                    </label>
-                  ))}
-                </div>
-                <FieldDescription>wallet.sync_requested asks your backend to push its app so the wallet collects waiting messages.</FieldDescription>
-              </Field>
-              <div className="flex flex-wrap gap-2">
-                <Button type="submit" disabled={!hydrated || save.isPending}>
-                  {endpoint ? 'Save endpoint' : 'Create endpoint'}
-                </Button>
-                {endpoint && canRotate && (
-                  <Button type="button" variant="outline" onClick={() => rotate.mutate()} disabled={!hydrated || rotate.isPending}>
-                    Rotate signing secret
-                  </Button>
-                )}
-                {endpoint &&
-                  (confirmRemove ? (
-                    <>
-                      <Button type="button" variant="destructive" onClick={() => remove.mutate()} disabled={remove.isPending}>
-                        Confirm remove
-                      </Button>
-                      <Button type="button" variant="ghost" onClick={() => setConfirmRemove(false)}>
-                        Cancel
-                      </Button>
-                    </>
-                  ) : (
-                    <Button type="button" variant="ghost" onClick={() => setConfirmRemove(true)} disabled={!hydrated}>
-                      Remove endpoint
+            </dd>
+          </dl>
+          {canUpdate && (
+            <div className="flex flex-wrap gap-2">
+              {canRotate && (
+                <ConfirmDialog
+                  trigger={
+                    <Button size="sm" variant="outline">
+                      <KeyRoundIcon />
+                      Rotate signing secret
                     </Button>
-                  ))}
-              </div>
-            </FieldGroup>
-          </form>
-        ) : (
-          !endpoint && <p className="text-sm text-muted-foreground">No webhook endpoint configured.</p>
-        )}
-      </CardContent>
+                  }
+                  title="Rotate the signing secret?"
+                  description="A new secret is shown once. The previous secret stops working immediately, so deliveries fail signature checks until your backend uses the new one."
+                  confirmLabel="Rotate secret"
+                  pendingLabel="Rotating…"
+                  destructive
+                  onConfirm={() => rotate.mutateAsync()}
+                />
+              )}
+              <ConfirmDialog
+                trigger={
+                  <Button size="sm" variant="ghost">
+                    <Trash2Icon />
+                    Remove endpoint
+                  </Button>
+                }
+                title="Remove the webhook endpoint?"
+                description="Events are no longer delivered and pending deliveries are dropped. Creating an endpoint again issues a new secret."
+                confirmLabel="Remove endpoint"
+                pendingLabel="Removing…"
+                destructive
+                onConfirm={() => remove.mutateAsync()}
+              />
+            </div>
+          )}
+        </CardContent>
+      )}
       <SecretOnceDialog
         secret={secret}
         title="Webhook signing secret"

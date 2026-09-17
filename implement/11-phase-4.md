@@ -20,6 +20,7 @@ The product will be **SaaS, and also self-hostable**. SaaS needs two kinds of us
 | Console → platform-api | **New internal console scope:** `x-console-token` + `x-console-tenant` + `x-console-actor` | The existing `/v1/*` routes work unchanged; the console never sees customer API keys; every console call is audited |
 | UI | **shadcn/ui + Tailwind v4** (Base UI primitives, the shadcn default since July 2026), lucide-react icons, sonner toasts | Components are copied into `src/components/ui` and owned by us; per-deployment theming via CSS variables (self-host rebranding) |
 | Client packages | **TanStack Query** (router SSR integration), **TanStack Table**, **TanStack Form** + zod, `qrcode` | One ecosystem with Start; zod schemas shared by forms and server-function validators |
+| UI revamp (C7, 2026-09-17) | **One shell** (shadcn `sidebar` with a workspace switcher as its top item, header with breadcrumb, theme toggle and profile menu), **one form kit** (TanStack Form + shared zod schemas + shadcn `Field`, validated on submit then live, `noValidate`), **short forms in dialogs, only the template builder on routes**, **every state-changing action behind one `ConfirmDialog`**, **row actions as icon buttons with a tooltip label**, **`Combobox` wherever a `<select>` was**, light/dark/system theme | The reference (shadcnuikit dashboard) was mined for ideas only. No portal overview page (kept the redirect to Catalogue); all e2e selectors follow the dialogs |
 | Data access | **The console never reads `platform_api` or agent databases** | Response stripping, validation and audit stay in platform-api |
 | Customer API keys | Stay in platform-api (sha256 table). The console only manages them through new routes | Better Auth's api-key plugin is **not** used |
 | Storage | Better Auth tables in their own database `console` on `agent-postgres` | platform-api migrations stay separate |
@@ -130,11 +131,18 @@ package.json / package-lock.json     exact pins; scripts: dev (vite dev), build 
 vite.config.ts                       tanstackStart() plugin placed before @vitejs/plugin-react; @tailwindcss/vite
 components.json                      shadcn config (created by `npx shadcn@<pinned> init -t start`, npm, Base UI, `@/*` alias)
 src/styles/app.css                   Tailwind v4 entry + shadcn theme CSS variables (brand tokens overridable per deployment)
-src/components/ui/                   shadcn components added via the CLI (button, card, dialog, field, input, select, table,
-                                     tabs, badge, dropdown-menu, sheet, sonner, skeleton, …); never hand-edited beyond theming
-src/components/                      app components: DataTable (TanStack Table + shadcn table: sorting, filters, pagination),
-                                     IdentifierPair (unqualified + qualified id, copy), StateBadge, SecretOnceDialog (API key /
-                                     webhook secret shown once), InvitationQr (qrcode), TemplateBuilder (TanStack Form)
+src/components/ui/                   shadcn components added via the CLI (button, card, dialog, field, input, combobox,
+                                     table, tabs, badge, dropdown-menu, sidebar, sheet, alert-dialog, tooltip, avatar, breadcrumb,
+                                     checkbox, switch, textarea, sonner, skeleton, …); never hand-edited beyond theming
+src/components/shell/                app shell (C7): AppShell (SidebarProvider + AppSidebar + AppHeader), WorkspaceSwitcher,
+                                     UserMenu, ThemeToggle, AuthLayout, use-shell-model (nav groups + breadcrumb from useMatches)
+src/components/form/                 form kit (C7): useAppForm/Form with TextField, PasswordField, TextareaField, NumberField,
+                                     CheckboxField, CheckboxGroupField, SwitchField, ComboboxField, SubmitButton, FormError;
+                                     FormDialog for short forms; submitMutation glue to TanStack Query
+src/components/                      app components: DataTable (TanStack Table + shadcn table: sorting, filters, pagination,
+                                     toolbar slot), PageHeader (title + actions slot), ConfirmDialog (AlertDialog for every
+                                     state-changing action), RowAction (icon + tooltip, optional confirm), IdentifierPair /
+                                     CopyableValue, StateBadge, SecretOnceDialog (API key / webhook secret shown once)
 src/integrations/query.tsx           QueryClient + TanStack Router SSR-Query integration; route loaders use
                                      queryClient.ensureQueryData(queryOptions → server functions)
 tsconfig.json                        jsx react-jsx, moduleResolution Bundler, module ESNext, target ES2022,
@@ -155,7 +163,9 @@ src/routes/_authed/t.$orgSlug.tsx + t.$orgSlug/…   tenant portal; beforeLoad s
 src/lib/permissions.ts               createAccessControl + roles, shared by server and client plugins
                                      (org: owner/admin/member over apiKey, webhook, catalogue, template, member, invitation;
                                      admin plugin: operator)
-src/lib/schemas.ts                   zod input schemas shared by forms and server-function validators (client-safe)
+src/features/<area>/<area>.schemas.ts   zod input schemas shared by forms and server-function validators (client-safe);
+                                     src/lib/template-schema.ts holds the builder's (templateDefinitionForm) and the server's
+                                     (templateDefinitionInput) template shapes around one set of rules
 src/lib/auth-client.ts               createAuthClient({ plugins: [organizationClient({ ac, roles }), inferOrgAdditionalFields,
                                      twoFactorClient({ twoFactorPage: '/2fa' }), adminClient()] })
 src/server/auth.server.ts            betterAuth({ baseURL, secret(s), trustedOrigins, database: drizzleAdapter(db, { provider: 'pg' }),
@@ -172,6 +182,8 @@ src/server/email.server.ts, db.server.ts, env.server.ts (zod: DATABASE_URL, BETT
                                      PLATFORM_API_URL, CONSOLE_TOKEN, SMTP_URL, MAIL_FROM)
 src/features/<area>/<area>.functions.ts   createServerFn().middleware([tenantMiddleware(...)|operatorMiddleware]).validator(schema)
                                      areas: tenants, api-keys, catalogue, templates, exchanges, wallets, webhooks, members, audit
+src/features/<area>/*-dialog.tsx     the area's short forms as FormDialogs (create tenant / organization / API key, invite
+                                     operator / member, change role, publish schema, webhook endpoint, connection invitation)
 scripts/create-operator.ts           bootstrap first operator through auth.api (one-time set-password link, TOTP enrollment on first login)
 Dockerfile                           build stage → node:22.20.0-bookworm-slim runtime, USER node
 test/                                middleware + isolation tests
@@ -263,8 +275,21 @@ Screens:
   - `console_audit` rows present for every mutation in the smoke.
 - No holder change, so no Android run is required for the Phase 4 gate.
 
+### C7 — Console UI revamp (2026-09-17)
+The first build of 4a/4b grew page by page: three hand-rolled nav bars, no organization switcher, dead dark-mode CSS, forms with native HTML validation bubbles sharing their column with the table they feed, fourteen state-changing actions without confirmation, native `<select>`s. C7 replaces that with one set of patterns; no server-function contract changes, no platform-api changes.
+
+- **Shell** (`src/components/shell/`, mounted once in `_authed.tsx`): shadcn sidebar (collapsible to icons, sheet on phones) whose top item is the **workspace switcher** (operator console + the viewer's organizations from `myOrganizationsQuery`, loaded in the `_authed` loader together with the sidebar cookie); nav groups and breadcrumb derived from the matched routes (`use-shell-model.ts`: operator sections, a contextual "Tenant · name" group inside a tenant, organization sections in the portal); header with sidebar trigger, breadcrumb, **theme toggle** (`next-themes`, class strategy, `suppressHydrationWarning` on `<html>`) and **profile menu** (avatar, organizations, operator console, sign out). Auth pages share `AuthLayout`.
+- **Form kit** (`src/components/form/`): `useAppForm` (TanStack Form `createFormHook`) + `Form` (`noValidate method="post"`) + field components on shadcn `Field`/`FieldError`. `revalidateLogic()` with the zod schema as `onDynamic` validator: quiet until the first submit, then live per field. Inputs are read-only and controls disabled until `useHydrated()` (a controlled input would drop text typed before hydration; the submit button waits for the same reason). Schemas live in `features/<area>/<area>.schemas.ts` and are the server functions' validators too; where the form holds a different shape (attributes as text, "all events" switch, blank alias, password confirmation) a `…Form` schema sits next to the `…Input` one with a converter.
+- **Placement rule:** short forms open in a `FormDialog` from the page header's actions slot (`PageHeader`); the proof template builder has routes (`/t/$orgSlug/templates/new`, `/t/$orgSlug/templates/$templateId/edit`) with an unsaved-changes guard (`useBlocker`). `/ops/tenants/new` is gone (dialog).
+- **Confirmation:** `ConfirmDialog` (AlertDialog: title naming the object, consequence, pending state, inline error) in front of ban/unban/sign-out-everywhere, remove member, cancel invitation, change role (dialog), delete template, publish credential definition, deprecate/reactivate, rotate/remove webhook, revoke API key, retry delivery, retry onboarding. `RowAction` = icon button + tooltip whose accessible name is the label, with an optional `confirm`.
+- **Combobox** (`ComboboxField`/`ComboboxControl`, Base UI) for member roles, schema names, versions, predicate attributes and comparisons; `CheckboxGroupField` for webhook events and disclosed attributes; `SwitchField` "deliver all events" (an empty selection is now an error instead of silently meaning all).
+- **Template builder:** `templateDefinitionForm` (every array present) with the cross-field rules as a `superRefine` that places each issue on `groups[i].key` / `.attributes` / `.predicates[j].name`; array fields for groups, credentials and predicates. The server validates `templateDefinitionInput` (same rules, platform-api shape).
+- **Tests:** unit test of the rule paths; e2e specs updated for dialogs (`getByRole('dialog')` scoping), confirmations (`getByRole('alertdialog')`), the profile menu and the combobox (`fill` + `option`).
+- **Password reset from the login page** ("Forgot your password?" → the same set-password mail Better Auth sends for a first password). The answer never says whether the address has an account.
+- **Lost sessions lead to sign-in, not an error page:** the operator 12 h cap lives in `lib/permissions.ts` and is applied by `getViewer`, so the route guards see it; a middleware without a usable session throws a router redirect to `/login`, which `router.tsx` also follows for queries and mutations. Dialogs cap their height and scroll.
+
 ## Order
-C0 → C1 (can start in parallel with C0) → C2 → C3 → C5 (deploy 4a) → C6 for 4a (operator smoke + outside checks) → C4 → C5 redeploy → C6 full (portal smoke, isolation suite, `smoke:platform-credo` with a console-created key).
+C0 → C1 (can start in parallel with C0) → C2 → C3 → C5 (deploy 4a) → C6 for 4a (operator smoke + outside checks) → C4 → C5 redeploy → C6 full (portal smoke, isolation suite, `smoke:platform-credo` with a console-created key) → C7 (UI revamp) → C5 redeploy → `e2e:staging`.
 
 ## Verification (gate)
 - `tsc --noEmit` + tests green in `platform-api` and `console`, including the isolation suite and the import-scan rule.

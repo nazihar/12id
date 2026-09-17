@@ -2,6 +2,7 @@ import { useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 
 import { RouteError } from '@/components/route-error'
+import { PageHeader } from '@/components/page-header'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { DeliveriesPanel } from '@/features/tenant-data/panels'
 import { getWebhookDelivery, retryWebhookDelivery } from '@/features/tenant-data/tenant-data.functions'
@@ -19,7 +20,8 @@ function WebhooksPage() {
   const { tenantId } = Route.useParams()
   const { data: endpoint } = useSuspenseQuery(webhookEndpointQuery(tenantId))
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
+      <PageHeader title="Webhooks" />
       <Card size="sm">
         <CardHeader>
           <CardTitle>Endpoint</CardTitle>

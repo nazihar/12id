@@ -14,7 +14,7 @@ export function SecretOnceDialog({ secret, title, description, onClose }: { secr
 
   return (
     <Dialog open={secret !== null} onOpenChange={(open) => !open && close()}>
-      <DialogContent showCloseButton={false}>
+      <DialogContent showCloseButton={false} className="max-h-[calc(100svh-2rem)] overflow-y-auto overscroll-contain">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>

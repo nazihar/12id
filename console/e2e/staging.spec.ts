@@ -13,6 +13,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { expect, test } from '@playwright/test'
 import { generateSync } from 'otplib'
 
+import { submitSignIn } from './staging-signin'
+
 const url = process.env.STAGING_URL ?? 'https://12id.naziharitsolution.com'
 const email = process.env.STAGING_EMAIL ?? ''
 const password = process.env.STAGING_PASSWORD ?? ''
@@ -32,7 +34,7 @@ test('staging: sign in, enroll or verify TOTP, read tenants from platform-api, i
   await page.goto('/login')
   await page.getByLabel('Email').fill(email)
   await page.getByLabel('Password').fill(password)
-  await page.getByRole('button', { name: 'Sign in' }).click()
+  await submitSignIn(page)
   await expect(page).toHaveURL(/\/(setup-2fa|verify-2fa)/)
 
   let secret = secretFromEnv
@@ -66,6 +68,7 @@ test('staging: sign in, enroll or verify TOTP, read tenants from platform-api, i
   const invitee = process.env.STAGING_INVITE_EMAIL
   if (invitee) {
     await page.getByRole('link', { name: 'Operators', exact: true }).click()
+    await page.getByRole('button', { name: 'Add operator' }).click()
     await page.getByLabel('Name', { exact: true }).fill('Staging Invitee')
     await page.getByLabel('Email', { exact: true }).fill(invitee)
     await page.getByRole('button', { name: 'Send invitation' }).click()

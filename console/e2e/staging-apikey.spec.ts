@@ -10,6 +10,8 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { expect, test } from '@playwright/test'
 import { generateSync } from 'otplib'
 
+import { submitSignIn } from './staging-signin'
+
 const url = process.env.STAGING_URL ?? 'https://12id.naziharitsolution.com'
 const email = process.env.STAGING_EMAIL ?? ''
 const password = process.env.STAGING_PASSWORD ?? ''
@@ -27,7 +29,7 @@ test('staging: manage an API key through the console', async ({ page }) => {
   await page.goto('/login')
   await page.getByLabel('Email').fill(email)
   await page.getByLabel('Password').fill(password)
-  await page.getByRole('button', { name: 'Sign in' }).click()
+  await submitSignIn(page)
   await expect(page).toHaveURL(/\/verify-2fa/)
   await page.getByTestId('otp-code').fill(generateSync({ secret }))
   await page.getByRole('button', { name: 'Verify' }).click()
@@ -40,14 +42,15 @@ test('staging: manage an API key through the console', async ({ page }) => {
   if (revokeLabel) {
     const row = page.getByTestId('api-keys-table').getByRole('row').filter({ hasText: revokeLabel }).filter({ hasText: 'active' }).first()
     await row.getByRole('button', { name: 'Revoke' }).click()
-    await row.getByRole('button', { name: 'Confirm revoke' }).click()
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Revoke key' }).click()
     await expect(page.getByTestId('api-keys-table').getByRole('row').filter({ hasText: revokeLabel }).first()).toContainText('revoked')
     return
   }
 
   const label = `smoke-${Date.now()}`
-  await page.getByLabel('New key label').fill(label)
   await page.getByRole('button', { name: 'Create API key' }).click()
+  await page.getByLabel('New key label').fill(label)
+  await page.getByRole('dialog').getByRole('button', { name: 'Create API key' }).click()
   const key = ((await page.getByTestId('secret-value').textContent()) ?? '').trim()
   expect(key).toMatch(/^12id_sk_/)
   writeFileSync('.staging/api-key.txt', key)

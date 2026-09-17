@@ -2,10 +2,9 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
+import { createApiKeyInput, createTenantInput, tenantInput } from '@/features/tenants/tenants.schemas'
 import { operatorMiddleware } from '@/server/middleware'
 import { platformFor, unwrap } from '@/server/platform.server'
-
-const tenantInput = z.object({ tenantId: z.uuid() })
 
 export const getTenantOverview = createServerFn({ method: 'GET' })
   .middleware([operatorMiddleware])
@@ -19,7 +18,7 @@ export const getTenant = createServerFn({ method: 'GET' })
 /** Creates the platform tenant and onboards it on the ledger (platform-api runs onboarding inline). */
 export const createTenant = createServerFn({ method: 'POST' })
   .middleware([operatorMiddleware])
-  .validator(z.object({ name: z.string().trim().min(1).max(200) }))
+  .validator(createTenantInput)
   .handler(async ({ context, data }) => unwrap(await platformFor(context.principal).POST('/admin/tenants', { body: { name: data.name } })))
 
 export const retryOnboarding = createServerFn({ method: 'POST' })
@@ -36,7 +35,7 @@ export const listApiKeys = createServerFn({ method: 'GET' })
 
 export const createApiKey = createServerFn({ method: 'POST' })
   .middleware([operatorMiddleware])
-  .validator(tenantInput.extend({ label: z.string().trim().min(1).max(100) }))
+  .validator(tenantInput.extend(createApiKeyInput.shape))
   .handler(async ({ context, data }) => unwrap(await platformFor(context.principal, { tenantId: data.tenantId }).POST('/v1/api-keys', { body: { label: data.label } })))
 
 export const revokeApiKey = createServerFn({ method: 'POST' })

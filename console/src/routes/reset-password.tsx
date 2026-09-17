@@ -1,11 +1,9 @@
-import { createFileRoute, useHydrated, useRouter } from '@tanstack/react-router'
-import { type FormEvent, useState } from 'react'
+import { createFileRoute, useRouter } from '@tanstack/react-router'
+import { useState } from 'react'
 
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
+import { Form, formValidation, useAppForm } from '@/components/form/form'
+import { AuthLayout } from '@/components/shell/auth-layout'
+import { PASSWORD_MIN, type PasswordConfirmForm, passwordConfirmForm } from '@/features/session/auth.schemas'
 import { authClient } from '@/lib/auth-client'
 
 const EXPIRED = 'This link has expired or was already used. Ask your operator or organization owner for a new one.'
@@ -23,61 +21,34 @@ export const Route = createFileRoute('/reset-password')({
 function ResetPasswordPage() {
   const { token, error: linkError } = Route.useSearch()
   const router = useRouter()
-  const hydrated = useHydrated()
   const [error, setError] = useState<string | null>(linkError || !token ? EXPIRED : null)
-  const [pending, setPending] = useState(false)
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!token) return
-    const form = new FormData(event.currentTarget)
-    const newPassword = String(form.get('password'))
-    if (newPassword !== String(form.get('confirm'))) {
-      setError('The passwords do not match.')
-      return
-    }
-    setPending(true)
-    setError(null)
-    const result = await authClient.resetPassword({ newPassword, token })
-    setPending(false)
-    if (result.error) {
-      setError(result.error.code === 'PASSWORD_TOO_SHORT' ? 'Use at least 12 characters.' : EXPIRED)
-      return
-    }
-    await router.navigate({ to: '/login' })
-  }
+  const form = useAppForm({
+    defaultValues: { password: '', confirm: '' } satisfies PasswordConfirmForm,
+    validationLogic: formValidation,
+    validators: { onDynamic: passwordConfirmForm },
+    onSubmit: async ({ value }) => {
+      if (!token) return
+      setError(null)
+      const result = await authClient.resetPassword({ newPassword: value.password, token })
+      if (result.error) {
+        setError(result.error.code === 'PASSWORD_TOO_SHORT' ? `Use at least ${PASSWORD_MIN} characters.` : EXPIRED)
+        return
+      }
+      await router.navigate({ to: '/login' })
+    },
+  })
 
   return (
-    <main className="flex min-h-svh items-center justify-center p-6">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle>Choose your password</CardTitle>
-          <CardDescription>After this you sign in and set up two-factor authentication.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form method="post" onSubmit={onSubmit}>
-            <FieldGroup>
-              {error && (
-                <Alert variant="destructive">
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
-              <Field>
-                <FieldLabel htmlFor="password">New password</FieldLabel>
-                <Input id="password" name="password" type="password" autoComplete="new-password" minLength={12} required />
-                <FieldDescription>At least 12 characters.</FieldDescription>
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="confirm">Repeat the password</FieldLabel>
-                <Input id="confirm" name="confirm" type="password" autoComplete="new-password" minLength={12} required />
-              </Field>
-              <Button type="submit" disabled={!hydrated || pending || !token}>
-                Save password
-              </Button>
-            </FieldGroup>
-          </form>
-        </CardContent>
-      </Card>
-    </main>
+    <AuthLayout title="Choose your password" description="After this you sign in and set up two-factor authentication.">
+      <Form form={form}>
+        <form.FormError error={error} />
+        <form.AppField name="password">{(field) => <field.PasswordField label="New password" autoComplete="new-password" description={`At least ${PASSWORD_MIN} characters.`} autoFocus />}</form.AppField>
+        <form.AppField name="confirm">{(field) => <field.PasswordField label="Repeat the password" autoComplete="new-password" />}</form.AppField>
+        <form.SubmitButton pendingLabel="Saving…" disabled={!token}>
+          Save password
+        </form.SubmitButton>
+      </Form>
+    </AuthLayout>
   )
 }

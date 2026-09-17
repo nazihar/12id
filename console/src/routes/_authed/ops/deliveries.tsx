@@ -1,12 +1,14 @@
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { createColumnHelper } from '@tanstack/react-table'
+import { RotateCwIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { DataTable } from '@/components/data-table/data-table'
 import type { DataTableFeatures } from '@/components/data-table/data-table-features'
+import { PageHeader } from '@/components/page-header'
 import { RouteError } from '@/components/route-error'
-import { Button } from '@/components/ui/button'
+import { RowAction, RowActions } from '@/components/row-action'
 import type { listDeliveriesAcrossTenants } from '@/features/ops/ops.functions'
 import { deliveriesAcrossTenantsQuery } from '@/features/ops/ops.queries'
 import { retryWebhookDelivery } from '@/features/tenant-data/tenant-data.functions'
@@ -28,7 +30,7 @@ const columns = column.columns([
   column.accessor('attempts', { header: 'Attempts' }),
   column.accessor((row) => row.lastError ?? (row.lastStatusCode ? `HTTP ${row.lastStatusCode}` : ''), { id: 'lastResult', header: 'Last result' }),
   column.accessor('createdAt', { header: 'Created', cell: ({ getValue }) => formatDateTime(getValue()) }),
-  column.display({ id: 'retry', header: '', cell: ({ row }) => <RetryButton tenantId={row.original.tenantId} deliveryId={row.original.id} /> }),
+  column.display({ id: 'retry', header: '', cell: ({ row }) => <RetryAction tenantId={row.original.tenantId} delivery={row.original} /> }),
 ])
 
 export const Route = createFileRoute('/_authed/ops/deliveries')({
@@ -40,27 +42,34 @@ export const Route = createFileRoute('/_authed/ops/deliveries')({
 function DeadDeliveriesPage() {
   const { data } = useSuspenseQuery(deliveriesAcrossTenantsQuery())
   return (
-    <section className="space-y-3">
-      <h1 className="font-heading text-lg font-medium">Dead webhook deliveries</h1>
-      <p className="text-sm text-muted-foreground">Deliveries that exhausted their retries, across all tenants. Retrying queues one more attempt.</p>
+    <section className="space-y-4">
+      <PageHeader title="Dead webhook deliveries" description="Deliveries that exhausted their retries, across all tenants. Retrying queues one more attempt." />
       <DataTable columns={columns} data={data} searchPlaceholder="Search events or errors" emptyMessage="No dead deliveries." />
     </section>
   )
 }
 
-function RetryButton({ tenantId, deliveryId }: { tenantId: string; deliveryId: number }) {
+function RetryAction({ tenantId, delivery }: { tenantId: string; delivery: DeliveryRow }) {
   const queryClient = useQueryClient()
   const retry = useMutation({
-    mutationFn: () => retryWebhookDelivery({ data: { tenantId, deliveryId } }),
+    mutationFn: () => retryWebhookDelivery({ data: { tenantId, deliveryId: delivery.id } }),
     onSuccess: async () => {
       toast.success('Queued for another attempt.')
       await queryClient.invalidateQueries({ queryKey: ['ops', 'deliveries'] })
     },
-    onError: (error) => toast.error(error.message),
   })
   return (
-    <Button size="sm" variant="outline" onClick={() => retry.mutate()} disabled={retry.isPending}>
-      Retry
-    </Button>
+    <RowActions>
+      <RowAction
+        label="Retry"
+        icon={RotateCwIcon}
+        confirm={{
+          title: `Retry delivery ${delivery.id}?`,
+          description: `The ${delivery.eventType} event is sent again to the tenant's endpoint, with the same signed body.`,
+          confirmLabel: 'Retry',
+          onConfirm: () => retry.mutateAsync(),
+        }}
+      />
+    </RowActions>
   )
 }

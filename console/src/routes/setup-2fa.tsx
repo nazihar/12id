@@ -2,12 +2,13 @@ import { createFileRoute, redirect, useHydrated, useRouter } from '@tanstack/rea
 import QRCode from 'qrcode'
 import { type FormEvent, useState } from 'react'
 
+import { Form, formValidation, useAppForm } from '@/components/form/form'
+import { AuthLayout } from '@/components/shell/auth-layout'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp'
+import { confirmPasswordForm } from '@/features/session/auth.schemas'
 import { authClient } from '@/lib/auth-client'
 
 // Required before anything else (the console middleware refuses sessions without 2FA).
@@ -21,6 +22,8 @@ export const Route = createFileRoute('/setup-2fa')({
   component: SetupTwoFactorPage,
 })
 
+type Method = 'totp' | 'otp'
+
 function SetupTwoFactorPage() {
   const { viewer } = Route.useRouteContext()
   const router = useRouter()
@@ -30,30 +33,31 @@ function SetupTwoFactorPage() {
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
 
-  async function start(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null
-    const password = String(new FormData(event.currentTarget).get('password'))
-    const useEmail = submitter?.value === 'otp' && !viewer.isOperator
-    setPending(true)
-    setError(null)
-    const result = useEmail ? await authClient.twoFactor.enable({ password, method: 'otp' }) : await authClient.twoFactor.enable({ password })
-    if (result.error) {
-      setPending(false)
-      setError('Password is incorrect.')
-      return
-    }
-    if (useEmail) {
-      await router.invalidate()
-      await router.navigate({ to: '/' })
-      return
-    }
-    const totpURI = (result.data as { totpURI: string }).totpURI
-    const backupCodes = (result.data as { backupCodes: string[] }).backupCodes
-    const secret = new URL(totpURI).searchParams.get('secret') ?? ''
-    setEnrollment({ secret, qr: await QRCode.toDataURL(totpURI), backupCodes })
-    setPending(false)
-  }
+  // One form, two submit buttons: the pressed one passes its method through handleSubmit's meta.
+  const form = useAppForm({
+    defaultValues: { password: '' },
+    validationLogic: formValidation,
+    validators: { onDynamic: confirmPasswordForm },
+    onSubmitMeta: { method: 'totp' as Method },
+    onSubmit: async ({ value, meta }) => {
+      const useEmail = meta.method === 'otp' && !viewer.isOperator
+      setError(null)
+      const result = useEmail ? await authClient.twoFactor.enable({ password: value.password, method: 'otp' }) : await authClient.twoFactor.enable({ password: value.password })
+      if (result.error) {
+        setError('Password is incorrect.')
+        return
+      }
+      if (useEmail) {
+        await router.invalidate()
+        await router.navigate({ to: '/' })
+        return
+      }
+      const totpURI = (result.data as { totpURI: string }).totpURI
+      const backupCodes = (result.data as { backupCodes: string[] }).backupCodes
+      const secret = new URL(totpURI).searchParams.get('secret') ?? ''
+      setEnrollment({ secret, qr: await QRCode.toDataURL(totpURI), backupCodes })
+    },
+  })
 
   async function confirm(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -71,72 +75,62 @@ function SetupTwoFactorPage() {
   }
 
   return (
-    <main className="flex min-h-svh items-center justify-center p-6">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>Set up two-factor authentication</CardTitle>
-          <CardDescription>{viewer.isOperator ? 'Operator accounts use an authenticator app.' : 'Use an authenticator app, or receive codes by email.'}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {error && (
-            <Alert variant="destructive" className="mb-4">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-          {!enrollment ? (
-            <form method="post" onSubmit={start}>
-              <FieldGroup>
-                <Field>
-                  <FieldLabel htmlFor="password">Confirm your password</FieldLabel>
-                  <Input id="password" name="password" type="password" autoComplete="current-password" required />
-                </Field>
-                <Button type="submit" value="totp" disabled={!hydrated || pending}>
-                  Use an authenticator app
+    <AuthLayout size="md" title="Set up two-factor authentication" description={viewer.isOperator ? 'Operator accounts use an authenticator app.' : 'Use an authenticator app, or receive codes by email.'}>
+      {!enrollment ? (
+        <Form form={form}>
+          <form.FormError error={error} />
+          <form.AppField name="password">{(field) => <field.PasswordField label="Confirm your password" autoComplete="current-password" autoFocus />}</form.AppField>
+          <form.SubmitButton pendingLabel="Checking…">Use an authenticator app</form.SubmitButton>
+          {!viewer.isOperator && (
+            <form.Subscribe selector={(state) => state.isSubmitting}>
+              {(isSubmitting) => (
+                <Button type="button" variant="outline" disabled={!hydrated || isSubmitting} onClick={() => void form.handleSubmit({ method: 'otp' })}>
+                  Email me codes instead
                 </Button>
-                {!viewer.isOperator && (
-                  <Button type="submit" value="otp" variant="outline" disabled={!hydrated || pending}>
-                    Email me codes instead
-                  </Button>
-                )}
-              </FieldGroup>
-            </form>
-          ) : (
-            <form method="post" onSubmit={confirm}>
-              <FieldGroup>
-                <img src={enrollment.qr} alt="QR code for your authenticator app" className="mx-auto size-48" />
-                <Field>
-                  <FieldLabel>Can't scan it? Enter this key</FieldLabel>
-                  <code className="rounded-md bg-muted px-2 py-1 font-mono text-xs break-all" data-testid="totp-secret">
-                    {enrollment.secret}
-                  </code>
-                </Field>
-                <Field>
-                  <FieldLabel>Backup codes</FieldLabel>
-                  <FieldDescription>Store these now. Each works once if you lose your phone; they are not shown again.</FieldDescription>
-                  <ul className="grid grid-cols-2 gap-1 font-mono text-xs" data-testid="backup-codes">
-                    {enrollment.backupCodes.map((backupCode) => (
-                      <li key={backupCode}>{backupCode}</li>
-                    ))}
-                  </ul>
-                </Field>
-                <Field>
-                  <FieldLabel>Code from your app</FieldLabel>
-                  <InputOTP maxLength={6} value={code} onChange={setCode} inputMode="numeric" autoComplete="one-time-code" data-testid="otp-code">
-                    <InputOTPGroup>
-                      {[0, 1, 2, 3, 4, 5].map((index) => (
-                        <InputOTPSlot key={index} index={index} />
-                      ))}
-                    </InputOTPGroup>
-                  </InputOTP>
-                </Field>
-                <Button type="submit" disabled={!hydrated || pending || code.length !== 6}>
-                  Turn on two-factor authentication
-                </Button>
-              </FieldGroup>
-            </form>
+              )}
+            </form.Subscribe>
           )}
-        </CardContent>
-      </Card>
-    </main>
+        </Form>
+      ) : (
+        <form method="post" onSubmit={confirm}>
+          <FieldGroup>
+            {error && (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            <img src={enrollment.qr} alt="QR code for your authenticator app" className="mx-auto size-48 rounded-md bg-white p-1" />
+            <Field>
+              <FieldLabel>Can't scan it? Enter this key</FieldLabel>
+              <code className="rounded-md bg-muted px-2 py-1 font-mono text-xs break-all" data-testid="totp-secret">
+                {enrollment.secret}
+              </code>
+            </Field>
+            <Field>
+              <FieldLabel>Backup codes</FieldLabel>
+              <FieldDescription>Store these now. Each works once if you lose your phone; they are not shown again.</FieldDescription>
+              <ul className="grid grid-cols-2 gap-1 font-mono text-xs" data-testid="backup-codes">
+                {enrollment.backupCodes.map((backupCode) => (
+                  <li key={backupCode}>{backupCode}</li>
+                ))}
+              </ul>
+            </Field>
+            <Field>
+              <FieldLabel>Code from your app</FieldLabel>
+              <InputOTP maxLength={6} value={code} onChange={setCode} inputMode="numeric" autoComplete="one-time-code" data-testid="otp-code">
+                <InputOTPGroup>
+                  {[0, 1, 2, 3, 4, 5].map((index) => (
+                    <InputOTPSlot key={index} index={index} />
+                  ))}
+                </InputOTPGroup>
+              </InputOTP>
+            </Field>
+            <Button type="submit" disabled={!hydrated || pending || code.length !== 6}>
+              Turn on two-factor authentication
+            </Button>
+          </FieldGroup>
+        </form>
+      )}
+    </AuthLayout>
   )
 }

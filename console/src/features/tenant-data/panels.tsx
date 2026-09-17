@@ -4,23 +4,21 @@
  * server functions (tenant from the active organization).
  */
 import { type QueryKey, type UseQueryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useHydrated } from '@tanstack/react-router'
 import { createColumnHelper } from '@tanstack/react-table'
-import { type FormEvent, useState } from 'react'
+import { EyeIcon, KeyRoundIcon, RotateCwIcon } from 'lucide-react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { DataTable } from '@/components/data-table/data-table'
 import type { DataTableFeatures } from '@/components/data-table/data-table-features'
-import { SecretOnceDialog } from '@/components/secret-once-dialog'
+import { PageHeader } from '@/components/page-header'
+import { RowAction, RowActions } from '@/components/row-action'
 import { StateBadge } from '@/components/state-badge'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Field, FieldLabel } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { formatDateTime } from '@/lib/format'
 
+import { CreateApiKeyDialog } from './create-api-key-dialog'
 import type { ApiKeyRow, ConnectionRow, CredentialRow, DeliveryDetail, DeliveryRow, DeliveryStatus, ProofRow, WalletRow } from './types'
 
 const mono = (value: string | null) => <span className="font-mono text-xs">{value ?? '—'}</span>
@@ -57,18 +55,17 @@ const proofColumns = proofColumn.columns([
 
 export function ExchangeTables({ connections, credentials, proofs }: { connections: ConnectionRow[]; credentials: CredentialRow[]; proofs: ProofRow[] }) {
   return (
-    <div className="space-y-6">
-      <p className="text-sm text-muted-foreground">The latest 200 of each, newest first. Credential attribute values are not shown.</p>
-      <section className="space-y-2">
-        <h2 className="font-heading font-medium">Connections</h2>
+    <div className="space-y-8">
+      <section className="space-y-3">
+        <PageHeader level={2} title="Connections" />
         <DataTable columns={connectionColumns} data={connections} searchPlaceholder="Search connections" emptyMessage="No connections." testId="connections-table" />
       </section>
-      <section className="space-y-2">
-        <h2 className="font-heading font-medium">Credential exchanges</h2>
+      <section className="space-y-3">
+        <PageHeader level={2} title="Credential exchanges" />
         <DataTable columns={credentialColumns} data={credentials} emptyMessage="No credential exchanges." />
       </section>
-      <section className="space-y-2">
-        <h2 className="font-heading font-medium">Proof exchanges</h2>
+      <section className="space-y-3">
+        <PageHeader level={2} title="Proof exchanges" />
         <DataTable columns={proofColumns} data={proofs} emptyMessage="No proof exchanges." />
       </section>
     </div>
@@ -107,17 +104,6 @@ export function ApiKeysPanel({
   /** Omit when the viewer may not revoke keys. */
   revokeKey?: (apiKeyId: string) => Promise<unknown>
 }) {
-  const [secret, setSecret] = useState<string | null>(null)
-  const hydrated = useHydrated()
-  const queryClient = useQueryClient()
-  const create = useMutation({
-    mutationFn: (label: string) => (createKey as NonNullable<typeof createKey>)(label),
-    onSuccess: async (created) => {
-      setSecret(created.apiKey)
-      await queryClient.invalidateQueries({ queryKey: invalidateKey })
-    },
-  })
-
   const columns = keyColumn.columns([
     keyColumn.accessor('label', { header: 'Label' }),
     keyColumn.accessor('prefix', { header: 'Key', cell: ({ getValue }) => <span className="font-mono text-xs">{getValue()}…</span> }),
@@ -127,73 +113,46 @@ export function ApiKeysPanel({
     keyColumn.display({
       id: 'actions',
       header: '',
-      cell: ({ row }) => (row.original.revokedAt || !revokeKey ? null : <RevokeKeyButton label={row.original.label} revoke={() => revokeKey(row.original.id)} invalidateKey={invalidateKey} />),
+      cell: ({ row }) => (row.original.revokedAt || !revokeKey ? null : <RevokeKeyAction apiKey={row.original} revoke={() => revokeKey(row.original.id)} invalidateKey={invalidateKey} />),
     }),
   ])
 
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const form = event.currentTarget
-    create.mutate(String(new FormData(form).get('label')), { onSuccess: () => form.reset() })
-  }
-
   return (
-    <div className="space-y-4">
-      {createKey && (
-        <form method="post" onSubmit={onSubmit} className="flex flex-wrap items-end gap-3">
-          <Field className="max-w-xs">
-            <FieldLabel htmlFor="label">New key label</FieldLabel>
-            <Input id="label" name="label" placeholder="backend-production" maxLength={100} required />
-          </Field>
-          <Button type="submit" disabled={!hydrated || create.isPending}>
-            Create API key
-          </Button>
-        </form>
-      )}
-      {create.error && (
-        <Alert variant="destructive">
-          <AlertDescription>{create.error.message}</AlertDescription>
-        </Alert>
-      )}
-      <DataTable columns={columns} data={keys} emptyMessage="No API keys." testId="api-keys-table" />
-      <SecretOnceDialog
-        secret={secret}
-        title="API key created"
-        description="Copy it now and store it in your secret manager. It is shown only once; the platform keeps only a hash."
-        onClose={() => setSecret(null)}
+    <section className="space-y-4">
+      <PageHeader
+        title="API keys"
+        description="Your backend calls the 12id API with these keys (Authorization: Bearer). Never put a key in an app."
+        actions={createKey && <CreateApiKeyDialog createKey={createKey} invalidateKey={invalidateKey} />}
       />
-    </div>
+      <DataTable columns={columns} data={keys} emptyMessage="No API keys." testId="api-keys-table" />
+    </section>
   )
 }
 
-function RevokeKeyButton({ label, revoke, invalidateKey }: { label: string; revoke: () => Promise<unknown>; invalidateKey: QueryKey }) {
-  const [confirming, setConfirming] = useState(false)
-  const hydrated = useHydrated()
+function RevokeKeyAction({ apiKey, revoke, invalidateKey }: { apiKey: ApiKeyRow; revoke: () => Promise<unknown>; invalidateKey: QueryKey }) {
   const queryClient = useQueryClient()
   const mutation = useMutation({
     mutationFn: revoke,
     onSuccess: async () => {
-      toast.success(`Revoked ${label}. Requests with it now fail.`)
+      toast.success(`Revoked ${apiKey.label}. Requests with it now fail.`)
       await queryClient.invalidateQueries({ queryKey: invalidateKey })
     },
-    onError: (error) => toast.error(error.message),
   })
-  if (!confirming) {
-    return (
-      <Button size="sm" variant="ghost" onClick={() => setConfirming(true)} disabled={!hydrated}>
-        Revoke
-      </Button>
-    )
-  }
   return (
-    <div className="flex gap-1">
-      <Button size="sm" variant="destructive" onClick={() => mutation.mutate()} disabled={mutation.isPending}>
-        Confirm revoke
-      </Button>
-      <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>
-        Cancel
-      </Button>
-    </div>
+    <RowActions>
+      <RowAction
+        label="Revoke"
+        icon={KeyRoundIcon}
+        confirm={{
+          title: `Revoke ${apiKey.label}?`,
+          description: `Requests with the key ${apiKey.prefix}… fail immediately. This cannot be undone; create a new key for the system that used it.`,
+          confirmLabel: 'Revoke key',
+          pendingLabel: 'Revoking…',
+          destructive: true,
+          onConfirm: () => mutation.mutateAsync(),
+        }}
+      />
+    </RowActions>
   )
 }
 
@@ -219,7 +178,6 @@ export function DeliveriesPanel<TKey extends QueryKey>({
   const [filter, setFilter] = useState<Filter>('all')
   const deliveries = useQuery(queryFor(filter === 'all' ? undefined : filter))
   const [viewing, setViewing] = useState<number | null>(null)
-  const hydrated = useHydrated()
 
   const columns = deliveryColumn.columns([
     deliveryColumn.accessor('eventType', { header: 'Event' }),
@@ -231,44 +189,44 @@ export function DeliveriesPanel<TKey extends QueryKey>({
       id: 'actions',
       header: '',
       cell: ({ row }) => (
-        <div className="flex gap-1">
-          <Button size="sm" variant="ghost" onClick={() => setViewing(row.original.id)} disabled={!hydrated}>
-            View
-          </Button>
-          {retryDelivery && (row.original.status === 'dead' || row.original.status === 'pending') && (
-            <RetryDeliveryButton retry={() => retryDelivery(row.original.id)} invalidateKey={invalidateKey} />
-          )}
-        </div>
+        <RowActions>
+          <RowAction label="View body" icon={EyeIcon} onClick={() => setViewing(row.original.id)} />
+          {retryDelivery && (row.original.status === 'dead' || row.original.status === 'pending') && <RetryDeliveryAction delivery={row.original} retry={() => retryDelivery(row.original.id)} invalidateKey={invalidateKey} />}
+        </RowActions>
       ),
     }),
   ])
 
   return (
-    <section className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="font-heading font-medium">Deliveries</h2>
-        <Tabs value={filter} onValueChange={(value) => setFilter(value as Filter)}>
-          <TabsList>
-            {FILTERS.map((value) => (
-              <TabsTrigger key={value} value={value}>
-                {value}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-      </div>
+    <section className="space-y-4">
+      <PageHeader level={2} title="Deliveries" description="Each event sent to the endpoint, with its result. Bodies open on demand and each read is audited." />
       {deliveries.error ? (
         <p className="text-sm text-destructive">{deliveries.error.message}</p>
       ) : (
-        <DataTable columns={columns} data={deliveries.data ?? EMPTY_DELIVERIES} emptyMessage={deliveries.isPending ? 'Loading…' : 'No deliveries.'} testId="deliveries-table" />
+        <DataTable
+          columns={columns}
+          data={deliveries.data ?? EMPTY_DELIVERIES}
+          emptyMessage={deliveries.isPending ? 'Loading…' : 'No deliveries.'}
+          testId="deliveries-table"
+          toolbar={
+            <Tabs value={filter} onValueChange={(value) => setFilter(value as Filter)}>
+              <TabsList>
+                {FILTERS.map((value) => (
+                  <TabsTrigger key={value} value={value}>
+                    {value}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          }
+        />
       )}
       <DeliveryBodyDialog deliveryId={viewing} invalidateKey={invalidateKey} loadBody={loadBody} onClose={() => setViewing(null)} />
     </section>
   )
 }
 
-function RetryDeliveryButton({ retry, invalidateKey }: { retry: () => Promise<unknown>; invalidateKey: QueryKey }) {
-  const hydrated = useHydrated()
+function RetryDeliveryAction({ delivery, retry, invalidateKey }: { delivery: DeliveryRow; retry: () => Promise<unknown>; invalidateKey: QueryKey }) {
   const queryClient = useQueryClient()
   const mutation = useMutation({
     mutationFn: retry,
@@ -276,12 +234,18 @@ function RetryDeliveryButton({ retry, invalidateKey }: { retry: () => Promise<un
       toast.success('Queued for another attempt.')
       await queryClient.invalidateQueries({ queryKey: invalidateKey })
     },
-    onError: (error) => toast.error(error.message),
   })
   return (
-    <Button size="sm" variant="outline" onClick={() => mutation.mutate()} disabled={!hydrated || mutation.isPending}>
-      Retry
-    </Button>
+    <RowAction
+      label="Retry"
+      icon={RotateCwIcon}
+      confirm={{
+        title: `Retry delivery ${delivery.id}?`,
+        description: `The ${delivery.eventType} event is sent again to the endpoint, with the same signed body.`,
+        confirmLabel: 'Retry',
+        onConfirm: () => mutation.mutateAsync(),
+      }}
+    />
   )
 }
 
@@ -304,7 +268,7 @@ function DeliveryBodyDialog({ deliveryId, invalidateKey, loadBody, onClose }: { 
   }
   return (
     <Dialog open={deliveryId !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="max-h-[calc(100svh-2rem)] overflow-y-auto overscroll-contain sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Delivery {deliveryId}</DialogTitle>
           <DialogDescription>The signed body as sent. It may contain personal data; this view is recorded in the audit log.</DialogDescription>
