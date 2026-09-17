@@ -25,6 +25,7 @@ import { Route as AuthedOpsDeliveriesRouteImport } from './routes/_authed/ops/de
 import { Route as AuthedOpsOperatorsRouteImport } from './routes/_authed/ops/operators'
 import { Route as AuthedTOrgSlugRouteImport } from './routes/_authed/t/$orgSlug'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as AuthedOpsTenantsIndexRouteImport } from './routes/_authed/ops/tenants/index'
 import { Route as AuthedOpsTenantsTenantIdRouteImport } from './routes/_authed/ops/tenants/$tenantId'
 import { Route as AuthedTOrgSlugIndexRouteImport } from './routes/_authed/t/$orgSlug/index'
 import { Route as AuthedTOrgSlugApiKeysRouteImport } from './routes/_authed/t/$orgSlug/api-keys'
@@ -122,6 +123,11 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AuthedOpsTenantsIndexRoute = AuthedOpsTenantsIndexRouteImport.update({
+  id: '/tenants/',
+  path: '/tenants/',
+  getParentRoute: () => AuthedOpsRoute,
 } as any)
 const AuthedOpsTenantsTenantIdRoute =
   AuthedOpsTenantsTenantIdRouteImport.update({
@@ -248,6 +254,7 @@ export interface FileRoutesByFullPath {
   '/t/$orgSlug/members': typeof AuthedTOrgSlugMembersRoute
   '/t/$orgSlug/wallets': typeof AuthedTOrgSlugWalletsRoute
   '/t/$orgSlug/webhooks': typeof AuthedTOrgSlugWebhooksRoute
+  '/ops/tenants/': typeof AuthedOpsTenantsIndexRoute
   '/t/$orgSlug/': typeof AuthedTOrgSlugIndexRoute
   '/ops/tenants/$tenantId/api-keys': typeof AuthedOpsTenantsTenantIdApiKeysRoute
   '/ops/tenants/$tenantId/catalogue': typeof AuthedOpsTenantsTenantIdCatalogueRoute
@@ -280,6 +287,7 @@ export interface FileRoutesByTo {
   '/t/$orgSlug/members': typeof AuthedTOrgSlugMembersRoute
   '/t/$orgSlug/wallets': typeof AuthedTOrgSlugWalletsRoute
   '/t/$orgSlug/webhooks': typeof AuthedTOrgSlugWebhooksRoute
+  '/ops/tenants': typeof AuthedOpsTenantsIndexRoute
   '/t/$orgSlug': typeof AuthedTOrgSlugIndexRoute
   '/ops/tenants/$tenantId/api-keys': typeof AuthedOpsTenantsTenantIdApiKeysRoute
   '/ops/tenants/$tenantId/catalogue': typeof AuthedOpsTenantsTenantIdCatalogueRoute
@@ -317,6 +325,7 @@ export interface FileRoutesById {
   '/_authed/t/$orgSlug/members': typeof AuthedTOrgSlugMembersRoute
   '/_authed/t/$orgSlug/wallets': typeof AuthedTOrgSlugWalletsRoute
   '/_authed/t/$orgSlug/webhooks': typeof AuthedTOrgSlugWebhooksRoute
+  '/_authed/ops/tenants/': typeof AuthedOpsTenantsIndexRoute
   '/_authed/t/$orgSlug/': typeof AuthedTOrgSlugIndexRoute
   '/_authed/ops/tenants/$tenantId/api-keys': typeof AuthedOpsTenantsTenantIdApiKeysRoute
   '/_authed/ops/tenants/$tenantId/catalogue': typeof AuthedOpsTenantsTenantIdCatalogueRoute
@@ -354,6 +363,7 @@ export interface FileRouteTypes {
     | '/t/$orgSlug/members'
     | '/t/$orgSlug/wallets'
     | '/t/$orgSlug/webhooks'
+    | '/ops/tenants/'
     | '/t/$orgSlug/'
     | '/ops/tenants/$tenantId/api-keys'
     | '/ops/tenants/$tenantId/catalogue'
@@ -386,6 +396,7 @@ export interface FileRouteTypes {
     | '/t/$orgSlug/members'
     | '/t/$orgSlug/wallets'
     | '/t/$orgSlug/webhooks'
+    | '/ops/tenants'
     | '/t/$orgSlug'
     | '/ops/tenants/$tenantId/api-keys'
     | '/ops/tenants/$tenantId/catalogue'
@@ -422,6 +433,7 @@ export interface FileRouteTypes {
     | '/_authed/t/$orgSlug/members'
     | '/_authed/t/$orgSlug/wallets'
     | '/_authed/t/$orgSlug/webhooks'
+    | '/_authed/ops/tenants/'
     | '/_authed/t/$orgSlug/'
     | '/_authed/ops/tenants/$tenantId/api-keys'
     | '/_authed/ops/tenants/$tenantId/catalogue'
@@ -560,6 +572,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/auth/$'
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_authed/ops/tenants/': {
+      id: '/_authed/ops/tenants/'
+      path: '/tenants'
+      fullPath: '/ops/tenants/'
+      preLoaderRoute: typeof AuthedOpsTenantsIndexRouteImport
+      parentRoute: typeof AuthedOpsRoute
     }
     '/_authed/ops/tenants/$tenantId': {
       id: '/_authed/ops/tenants/$tenantId'
@@ -726,6 +745,7 @@ interface AuthedOpsRouteChildren {
   AuthedOpsOperatorsRoute: typeof AuthedOpsOperatorsRoute
   AuthedOpsIndexRoute: typeof AuthedOpsIndexRoute
   AuthedOpsTenantsTenantIdRoute: typeof AuthedOpsTenantsTenantIdRouteWithChildren
+  AuthedOpsTenantsIndexRoute: typeof AuthedOpsTenantsIndexRoute
 }
 
 const AuthedOpsRouteChildren: AuthedOpsRouteChildren = {
@@ -734,6 +754,7 @@ const AuthedOpsRouteChildren: AuthedOpsRouteChildren = {
   AuthedOpsOperatorsRoute: AuthedOpsOperatorsRoute,
   AuthedOpsIndexRoute: AuthedOpsIndexRoute,
   AuthedOpsTenantsTenantIdRoute: AuthedOpsTenantsTenantIdRouteWithChildren,
+  AuthedOpsTenantsIndexRoute: AuthedOpsTenantsIndexRoute,
 }
 
 const AuthedOpsRouteWithChildren = AuthedOpsRoute._addFileChildren(

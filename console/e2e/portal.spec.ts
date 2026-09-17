@@ -82,7 +82,13 @@ test('owners run their tenant, members are limited by role and organization', as
   await enrollEmailCodes(owner, password)
 
   await owner.getByTestId('organizations').getByText(nameA).click()
-  await expect(owner).toHaveURL(new RegExp(`/t/${slugFor(nameA, tenantA)}/catalogue`))
+  // The Overview (C8): stats from platform-api's own tables; a fresh tenant sees the getting-started checklist.
+  await expect(owner).toHaveURL(new RegExp(`/t/${slugFor(nameA, tenantA)}$`))
+  await expect(tab(owner, 'Overview')).toHaveAttribute('data-active')
+  await expect(owner.getByTestId('getting-started')).toContainText('0 of 5 steps done')
+  await expect(owner.getByTestId('stat-connections')).toBeVisible()
+  await expect(owner.getByTestId('attention-list')).toContainText('Nothing needs attention')
+  await tab(owner, 'Catalogue').click()
   // The catalogue lives in agent-service, which is not running locally: the error stays inside the portal (staging spec covers the page).
   await expect(owner.getByText('This page could not be loaded')).toBeVisible()
 

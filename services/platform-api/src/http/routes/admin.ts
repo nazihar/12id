@@ -3,7 +3,7 @@
  * the console (console token + operator role + actor) and the break-glass `x-admin-token` over an
  * SSH tunnel. The edge answers 404 for /admin/*; both callers are audited (audit.ts).
  */
-import { type SQL, and, desc, eq, sql } from 'drizzle-orm'
+import { type SQL, and, desc, eq } from 'drizzle-orm'
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { z } from 'zod'
 
@@ -14,6 +14,7 @@ import { DELIVERY_STATUSES, apiKeys, consoleAudit, tenants, webhookDeliveries } 
 import { requireOperator } from '../auth.ts'
 import { notFound } from '../errors.ts'
 import { CONSOLE_ONLY_TAG } from './console.ts'
+import { activeRevokedByTenant, deadDeliveriesByTenant, exchangeActivityByTenant } from './stats.ts'
 import { deliveryView, toDeliveryView } from './webhook.ts'
 
 export interface AdminDeps {
@@ -52,8 +53,6 @@ async function onboard(deps: AdminDeps, tenantId: string, agentTenantId: string)
 }
 
 const view = (row: typeof tenants.$inferSelect) => ({ id: row.id, name: row.name, status: row.status, did: row.did, agentTenantId: row.agentTenantId, lastError: row.lastError, createdAt: row.createdAt.toISOString() })
-
-type ExchangeKind = 'connections' | 'credentials' | 'proofs'
 
 export const adminRoutes = (deps: AdminDeps): FastifyPluginAsyncZod => async (app) => {
   app.addHook('onRequest', requireOperator(deps.adminToken, deps.consoleToken))
@@ -111,34 +110,13 @@ export const adminRoutes = (deps: AdminDeps): FastifyPluginAsyncZod => async (ap
   })
 
   app.get('/admin/overview', { schema: { tags, summary: 'Per-tenant activity for the operator console', response: { 200: z.array(overviewView) } } }, async () => {
-    const tenantRows = await deps.db.select().from(tenants).orderBy(desc(tenants.createdAt))
-    const [exchanges, walletCounts, keyCounts, dead] = await Promise.all([
-      deps.db.execute<{ tenant_id: string; kind: ExchangeKind; state: string; n: number; last: Date | string | null }>(sql`
-        select tenant_id, 'connections' as kind, state, count(*)::int as n, max(updated_at) as last from connections group by tenant_id, state
-        union all select tenant_id, 'credentials', state, count(*)::int, max(updated_at) from credentials group by tenant_id, state
-        union all select tenant_id, 'proofs', state, count(*)::int, max(updated_at) from proofs group by tenant_id, state`),
-      deps.db.execute<{ tenant_id: string; active: number; revoked: number }>(
-        sql`select tenant_id, (count(*) filter (where revoked_at is null))::int as active, (count(*) filter (where revoked_at is not null))::int as revoked from wallets group by tenant_id`
-      ),
-      deps.db.execute<{ tenant_id: string; active: number; revoked: number }>(
-        sql`select tenant_id, (count(*) filter (where revoked_at is null))::int as active, (count(*) filter (where revoked_at is not null))::int as revoked from api_keys group by tenant_id`
-      ),
-      deps.db.execute<{ tenant_id: string; n: number }>(sql`select tenant_id, count(*)::int as n from webhook_deliveries where status = 'dead' group by tenant_id`),
+    const [tenantRows, activity, wallets, keys, deadDeliveries] = await Promise.all([
+      deps.db.select().from(tenants).orderBy(desc(tenants.createdAt)),
+      exchangeActivityByTenant(deps.db),
+      activeRevokedByTenant(deps.db, 'wallets'),
+      activeRevokedByTenant(deps.db, 'api_keys'),
+      deadDeliveriesByTenant(deps.db),
     ])
-
-    const activity = new Map<string, Record<ExchangeKind, Record<string, number>> & { last: Date | null }>()
-    for (const row of exchanges.rows) {
-      const entry = activity.get(row.tenant_id) ?? { connections: {}, credentials: {}, proofs: {}, last: null }
-      entry[row.kind][row.state] = Number(row.n)
-      const last = row.last ? new Date(row.last) : null
-      if (last && (!entry.last || last > entry.last)) entry.last = last
-      activity.set(row.tenant_id, entry)
-    }
-    const byTenant = <T extends { tenant_id: string }>(rows: T[]) => new Map(rows.map((row) => [row.tenant_id, row]))
-    const wallets = byTenant(walletCounts.rows)
-    const keys = byTenant(keyCounts.rows)
-    const deadDeliveries = byTenant(dead.rows)
-
     return tenantRows.map((row) => {
       const entry = activity.get(row.id)
       return {
@@ -146,9 +124,9 @@ export const adminRoutes = (deps: AdminDeps): FastifyPluginAsyncZod => async (ap
         connections: entry?.connections ?? {},
         credentials: entry?.credentials ?? {},
         proofs: entry?.proofs ?? {},
-        wallets: { active: Number(wallets.get(row.id)?.active ?? 0), revoked: Number(wallets.get(row.id)?.revoked ?? 0) },
-        apiKeys: { active: Number(keys.get(row.id)?.active ?? 0), revoked: Number(keys.get(row.id)?.revoked ?? 0) },
-        deadDeliveries: Number(deadDeliveries.get(row.id)?.n ?? 0),
+        wallets: wallets.get(row.id) ?? { active: 0, revoked: 0 },
+        apiKeys: keys.get(row.id) ?? { active: 0, revoked: 0 },
+        deadDeliveries: deadDeliveries.get(row.id) ?? 0,
         lastActivityAt: entry?.last?.toISOString() ?? null,
       }
     })

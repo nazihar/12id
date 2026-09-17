@@ -21,7 +21,7 @@ import type { Database } from '../db/client.ts'
 import type { MediatorClient } from '../mediator-client.ts'
 import type { WakeOutcome } from '../wake.ts'
 import { consoleAuditHook } from './audit.ts'
-import { CONSOLE_TOKEN_HEADER, requireTenantPrincipal, requireWalletToken } from './auth.ts'
+import { CONSOLE_TOKEN_HEADER, requireOperator, requireTenantPrincipal, requireWalletToken } from './auth.ts'
 import { platformErrorHandler } from './errors.ts'
 import { useIdempotency } from './idempotency.ts'
 import { adminRoutes } from './routes/admin.ts'
@@ -31,6 +31,7 @@ import { exchangeRoutes } from './routes/exchanges.ts'
 import { internalRoutes } from './routes/internal.ts'
 import { proofTemplateRoutes } from './routes/proof-templates.ts'
 import { publicRoutes } from './routes/public.ts'
+import { platformStatsRoutes, tenantStatsRoutes } from './routes/stats.ts'
 import { walletCustomerRoutes, walletDeviceRoutes } from './routes/wallets.ts'
 import { webhookRoutes } from './routes/webhook.ts'
 
@@ -96,6 +97,7 @@ export function buildApp(deps: AppDeps, options: BuildOptions = {}) {
         { name: 'webhooks' },
         ...(consoleSpec
           ? [
+              { name: 'stats', description: 'Dashboard aggregates, served to the console only' },
               { name: 'api-keys', description: 'API keys, managed from the console only' },
               { name: 'admin', description: 'Operator routes; not reachable from the internet' },
               { name: CONSOLE_ONLY_TAG, description: 'Left out of the customer document' },
@@ -131,6 +133,7 @@ export function buildApp(deps: AppDeps, options: BuildOptions = {}) {
     await scope.register(walletCustomerRoutes({ db: deps.db }))
     await scope.register(webhookRoutes({ db: deps.db }))
     await scope.register(consoleRoutes({ db: deps.db }))
+    await scope.register(tenantStatsRoutes({ db: deps.db }))
   })
 
   // SDK scope: wallet token.
@@ -141,6 +144,10 @@ export function buildApp(deps: AppDeps, options: BuildOptions = {}) {
 
   // Operator scope.
   app.register(adminRoutes({ db: deps.db, agent: deps.agent, adminToken: deps.config.PLATFORM_ADMIN_TOKEN, consoleToken: deps.config.CONSOLE_TOKEN }))
+  app.register(async (scope) => {
+    scope.addHook('onRequest', requireOperator(deps.config.PLATFORM_ADMIN_TOKEN, deps.config.CONSOLE_TOKEN))
+    await scope.register(platformStatsRoutes({ db: deps.db, readiness: deps.readiness }))
+  })
 
   return app
 }

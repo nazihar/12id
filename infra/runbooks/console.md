@@ -37,6 +37,12 @@ infra/scripts/deploy.sh edge up -d --force-recreate caddy
 EXTRA_SECRETS=mediator infra/scripts/deploy.sh monitoring up -d --force-recreate prometheus
 ```
 
+**Syncing the tree to the VM: never let it touch `infra/staging/secrets/`.** The committed `*.sops.env`
+files can be older than the VM's (`CONSOLE_TOKEN` was added to `platform.sops.env` on the VM); a
+tarball extracted over `/opt/12id` replaced it and the next platform deploy failed at interpolation
+(4-init trap 45). Exclude that directory, or commit the VM's file first. Until `platform.sops.env` on
+the VM has `CONSOLE_TOKEN` again, the platform stack deploys with `EXTRA_SECRETS="agent mediator console"`.
+
 Checks from outside: `https://12id.naziharitsolution.com/api/health` 200; `/` redirects to `/login`;
 `https://api.12id…/v1/ledger` with header `X-Console-Token: x` → 404; `:3600` closed.
 

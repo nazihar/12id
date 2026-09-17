@@ -2198,6 +2198,124 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dashboard aggregates for one tenant
+         * @description Counters by state, webhook health, what needs attention, and exchanges started per day over the window. Computed from platform-api tables only.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    days?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            tenant: {
+                                id: string;
+                                name: string;
+                                status: string;
+                                did: string | null;
+                                lastError: string | null;
+                            };
+                            days: number;
+                            totals: {
+                                connections: {
+                                    byState: {
+                                        [key: string]: number;
+                                    };
+                                    total: number;
+                                };
+                                credentials: {
+                                    byState: {
+                                        [key: string]: number;
+                                    };
+                                    total: number;
+                                };
+                                proofs: {
+                                    byState: {
+                                        [key: string]: number;
+                                    };
+                                    total: number;
+                                    verified: number;
+                                    failed: number;
+                                };
+                                wallets: {
+                                    active: number;
+                                    revoked: number;
+                                };
+                                apiKeys: {
+                                    active: number;
+                                    revoked: number;
+                                };
+                            };
+                            webhook: {
+                                configured: boolean;
+                                url: string | null;
+                                deliveries: {
+                                    pending: number;
+                                    sending: number;
+                                    delivered: number;
+                                    dead: number;
+                                };
+                                lastDeliveredAt: string | null;
+                                lastFailureAt: string | null;
+                            };
+                            attention: {
+                                stuckCredentials: number;
+                                stuckProofs: number;
+                                deadDeliveries: number;
+                                expiringCredentials: number;
+                                expiredCredentials: number;
+                                walletsNeverConnected: number;
+                            };
+                            series: {
+                                day: string;
+                                connections: number;
+                                credentials: number;
+                                proofs: number;
+                            }[];
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/wallet": {
         parameters: {
             query?: never;
@@ -2790,6 +2908,109 @@ export interface paths {
                             statusCode: number;
                             requestId: string;
                         }[];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dashboard aggregates across tenants
+         * @description Platform totals, outcomes by state, what needs attention, exchanges started per day, the busiest tenants over the window, and the readiness checks.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    days?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            days: number;
+                            platform: {
+                                tenants: {
+                                    total: number;
+                                    ready: number;
+                                    provisioning: number;
+                                    failed: number;
+                                };
+                                connections: number;
+                                credentials: number;
+                                proofs: number;
+                                wallets: {
+                                    active: number;
+                                    revoked: number;
+                                };
+                                apiKeys: {
+                                    active: number;
+                                    revoked: number;
+                                };
+                            };
+                            outcomes: {
+                                connections: {
+                                    [key: string]: number;
+                                };
+                                credentials: {
+                                    [key: string]: number;
+                                };
+                                proofs: {
+                                    [key: string]: number;
+                                };
+                            };
+                            attention: {
+                                failedTenants: {
+                                    id: string;
+                                    name: string;
+                                    lastError: string | null;
+                                }[];
+                                deadDeliveries: number;
+                                stuckCredentials: number;
+                                stuckProofs: number;
+                                walletsNeverConnected: number;
+                                tenantsWithoutWebhook: number;
+                            };
+                            series: {
+                                day: string;
+                                connections: number;
+                                credentials: number;
+                                proofs: number;
+                            }[];
+                            topTenants: {
+                                tenantId: string;
+                                name: string;
+                                exchanges: number;
+                            }[];
+                            health: {
+                                ready: boolean;
+                                draining: boolean;
+                                checks: {
+                                    [key: string]: boolean;
+                                };
+                            };
+                        };
                     };
                 };
             };

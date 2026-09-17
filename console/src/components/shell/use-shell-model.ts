@@ -40,7 +40,8 @@ export interface ShellModel {
 }
 
 const OPS_ITEMS: NavItem[] = [
-  { label: 'Tenants', to: '/ops', icon: BuildingIcon, exact: true },
+  { label: 'Dashboard', to: '/ops', icon: LayoutDashboardIcon, exact: true },
+  { label: 'Tenants', to: '/ops/tenants', icon: BuildingIcon },
   { label: 'Dead deliveries', to: '/ops/deliveries', icon: WebhookIcon },
   { label: 'Audit log', to: '/ops/audit', icon: ScrollTextIcon },
   { label: 'Operators', to: '/ops/operators', icon: ShieldUserIcon },
@@ -62,6 +63,7 @@ function tenantItems(tenantId: string): NavItem[] {
 function portalItems(orgSlug: string): NavItem[] {
   const params = { orgSlug }
   return [
+    { label: 'Overview', to: '/t/$orgSlug', params, icon: LayoutDashboardIcon, exact: true },
     { label: 'Catalogue', to: '/t/$orgSlug/catalogue', params, icon: FileBadgeIcon },
     { label: 'Proof templates', to: '/t/$orgSlug/templates', params, icon: ScrollTextIcon },
     { label: 'Exchanges', to: '/t/$orgSlug/exchanges', params, icon: GlobeIcon },
@@ -90,7 +92,7 @@ export function useShellModel(): ShellModel {
     return {
       workspace,
       groups: [{ label: organization.name, ariaLabel: 'Organization sections', items }],
-      crumbs: [{ label: organization.name, to: '/t/$orgSlug', params }, ...(page ? [{ label: page }] : [])],
+      crumbs: [{ label: organization.name, to: '/t/$orgSlug', params }, ...(page && page !== 'Overview' ? [{ label: page }] : [])],
       isActive,
     }
   }
@@ -106,12 +108,12 @@ export function useShellModel(): ShellModel {
       const tenant = tenantMatch.loaderData as { name?: string } | undefined
       const items = tenantItems(tenantId)
       groups.push({ label: `Tenant · ${tenant?.name ?? tenantId.slice(0, 8)}`, ariaLabel: 'Tenant sections', items })
-      crumbs.push({ label: 'Tenants', to: '/ops' }, { label: tenant?.name ?? tenantId.slice(0, 8), to: '/ops/tenants/$tenantId', params: { tenantId } })
+      crumbs.push({ label: 'Tenants', to: '/ops/tenants' }, { label: tenant?.name ?? tenantId.slice(0, 8), to: '/ops/tenants/$tenantId', params: { tenantId } })
       const page = activeLabel(items)
       if (page && page !== 'Overview') crumbs.push({ label: page })
     } else {
       const page = activeLabel(OPS_ITEMS)
-      if (page) crumbs.push({ label: page })
+      if (page && page !== 'Dashboard') crumbs.push({ label: page })
     }
     return { workspace, groups, crumbs, isActive }
   }

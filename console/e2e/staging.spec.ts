@@ -52,8 +52,12 @@ test('staging: sign in, enroll or verify TOTP, read tenants from platform-api, i
     await page.getByRole('button', { name: 'Verify' }).click()
   }
 
-  // Tenants come from platform-api's /admin/overview through the console scope.
+  // The dashboard (C8) from /admin/stats, then the tenants table from /admin/overview, both through the console scope.
   await expect(page).toHaveURL(/\/ops/)
+  await expect(page.getByRole('heading', { name: 'Platform' })).toBeVisible()
+  await expect(page.getByTestId('health-strip')).toContainText('Agent service: ok')
+  await expect(page.getByTestId('activity-chart').locator('svg').first()).toBeVisible()
+  await page.getByRole('navigation', { name: 'Operator sections' }).getByRole('link', { name: 'Tenants', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Tenants' })).toBeVisible()
   await expect(page.getByTestId('tenants-table')).toContainText('acme-platform')
 

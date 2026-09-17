@@ -44,6 +44,7 @@ Phase 0 ran the stack end to end on Android. Content now falls into these tiers,
 - **platform-api console scope** (`x-console-token` + actor/role/tenant): serves the existing `/v1/*` routes and the operator routes, refuses a wrong token, audits every mutation in `console_audit`; the edge answers 404 to any request carrying the header.
 - **Console auth:** invite-only accounts, mandatory 2FA (TOTP or email OTP), operators TOTP-only, TanStack Start's CSRF middleware, Playwright-driven sign-in / enrollment / operator screens.
 - **Tenant portal (local):** organization owners and members through invitation mail, role limits enforced per request, a member refused on another organization's URL, role change and removal effective on the next request.
+- **Dashboards (C8, staging):** `GET /v1/stats` served to the console principal only and `GET /admin/stats` to operators, both computed from platform-api's tables (mirror tables, wallets, keys, deliveries) with no agent call; the operator dashboard and the tenant Overview rendered from them on staging with the readiness checks, a 30-day series and the attention lists; `e2e:staging` 3/3.
 
 **Confirmed (Phase 5, device, run).** Observed with the Android SDK's sample app on a phone against staging (`14-phase-5-android-findings.md`, `smoke:sdk-android`). Includes:
 - **The SDK onboards from a wallet token alone:** genesis fetched from `/v1/ledger` and verified by sha256, a per-wallet invitation minted, mediation completed; nothing compiled into the app.
@@ -220,7 +221,7 @@ Responsibilities:
 - Proof request templates
 - Webhook delivery to customer backends
 - **Wallets** (per-installation tokens), per-wallet mediator invitations, and the mediator webhook receiver that relays wake-ups to the customer (§4.8, §12.12). No device tokens are stored
-- Admin UI
+- Admin UI (the Phase 4 console reaches it through the console scope), including **aggregate stats for the console's dashboards** — per-tenant and platform-wide counters, a daily series and attention lists, computed from the mirror tables only, never through agent-service (Phase 4 C8)
 - Business-data-to-credential-attribute mapping
 
 **Runtime.** Node.js/TypeScript. Own Postgres database, separate from the agent wallet storage.
@@ -799,6 +800,7 @@ One app, two roles: **platform operator** (all tenants) and **tenant member** (o
 - [x] **Stage 4b, tenant portal (built, local Playwright 4/4):** `/t/$orgSlug/*` with members and invitations (invite mail → account → 2FA), self-service API keys, schema/cred-def publishing (`expiresAt` always appended), proof template builder (expiry predicate enforced, client mirror of the platform rules), connection invitation with QR, browsers, webhook configuration and delivery log; owner/admin/member roles checked per request
 - [x] Staging: console deployed; `smoke:platform-credo` PASSED with a console-created key; Playwright staging specs pass for the operator console and the tenant portal (catalogue, template builder, exchanges, webhooks, API keys, members, audit)
 - [x] Restore drill of the `console` database (2026-09-15): nightly backup restored to a scratch Postgres; an account signed in with password + TOTP against the restored copy
+- [x] **C8 dashboards (on staging 2026-09-17, `e2e:staging` 3/3; `11-phase-4.md` §C8):** `/ops` becomes the operator dashboard (tenants table → `/ops/tenants`), `/t/$orgSlug` becomes the tenant Overview (was a redirect), the same tenant dashboard on `/ops/tenants/$tenantId`; platform-api `GET /v1/stats` (console principal only, hidden from the customer spec) and `GET /admin/stats` with counters, a 7/30/90-day series, attention lists (stuck exchanges, dead deliveries, credentials expiring — the operable side of no revocation, wallets never connected, failed tenants) and the readiness checks; migration `0003_stats_indexes` (the index half of review L3); shadcn `chart` + recharts with a validated categorical palette
 - [ ] Left for later: invited-member acceptance through real SMTP on staging; operator 12 h session cap observed
 
 Original checklist: tenant management; catalogue (both identifier forms); proof template builder (expiry predicate enforced); credential and connection browser; webhook delivery log.
@@ -932,6 +934,8 @@ Findings and the ordered fix set: [`15-pre-production-review.md`](15-pre-product
 43. **`UnsatisfiedLinkError` is an `Error`, not an `Exception`** (Phase 5). A `catch (e: Exception)` around wallet initialisation let the failure escape and left the SDK's state at `Initializing` for good. Catch `Throwable` at the API boundary and report a typed failure.
 
 44. **The platform-api → agent-service client times out at 10 s, and a credential-definition publication can take longer** (Phase 5, staging). One `POST /v1/credential-definitions` answered 502 `agent_unreachable` while both services were healthy. Raise the timeout for catalogue writes (platform follow-up).
+
+45. **A tree sync that includes `infra/staging/secrets/` overwrites secrets edited on the VM** (Phase 4 C8). `*.sops.env` files are committed, but keys added on the VM with `sops` (`CONSOLE_TOKEN` in `platform.sops.env`, runbook step 1) were never committed back, so extracting a tarball of the repo over `/opt/12id` silently replaced the file with the older committed one and the next `deploy.sh platform` failed at interpolation. Nothing running was affected; the value was recoverable from `console.sops.env`, which holds the same token and is not in the repo. Exclude `infra/staging/secrets/` from every sync, or commit the VM's file first.
 
 ---
 

@@ -70,7 +70,13 @@ export const connections = pgTable('connections', {
   lastOutboxId: bigint('last_outbox_id', { mode: 'number' }).notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-}, (table) => [primaryKey({ columns: [table.tenantId, table.recordId] }), index('connections_invitation_idx').on(table.tenantId, table.invitationId)])
+}, (table) => [
+  primaryKey({ columns: [table.tenantId, table.recordId] }),
+  index('connections_invitation_idx').on(table.tenantId, table.invitationId),
+  // List sort and the dashboard's daily series / state counts (Phase 4 C8; review L3).
+  index('connections_tenant_created_idx').on(table.tenantId, table.createdAt.desc()),
+  index('connections_tenant_state_idx').on(table.tenantId, table.state),
+])
 
 export const credentials = pgTable('credentials', {
   tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
@@ -86,7 +92,12 @@ export const credentials = pgTable('credentials', {
   lastOutboxId: bigint('last_outbox_id', { mode: 'number' }).notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-}, (table) => [primaryKey({ columns: [table.tenantId, table.recordId] }), index('credentials_connection_idx').on(table.tenantId, table.connectionId)])
+}, (table) => [
+  primaryKey({ columns: [table.tenantId, table.recordId] }),
+  index('credentials_connection_idx').on(table.tenantId, table.connectionId),
+  index('credentials_tenant_created_idx').on(table.tenantId, table.createdAt.desc()),
+  index('credentials_tenant_state_idx').on(table.tenantId, table.state),
+])
 
 export const proofs = pgTable('proofs', {
   tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
@@ -103,7 +114,12 @@ export const proofs = pgTable('proofs', {
   lastOutboxId: bigint('last_outbox_id', { mode: 'number' }).notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-}, (table) => [primaryKey({ columns: [table.tenantId, table.recordId] }), index('proofs_connection_idx').on(table.tenantId, table.connectionId)])
+}, (table) => [
+  primaryKey({ columns: [table.tenantId, table.recordId] }),
+  index('proofs_connection_idx').on(table.tenantId, table.connectionId),
+  index('proofs_tenant_created_idx').on(table.tenantId, table.createdAt.desc()),
+  index('proofs_tenant_state_idx').on(table.tenantId, table.state),
+])
 
 export const proofTemplates = pgTable('proof_templates', {
   id: uuid('id').primaryKey().defaultRandom(),

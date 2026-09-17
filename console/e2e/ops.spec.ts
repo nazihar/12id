@@ -15,6 +15,18 @@ test('operator screens load through the console scope', async ({ page }) => {
   test.setTimeout(120_000)
   await signInWithTotp(page)
 
+  // Dashboard (C8): KPI row, health strip, attention list; the range lives in the URL and re-renders the chart.
+  await expect(page.getByRole('heading', { name: 'Platform' })).toBeVisible()
+  await expect(page.getByTestId('health-strip')).toContainText('Platform database: ok')
+  await expect(page.getByTestId('health-strip')).toContainText('Agent service: failing')
+  await expect(page.getByTestId('stat-tenants')).toBeVisible()
+  await expect(page.getByTestId('activity-chart').locator('svg').first()).toBeVisible()
+  await expect(page.getByTestId('attention-list')).toBeVisible()
+  await page.getByRole('tab', { name: '7 days' }).click()
+  await expect(page).toHaveURL(/days=7/)
+  await expect(page.getByText('over the last 7 days')).toBeVisible()
+  await expect(page.getByTestId('activity-chart').locator('svg').first()).toBeVisible()
+
   await page.getByRole('link', { name: 'Dead deliveries' }).click()
   await expect(page.getByRole('heading', { name: 'Dead webhook deliveries' })).toBeVisible()
 

@@ -1,6 +1,6 @@
 # Phase 4 — Findings
 
-**Plan:** [11-phase-4.md](11-phase-4.md). **Status: 4a, 4b and C7 (console UI revamp) on staging since 2026-09-17; `e2e:staging` 3/3.**
+**Plan:** [11-phase-4.md](11-phase-4.md). **Status: 4a, 4b, C7 (console UI revamp) and C8 (dashboards) on staging since 2026-09-17; `e2e:staging` 3/3.**
 
 | Item | State |
 |---|---|
@@ -12,6 +12,7 @@
 | C6 staging checks (4a) | **passed:** `e2e:staging` (sign-in, operator TOTP enrollment, tenants/catalogue/webhooks from platform-api, invitation by mail); `smoke:platform-credo` **PASSED with an API key created in the console** (then revoked there; audit shows create 201 and delete 200 by the operator); `:3600` closed from outside; `api.` with `X-Console-Token` → 404; anonymous `/ops` → 307 to login |
 | C4 tenant portal (4b) | **done locally, Playwright 4/4 in 2.1 min** (`portal.spec.ts`: owner onboarding by mail link, email-code 2FA, API key and webhook secret shown once, invitation → account → member, role limits, cross-organization denial, role change and removal effective on the next request). Console `tsc` clean, Vitest 11/11, client bundle clean. **Staging, 2026-09-15: redeployed; `staging.spec.ts`, `staging-apikey.spec.ts` and `staging-portal.spec.ts` pass** (agent-backed catalogue, template builder, exchanges; audit log shows actor emails) |
 | C7 console UI revamp | **done and on staging, 2026-09-17.** Locally: `tsc` clean, Vitest 17/17, `vite build` + client-bundle check clean, Playwright 4/4 (`auth`, `ops`, `portal`). Staging: `12id/console:phase4` rebuilt twice (second time with the save-guard fix below), healthy behind Caddy; `npm run e2e:staging` **3/3** (`staging-apikey`, `staging-portal`, `staging`) with the new automation operator. One shell (sidebar + workspace switcher + header with breadcrumb, theme toggle, profile menu), one form kit (TanStack Form + shared zod schemas, field-level errors), short forms in dialogs, the template builder on its own routes, a confirmation dialog in front of every state-changing action, comboboxes instead of selects, dark mode. Edge: `/assets/*` exempt from the console per-IP limit |
+| C8 dashboards | **done and on staging, 2026-09-17; `e2e:staging` 3/3.** Deployed with `console.sops.env` merged into the platform stack after the sync overwrote `platform.sops.env` (trap 45; owner follow-up in §C8 Staging).* platform-api: `GET /v1/stats` (console principal only) + `GET /admin/stats`, migration `0003_stats_indexes`, 42/42 tests (36 + 6), `tsc` clean, `openapi.json` still 25 paths, `openapi.console.json` 37. Console: `/ops` dashboard, tenants table at `/ops/tenants`, `/t/$orgSlug` Overview with the getting-started checklist, the tenant dashboard reused on `/ops/tenants/$tenantId`; shadcn `chart` + recharts 3.8.0; `tsc` clean, Vitest 22/22 (17 + 5), `vite build` + client-bundle check clean, Playwright **4/4**; no horizontal overflow at 1280 or 390 px in either theme |
 | Not yet exercised at runtime | an invited member accepting through real SMTP on staging (proven locally with the mail outbox, and for owners/operators on staging by the owner's own session) |
 
 Every claim below comes from a local run on 2026-09-14 or a registry/doc read on that date.
@@ -243,3 +244,56 @@ Fix on every auth form (login, verify-2fa, setup-2fa): `method="post"`, so a pre
 
 ### Deliberate deviation from the TanStack guidance
 `auth.server.ts` reads env at module scope: the Better Auth CLI (`generate`, `create-admin`) discovers a module-level `auth` instance. Acceptable here because the console runs on Node (not an edge runtime, where module-scope env is undefined) and `.server.ts` import protection fails production builds that would pull the file into the client.
+
+---
+
+## C8 — Dashboards (planned 2026-09-17; build findings go here)
+
+Decided with the owner before the build (recorded in [11-phase-4.md](11-phase-4.md) §C8): `/ops` becomes the dashboard and the tenants table moves to `/ops/tenants`; charts with shadcn `chart` + recharts; the stats routes are console-scope only (customer `openapi.json` unchanged); first pass = counters + 7/30/90-day series + attention lists.
+
+### Chart palette validated before any chart code (2026-09-17, run)
+The shadcn `nova` preset's `--chart-1…5` in `src/styles/app.css` are `oklch(… 0 0)` — a grayscale ramp, usable for magnitude, not for telling three series apart. The console's card surfaces resolve to `#ffffff` (light, `oklch(1 0 0)`) and `#171717` (dark, `oklch(0.205 0 0)`), and the candidate categorical set was run through the data-viz palette validator against those surfaces:
+
+```
+light, surface #ffffff  #2a78d6 #eb6834 #1baf7a (+ #eda100 as a 4th, unused)
+  [PASS] Lightness band        [PASS] Chroma floor
+  [PASS] CVD separation        worst adjacent ΔE 9.1 (protan)
+  [PASS] Normal-vision floor   worst adjacent ΔE 22.9
+  [WARN] Contrast vs surface   #1baf7a 2.82, #eda100 2.17 — relief required (labels or table view)
+dark, surface #171717   #3987e5 #d95926 #199e70 (+ #c98500)
+  [PASS] all five checks       CVD ΔE 8.4, normal-vision ΔE 19.8, contrast ≥ 3:1
+```
+
+Consequences carried into the plan: three categorical slots only (connections / credentials / proofs); the light-mode contrast warning is relieved by an always-present legend, tooltip values and the exchange tables one click away; exchange **states** (done / in flight / abandoned) use the fixed status palette `#0ca30c` / `#fab219` / `#d03b3b` with icon + label, never a categorical slot; the grayscale `--chart-4/5` stay for a future single-hue ramp.
+
+### Build (2026-09-17, local)
+**platform-api.** `src/http/routes/stats.ts` holds both routes and the shared aggregates (`exchangeActivityByTenant`, `activeRevokedByTenant`, `deadDeliveriesByTenant`, `activitySeries`); `/admin/overview` now calls the same helpers instead of its own copies. `GET /v1/stats` sits on the customer scope and answers 403 to an API-key principal; `GET /admin/stats` is registered in its own operator scope with `readiness()` as a dep. Migration `0003_stats_indexes` (drizzle-kit generate) adds `(tenant_id, created_at desc)` and `(tenant_id, state)` to the three mirror tables. `test/stats.test.ts` (6 cases): console-only, `days` bounds, counters and the attention numbers against seeded rows (a stuck offer, an `expiresAt` in 10 days, one 5 days ago, `"not-a-number"`, one missing), exactly `days` series points with zero days present, `/admin/stats` refusing organization roles and accepting the break-glass token, `/admin/overview` consistent with the helpers, no audit rows from stats reads, and the six new indexes present. **42/42**, `tsc --noEmit` clean; `openapi.json` 25 paths, `openapi.console.json` 37; `npm run openapi:client` regenerated the console's client.
+- **Trap while writing the series SQL:** `date - $1` with an untyped parameter is ambiguous to Postgres (`date - integer` vs `date - interval`) and fails with "operator is not unique"; the offset is cast (`${days - 1}::int`). Days are bucketed as `(created_at at time zone 'utc')::date` so the spine and the buckets agree whatever the session time zone.
+- The expiring/expired counts use `attributes->>'expiresAt' ~ '^[0-9]{1,12}$'` before the `::bigint` cast: a non-numeric attribute (allowed on the wire, §5.2) would otherwise error the whole dashboard; the length cap keeps `to_timestamp` in range.
+
+**console.** `npx shadcn@4.21.0 add chart` wrote `src/components/ui/chart.tsx` and added `recharts ^3.8.0`, re-pinned to **3.8.0**. recharts 3's `ResponsiveContainer` takes an `initialDimension` for SSR, so the server pass no longer renders nothing, but the charts still sit behind the `useHydrated()` skeleton: no mismatch was observed with the gate, so **no trap 45**. Bar animation is **off** (`isAnimationActive={false}`): the first screenshots caught the bars at zero height mid-animation, and a dashboard gains nothing from it. Client bundle: recharts lands in one route-level chunk of **353 KB** (`stat-tile-*.js`, loaded only by the three dashboard routes; the login page is unchanged); `check:client` clean.
+- **Range in the URL, default left out.** The first `validateSearch` returned `{ days: 30 }` for a bare URL and the router serialised it, so every dashboard link became `?days=30` and the portal spec's URL assertion failed. `parseDashboardSearch` now keeps `days` only when it is one of the presets and present; `rangeOf(search)` resolves the default. Choosing a preset writes it; the default never appears.
+- **The catalogue card must not retry.** The Overview's catalogue `useQuery` inherited the client's default 3 retries with backoff (~7 s); clicking Catalogue during a retry left the router pending on the old page and the "This page could not be loaded" assertion timed out. The card uses `retry: false`, like the route loaders (which `fetchQuery` already runs without retries).
+- Base UI marks the active sidebar item with a bare `data-active` attribute, not `aria-current`; the portal spec asserts `toHaveAttribute('data-active')`.
+- e2e: `auth.spec.ts` asserts the dashboard at `/ops` and the table at `/ops/tenants`; `ops.spec.ts` checks the health strip (`Platform database: ok`, `Agent service: failing` locally), the KPI row, the chart's `<svg>`, the attention list and that the 7-day tab writes `?days=7` and re-renders; `portal.spec.ts` lands on the Overview, sees "0 of 5 steps done" and "Nothing needs attention", then opens Catalogue for the existing agent-error assertion. Staging specs: `staging.spec.ts` checks the health strip and the chart before navigating to Tenants through the sidebar; `staging-portal.spec.ts` goes to `/ops/tenants` first and checks `stat-credentials` and the catalogue summary on the owner's Overview before the catalogue page. Local run **4/4** in 2.6 min.
+- Screenshots (operator dashboard and a tenant detail seeded with 65 exchanges) at 1280 px and 390 px, light and dark; `document.documentElement.scrollWidth === window.innerWidth` at both widths. Tooltip given `min-w-48` after the value column collided with "Credential exchanges"; x-axis ticks use `interval="preserveStartEnd"` + `minTickGap` so the phone shows ~4 labels instead of 8.
+
+### Staging (2026-09-17, deploy stopped before either image was rebuilt)
+The tree was synced to `/opt/12id` (tarball of tracked + new files under `services/`, `console/`, `infra/`, `implement/`; `console/src` moved aside to `console/src.prev-<stamp>` first, as in C7). `deploy.sh platform up -d --build` then failed at interpolation: **`CONSOLE_TOKEN` missing from `platform.sops.env`**. Nothing running was touched (compose stops before it changes containers); `platform-platform-api-1` and `console-console-1` stayed up and healthy on the pre-C8 images.
+
+**Cause — a trap for every future sync.** The tarball carried the *committed* `infra/staging/secrets/*.sops.env`, and the committed `platform.sops.env` predates C5: `CONSOLE_TOKEN` was added to it **on the VM** with `sops` (runbook step 1) and never committed back. Extracting over `/opt/12id` replaced the VM's copy with the older one. The other five committed secrets files match what their stacks run with (checked by key name against the running containers' environment), and `console.sops.env` is not in the repo at all, so it survived intact — it holds the same `CONSOLE_TOKEN` value by design. Rule from now on: **never let a sync touch `infra/staging/secrets/`** (exclude the directory from the tarball, or commit the VM's edited files back first).
+
+**Deployed anyway, without touching the secrets store (2026-09-17, 10:40–10:50 UTC).** `deploy.sh` merges other stacks' secrets files with `EXTRA_SECRETS`, and `console.sops.env` holds the same `CONSOLE_TOKEN`, so the platform stack was deployed with `EXTRA_SECRETS="agent mediator console"`: `config --quiet` clean, `up -d --build` exit 0, provision `platform database migrated`, the six `*_tenant_created_idx` / `*_tenant_state_idx` indexes present in `platform_api`, `platform-platform-api-1` healthy. Then `EXTRA_SECRETS="agent" deploy.sh console up -d --build`: migrate job `{"database":"existing","migrations":"applied"}`, `console-console-1` healthy. From outside: `/api/health` 200, `/` → 307 `/login`, `api.` with `X-Console-Token` → **404**, `/v1/stats` without credentials → 401. **`npm run e2e:staging` 3/3 in 42 s** (`staging-apikey` 17 s, `staging-portal` 8 s — the owner's Overview showed `stat-credentials` and a catalogue summary with published schemas before the catalogue page — and `staging` 15 s with the health strip reading `Agent service: ok` and the activity chart's `<svg>` on `/ops`). `console_audit` gained no row with `stats` in its route; platform-api logged no errors in the window. The operator dashboard on staging shows the platform as it is: 6 of 9 tenants ready and the 3 from the 2026-09-15 onboarding race listed by name under "Tenants whose onboarding failed", 6 dead deliveries, 3 wallets that never mediated, 6 tenants without a webhook, and the Phase 5 smoke spike (`sdk-smoke-20260915-1509`, 32 exchanges) on 09-14/15.
+
+**Owner follow-up (the sops file is still the older committed one):** the platform stack now depends on `console.sops.env` being merged in at deploy time. Put `CONSOLE_TOKEN` back into `platform.sops.env` on the VM and commit the file, after which `EXTRA_SECRETS="agent mediator"` works again as the runbook says:
+```bash
+cd /opt/12id/infra/staging/secrets && export SOPS_AGE_KEY_FILE=/opt/12id/secrets/age.key
+cp platform.sops.env /opt/12id/secrets/platform.sops.env.before-c8-restore
+dec=$(mktemp -p /dev/shm) && chmod 600 "$dec"
+sops -d --input-type dotenv --output-type dotenv platform.sops.env > "$dec"
+sops -d --input-type dotenv --output-type dotenv console.sops.env | grep '^CONSOLE_TOKEN=' >> "$dec"
+sops -e --input-type dotenv --output-type dotenv --filename-override infra/staging/secrets/platform.sops.env "$dec" > platform.sops.env.new && mv platform.sops.env.new platform.sops.env
+shred -u "$dec"
+cd /opt/12id && EXTRA_SECRETS="agent mediator" infra/scripts/deploy.sh platform config --quiet   # must pass again
+```
+Then copy the restored `infra/staging/secrets/platform.sops.env` back into the repo and commit it, so the next sync cannot regress it (trap 45).

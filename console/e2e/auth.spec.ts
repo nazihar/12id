@@ -80,8 +80,11 @@ test('operator: mandatory TOTP, console data, and no emailed codes', async ({ pa
   await page.getByTestId('otp-code').fill(generateSync({ secret }))
   await page.getByRole('button', { name: 'Turn on two-factor authentication' }).click()
 
-  // Data from platform-api through operatorMiddleware and the console scope.
+  // Data from platform-api through operatorMiddleware and the console scope: the dashboard (C8), then the tenants table.
   await expect(page).toHaveURL(/\/ops/)
+  await expect(page.getByRole('heading', { name: 'Platform' })).toBeVisible()
+  await expect(page.getByTestId('stat-tenants')).toBeVisible()
+  await page.goto('/ops/tenants')
   await expect(page.getByRole('heading', { name: 'Tenants' })).toBeVisible()
   await expect(page.getByTestId('tenants-empty').or(page.getByTestId('tenants-table'))).toBeVisible()
 

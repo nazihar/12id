@@ -1,52 +1,157 @@
-import { useSuspenseQuery } from '@tanstack/react-query'
+import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
-import { createColumnHelper } from '@tanstack/react-table'
+import { CircleAlertIcon, CircleCheckIcon, PauseCircleIcon } from 'lucide-react'
 
-import { DataTable } from '@/components/data-table/data-table'
-import type { DataTableFeatures } from '@/components/data-table/data-table-features'
+import { type AttentionItem, AttentionList } from '@/components/dashboard/attention-list'
+import { ActivityChart } from '@/components/dashboard/charts'
+import { RangeTabs } from '@/components/dashboard/range-tabs'
+import { StatGrid, StatTile } from '@/components/dashboard/stat-tile'
 import { PageHeader } from '@/components/page-header'
 import { RouteError } from '@/components/route-error'
 import { StateBadge } from '@/components/state-badge'
-import { CreateTenantDialog } from '@/features/tenants/create-tenant-dialog'
-import type { getTenantOverview } from '@/features/tenants/tenants.functions'
-import { tenantOverviewQuery } from '@/features/tenants/tenants.queries'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { type OperatorDashboard, operatorDashboardQuery } from '@/features/dashboard/dashboard.queries'
+import { parseDashboardSearch, rangeOf } from '@/features/dashboard/dashboard.schemas'
+import { auditLogQuery } from '@/features/ops/ops.queries'
 import { formatDateTime } from '@/lib/format'
 
-type TenantRow = Awaited<ReturnType<typeof getTenantOverview>>[number]
-
-const column = createColumnHelper<DataTableFeatures, TenantRow>()
-const sum = (counts: Record<string, number>) => Object.values(counts).reduce((total, n) => total + n, 0)
-
-const columns = column.columns([
-  column.accessor((row) => row.tenant.name, {
-    id: 'name',
-    header: 'Name',
-    cell: ({ row }) => (
-      <Link to="/ops/tenants/$tenantId" params={{ tenantId: row.original.tenant.id }} className="font-medium hover:underline">
-        {row.original.tenant.name}
-      </Link>
-    ),
-  }),
-  column.accessor((row) => row.tenant.status, { id: 'status', header: 'Status', cell: ({ getValue }) => <StateBadge state={getValue()} /> }),
-  column.accessor((row) => sum(row.connections), { id: 'connections', header: 'Connections' }),
-  column.accessor((row) => sum(row.credentials), { id: 'credentials', header: 'Credential exchanges' }),
-  column.accessor((row) => row.apiKeys.active, { id: 'apiKeys', header: 'Active API keys' }),
-  column.accessor('deadDeliveries', { header: 'Dead deliveries' }),
-  column.accessor('lastActivityAt', { header: 'Last activity', cell: ({ getValue }) => formatDateTime(getValue()) }),
-])
-
+// The operator dashboard (Phase 4 C8): platform totals, service health, activity, what needs a
+// person, the busiest tenants and the latest console actions.
 export const Route = createFileRoute('/_authed/ops/')({
-  loader: ({ context }) => context.queryClient.ensureQueryData(tenantOverviewQuery()),
+  validateSearch: parseDashboardSearch,
+  loaderDeps: ({ search }) => ({ days: rangeOf(search) }),
+  loader: ({ context, deps }) => context.queryClient.ensureQueryData(operatorDashboardQuery(deps.days)),
   errorComponent: RouteError,
-  component: TenantsPage,
+  component: OperatorDashboardPage,
 })
 
-function TenantsPage() {
-  const { data: tenants } = useSuspenseQuery(tenantOverviewQuery())
+const CHECK_LABELS: Record<string, string> = { database: 'Platform database', agent: 'Agent service', mediatorDatabase: 'Mediator database' }
+
+function HealthStrip({ health }: { health: OperatorDashboard['health'] }) {
+  const checks = Object.entries(health.checks)
   return (
-    <section className="space-y-4">
-      <PageHeader title="Tenants" description="Every customer tenant on the platform with its onboarding state and activity." actions={<CreateTenantDialog />} />
-      <DataTable columns={columns} data={tenants} searchPlaceholder="Search tenants" emptyMessage="No tenants yet." testId="tenants-table" />
-    </section>
+    <div className="flex flex-wrap items-center gap-2" data-testid="health-strip">
+      {checks.length === 0 && <span className="text-sm text-muted-foreground">No health checks reported.</span>}
+      {checks.map(([name, ok]) => (
+        <Badge key={name} variant={ok ? 'secondary' : 'destructive'} className="gap-1">
+          {ok ? <CircleCheckIcon className="size-3" aria-hidden /> : <CircleAlertIcon className="size-3" aria-hidden />}
+          {CHECK_LABELS[name] ?? name}: {ok ? 'ok' : 'failing'}
+        </Badge>
+      ))}
+      {health.draining && (
+        <Badge variant="outline" className="gap-1">
+          <PauseCircleIcon className="size-3" aria-hidden />
+          platform-api draining
+        </Badge>
+      )}
+    </div>
+  )
+}
+
+function attentionItems(stats: OperatorDashboard): AttentionItem[] {
+  const a = stats.attention
+  return [
+    { key: 'failed-tenants', label: 'Tenants whose onboarding failed', detail: a.failedTenants.map((t) => t.name).join(', ') || undefined, count: a.failedTenants.length, level: 'critical', to: '/ops/tenants' },
+    { key: 'dead-deliveries', label: 'Dead webhook deliveries', detail: 'Across all tenants; retry from the delivery log.', count: a.deadDeliveries, level: 'critical', to: '/ops/deliveries' },
+    { key: 'stuck-credentials', label: 'Credential exchanges stuck for over a day', detail: 'Reconciliation abandons them after its TTL; the customer must re-offer.', count: a.stuckCredentials, level: 'warning' },
+    { key: 'stuck-proofs', label: 'Proof exchanges stuck for over a day', count: a.stuckProofs, level: 'warning' },
+    { key: 'wallets-never-connected', label: 'Wallets that never reached the mediator', detail: 'Over a day old with no mediator connection.', count: a.walletsNeverConnected, level: 'warning' },
+    { key: 'tenants-without-webhook', label: 'Tenants without a webhook endpoint', detail: 'Their events are computed and dropped.', count: a.tenantsWithoutWebhook, level: 'warning', to: '/ops/tenants' },
+  ]
+}
+
+function OperatorDashboardPage() {
+  const days = rangeOf(Route.useSearch())
+  const navigate = Route.useNavigate()
+  const { data: stats } = useSuspenseQuery(operatorDashboardQuery(days))
+  const audit = useQuery(auditLogQuery())
+  const { platform } = stats
+
+  return (
+    <div className="space-y-4">
+      <PageHeader title="Platform" description="Every tenant on this deployment, and what needs an operator." actions={<RangeTabs value={days} onChange={(next) => navigate({ search: { days: next }, replace: true })} />} />
+      <HealthStrip health={stats.health} />
+
+      <StatGrid className="xl:grid-cols-6">
+        <StatTile testId="stat-tenants" label="Tenants" value={platform.tenants.ready} sub={`ready of ${platform.tenants.total} · ${platform.tenants.failed} failed`} />
+        <StatTile testId="stat-connections" label="Connections" value={platform.connections} sub={`${stats.outcomes.connections.completed ?? 0} completed`} />
+        <StatTile testId="stat-credentials" label="Credential exchanges" value={platform.credentials} sub={`${stats.outcomes.credentials.done ?? 0} issued`} />
+        <StatTile testId="stat-proofs" label="Proof exchanges" value={platform.proofs} sub={`${stats.outcomes.proofs.done ?? 0} completed`} />
+        <StatTile testId="stat-wallets" label="Active wallets" value={platform.wallets.active} sub={`${platform.wallets.revoked} revoked`} />
+        <StatTile testId="stat-api-keys" label="Active API keys" value={platform.apiKeys.active} sub={`${platform.apiKeys.revoked} revoked`} />
+      </StatGrid>
+
+      <Card size="sm">
+        <CardHeader>
+          <CardTitle>Activity</CardTitle>
+          <CardDescription>Exchanges started per day (UTC) across all tenants over the last {stats.days} days.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ActivityChart series={stats.series} testId="activity-chart" />
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 lg:grid-cols-[3fr_2fr]">
+        <AttentionList items={attentionItems(stats)} testId="attention-list" />
+        <Card size="sm">
+          <CardHeader>
+            <CardTitle>Busiest tenants</CardTitle>
+            <CardDescription>Exchanges started in the window.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {stats.topTenants.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No exchanges in this window.</p>
+            ) : (
+              <ol className="divide-y" data-testid="top-tenants">
+                {stats.topTenants.map((tenant) => (
+                  <li key={tenant.tenantId} className="flex items-center justify-between gap-3 py-2 text-sm">
+                    <Link to="/ops/tenants/$tenantId" params={{ tenantId: tenant.tenantId }} className="min-w-0 truncate font-medium hover:underline">
+                      {tenant.name}
+                    </Link>
+                    <span className="tabular-nums">{tenant.exchanges}</span>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card size="sm">
+        <CardHeader>
+          <CardTitle>Recent console actions</CardTitle>
+          <CardDescription>
+            The latest audited calls.{' '}
+            <Link to="/ops/audit" className="underline">
+              Full audit log
+            </Link>
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {audit.error ? (
+            <p className="text-sm text-destructive">{audit.error.message}</p>
+          ) : !audit.data ? (
+            <p className="text-sm text-muted-foreground">Loading…</p>
+          ) : audit.data.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nothing audited yet.</p>
+          ) : (
+            <ul className="divide-y" data-testid="recent-audit">
+              {audit.data.slice(0, 10).map((entry) => (
+                <li key={entry.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-sm">
+                  <span className="text-muted-foreground tabular-nums">{formatDateTime(entry.at)}</span>
+                  <span className="min-w-0 truncate">{entry.actorEmail ?? entry.actor}</span>
+                  <StateBadge state={entry.role} />
+                  <span className="font-mono text-xs">
+                    {entry.method} {entry.route}
+                  </span>
+                  <span className="font-mono text-xs text-muted-foreground">{entry.statusCode}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   )
 }

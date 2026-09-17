@@ -2,11 +2,15 @@ import { useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { createColumnHelper } from '@tanstack/react-table'
 
+import { RangeTabs } from '@/components/dashboard/range-tabs'
 import { DataTable } from '@/components/data-table/data-table'
 import type { DataTableFeatures } from '@/components/data-table/data-table-features'
 import { RouteError } from '@/components/route-error'
 import { StateBadge } from '@/components/state-badge'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { tenantDashboardQuery } from '@/features/dashboard/dashboard.queries'
+import { parseDashboardSearch, rangeOf } from '@/features/dashboard/dashboard.schemas'
+import { TenantDashboardBody, type TenantDashboardLinks } from '@/features/dashboard/tenant-dashboard'
 import { CreateTenantOrganizationDialog } from '@/features/tenants/create-tenant-organization-dialog'
 import type { getTenantOrganization } from '@/features/tenants/tenant-owner.functions'
 import { tenantOrganizationQuery, tenantQuery } from '@/features/tenants/tenants.queries'
@@ -23,8 +27,11 @@ const memberColumns = column.columns([
   column.accessor('since', { header: 'Member since', cell: ({ getValue }) => formatDateTime(getValue()) }),
 ])
 
+// Tenant overview: the same dashboard body the tenant sees in its portal (C8), then the operator-only cards.
 export const Route = createFileRoute('/_authed/ops/tenants/$tenantId/')({
-  loader: ({ context, params }) => context.queryClient.ensureQueryData(tenantOrganizationQuery(params.tenantId)),
+  validateSearch: parseDashboardSearch,
+  loaderDeps: ({ search }) => ({ days: rangeOf(search) }),
+  loader: ({ context, params, deps }) => Promise.all([context.queryClient.ensureQueryData(tenantOrganizationQuery(params.tenantId)), context.queryClient.ensureQueryData(tenantDashboardQuery(params.tenantId, deps.days))]),
   errorComponent: RouteError,
   component: TenantOverviewPage,
 })
@@ -33,8 +40,22 @@ function TenantOverviewPage() {
   const { tenantId } = Route.useParams()
   const { data: tenant } = useSuspenseQuery(tenantQuery(tenantId))
   const { data: organization } = useSuspenseQuery(tenantOrganizationQuery(tenantId))
+  const days = rangeOf(Route.useSearch())
+  const navigate = Route.useNavigate()
+  const { data: stats } = useSuspenseQuery(tenantDashboardQuery(tenantId, days))
+  const params = { tenantId }
+  const links: TenantDashboardLinks = {
+    exchanges: { to: '/ops/tenants/$tenantId/exchanges', params },
+    wallets: { to: '/ops/tenants/$tenantId/wallets', params },
+    webhooks: { to: '/ops/tenants/$tenantId/webhooks', params },
+  }
 
   return (
+    <div className="space-y-5">
+      <div className="flex justify-end">
+        <RangeTabs value={days} onChange={(next) => navigate({ search: { days: next }, replace: true })} />
+      </div>
+      <TenantDashboardBody stats={stats} links={links} />
     <div className="grid gap-5 lg:grid-cols-[1fr_2fr]">
       <Card size="sm">
         <CardHeader>
@@ -70,6 +91,7 @@ function TenantOverviewPage() {
           )}
         </CardContent>
       </Card>
+    </div>
     </div>
   )
 }
