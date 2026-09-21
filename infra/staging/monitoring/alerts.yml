@@ -17,6 +17,62 @@ groups:
         annotations:
           summary: '{{ $labels.instance }} is failing from the VM'
 
+      # --- Phase 6 biometric gate -------------------------------------------------------
+      - alert: BiometricServiceDown
+        expr: probe_success{job="blackbox-http-local", instance="http://127.0.0.1:3430/healthz"} == 0
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'biometric-service is not answering'
+          description: >-
+            Gated offers and proof requests are refused and holders cannot start face checks. Exchanges
+            already held stay held until their check expires. Runbook: infra/runbooks/biometric-service.md.
+
+      - alert: BiometricFailureRateHigh
+        expr: >-
+          sum(biometric_attempts_last_15m{decision="failed"}) >= 10
+          and sum(biometric_attempts_last_15m{decision="failed"}) / clamp_min(sum(biometric_attempts_last_15m), 1) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'More than half of face checks failed in the last 15 minutes'
+          description: >-
+            A tenant's reference images or thresholds may be wrong, liveness may be rejecting real users,
+            or someone is trying presentation attacks. See each exchange's biometric log in the console.
+
+      - alert: BiometricVendorErrors
+        expr: biometric_vendor_failures_last_15m >= 3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'The biometric vendor failed or expired several sessions in the last 15 minutes'
+          description: >-
+            AWS returned FAILED or EXPIRED session results: capture problems on devices, or an AWS-side issue.
+
+      - alert: BiometricGateStuck
+        expr: biometric_gates_unsettled > 0
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Face checks are decided but their exchanges were never released or abandoned'
+          description: >-
+            platform-api could not tell agent-service to issue, accept or abandon (it retries every 30 s).
+            Holders are waiting. Check agent-service and platform-api logs for the gate id.
+
+      - alert: BiometricExpiryStalled
+        expr: biometric_gates_overdue_pending > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Pending face checks are more than 10 minutes past their expiry'
+          description: >-
+            platform-api's expiry loop is not running, so held exchanges are not abandoned.
+
       - alert: CertificateExpiringSoon
         expr: probe_ssl_earliest_cert_expiry{job="blackbox-http"} - time() < 14 * 86400
         for: 1h

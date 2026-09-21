@@ -15,6 +15,10 @@ User=ubuntu
 Group=ubuntu
 WorkingDirectory=/opt/12id/von-network
 ExecStart=/opt/12id/von-network/manage start 123.176.58.72
+# indy-vdr-proxy starts with Docker, before the ledger; it does not retry a failed pool connection and
+# answered 502 for 26 h after the 2026-09-20 reboot. Restart it once the validators are up.
+ExecStartPost=/bin/sleep 20
+ExecStartPost=/usr/bin/docker restart edge-vdr-proxy-1
 TimeoutStartSec=300
 
 [Install]

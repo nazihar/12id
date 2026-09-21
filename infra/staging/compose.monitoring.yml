@@ -1,9 +1,10 @@
 # Monitoring stack (W7): Prometheus, Alertmanager, Grafana and exporters.
 #
-#   EXTRA_SECRETS=mediator infra/scripts/deploy.sh monitoring
+#   EXTRA_SECRETS="mediator agent" infra/scripts/deploy.sh monitoring
 #
 # secrets/monitoring.sops.env: GRAFANA_ADMIN_PASSWORD, GMAIL_APP_PASSWORD (added by the owner).
-# EXTRA_SECRETS=mediator: POSTGRES_PASSWORD for postgres-exporter.
+# EXTRA_SECRETS: POSTGRES_PASSWORD (mediator) for the mediator exporters, AGENT_POSTGRES_PASSWORD (agent)
+# for the Phase 6 biometric exporter.
 #
 # Everything listens on 127.0.0.1: Docker-published ports bypass ufw. Only Grafana is
 # exposed, through Caddy with its own login. Reach Prometheus (:9090) and Alertmanager
@@ -36,7 +37,9 @@ services:
     # Alertmanager does not expand env vars in its config; write the SMTP password to a
     # tmpfs file it reads with smtp_auth_password_file. Nothing lands on a volume.
     tmpfs:
-      - /run/smtp
+      # Owned by the image's user (nobody), or the entrypoint cannot write the password file and
+      # Alertmanager restarts forever (found 2026-09-21).
+      - /run/smtp:uid=65534,gid=65534,mode=0700
     entrypoint: ['/bin/sh', '-c']
     command:
       - >-
@@ -90,7 +93,8 @@ services:
     image: ghcr.io/google/cadvisor:v0.60.5
     network_mode: host
     restart: unless-stopped
-    mem_limit: 256m
+    # 256m was too small: it sat at the cap, scrapes timed out (up ~7% of 12 h) and it burned CPU (2026-09-21).
+    mem_limit: 512m
     # cAdvisor needs broad host access to read container cgroups; acceptable on a
     # single-purpose staging VM, revisit for production.
     privileged: true
@@ -143,10 +147,31 @@ services:
     networks:
       - mediator
 
+  # Phase 6 biometric gate metrics from platform-api's biometric log (agent-postgres).
+  postgres-exporter-biometric:
+    image: prometheuscommunity/postgres-exporter:v0.20.1
+    restart: unless-stopped
+    mem_limit: 64m
+    environment:
+      DATA_SOURCE_NAME: postgresql://postgres:${AGENT_POSTGRES_PASSWORD:?run with EXTRA_SECRETS="mediator agent"}@agent-postgres:5432/platform_api?sslmode=disable
+      PG_EXPORTER_EXTEND_QUERY_PATH: /etc/postgres-exporter/queries.yml
+      # Only the custom biometric series; the mediator exporters already report Postgres itself.
+      PG_EXPORTER_DISABLE_DEFAULT_METRICS: 'true'
+      PG_EXPORTER_DISABLE_SETTINGS_METRICS: 'true'
+    volumes:
+      - ./monitoring/postgres-exporter-biometric-queries.yml:/etc/postgres-exporter/queries.yml:ro
+    ports:
+      - '127.0.0.1:9189:9187'
+    networks:
+      - agent
+
 networks:
   mediator:
     external: true
     name: 12id-mediator
+  agent:
+    external: true
+    name: 12id-agent
 
 volumes:
   prometheus-data:

@@ -907,7 +907,7 @@ Plan: [`16-phase-6-biometric.md`](16-phase-6-biometric.md); evidence: [`17-phase
 - [x] B3 platform-api: policies (tenant, credential definition, template), gate engine, biometric log, wallet routes, `biometric.check_completed`
 - [x] B4 Android SDK: `BiometricCapture` port, `verifyFace`, `holder-sdk-android-biometrics-aws` / `-mock`, sample, integration guide. The wallet token is now cached (findings F1)
 - [x] B5 console: settings, policies, Biometric column + log dialog (tenant + operator) deployed; Playwright `biometrics.spec.ts` passes locally
-- [~] B6 infra: compose, secrets, backup + restore drill, runbook; blackbox probe / failed-check alert not added
+- [x] B6 infra: compose, secrets, backup + restore drill, runbook; probe + 5 biometric alerts; alert email to onetwoidadmin@gmail.com works (test alert delivered 2026-09-21)
 - [x] `smoke:biometric-credo` (mock) **PASSED 18/18**; `smoke:sdk-biometric-android` (mock, phone) **PASSED 12/12**; grep check clean
 - [x] `smoke:sdk-biometric-android PROVIDER=aws` on the phone with the owner's AWS account: real liveness 99+, same face match 99.9 → issued, different face 2.7 → refused (findings "AWS run"). A printed or on-screen photo was refused (liveness 0.13, match 99.99), and the AWS capture passed in an R8-shrunk build (`-PminifyDebug`)
 

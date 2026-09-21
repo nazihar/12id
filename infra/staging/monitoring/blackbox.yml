@@ -7,6 +7,13 @@ modules:
       # Default valid_status_codes is any 2xx, which covers the mediator's 202 /health.
       fail_if_not_ssl: true
 
+  # Host-local plain-HTTP health endpoints (Phase 6 biometric-service): same checks, no TLS requirement.
+  http_2xx_local:
+    prober: http
+    timeout: 5s
+    http:
+      preferred_ip_protocol: ip4
+
   tcp_connect:
     prober: tcp
     timeout: 5s

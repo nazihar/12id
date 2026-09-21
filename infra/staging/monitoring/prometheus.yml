@@ -37,6 +37,11 @@ scrape_configs:
     static_configs:
       - targets: ['127.0.0.1:9188']
 
+  # Phase 6 biometric gate (postgres-exporter-biometric-queries.yml).
+  - job_name: postgres-biometric
+    static_configs:
+      - targets: ['127.0.0.1:9189']
+
   # Public HTTPS endpoints, through Caddy. Also feeds certificate-expiry alerts.
   - job_name: blackbox-http
     metrics_path: /probe
@@ -61,6 +66,16 @@ scrape_configs:
         target_label: instance
       - target_label: __address__
         replacement: 127.0.0.1:9115
+
+  # Host-local services without TLS (Phase 6 biometric-service is not published at the edge).
+  - job_name: blackbox-http-local
+    metrics_path: /probe
+    params:
+      module: [http_2xx_local]
+    static_configs:
+      - targets:
+          - http://127.0.0.1:3430/healthz
+    relabel_configs: *blackbox-relabel
 
   # Validator client ports on the public IP. Probed from the VM, so this hairpins through
   # the provider NAT: it proves the ports answer, not that every network can reach them.

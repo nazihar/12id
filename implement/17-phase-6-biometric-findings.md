@@ -16,7 +16,7 @@ Tier vocabulary as in 4-init §0.1: *run* = observed, *source read* = read in co
 | B3 platform-api gate | Built; 58/58 tests; migration `0004_biometric_gate`; deployed |
 | B4 Android SDK + add-ons | Built; SDK JVM 39/39 + `apiCheck`; `:biometrics-aws`, `:biometrics-mock`; sample |
 | B5 console | Built; `tsc`, Vitest 22/22, client-bundle check; deployed (`12id/console:phase6`). Playwright `e2e/biometrics.spec.ts` **passes locally** (see "Console Playwright") |
-| B6 infra | `compose.biometric.yml`, `biometric.sops.env`, backups, runbook `infra/runbooks/biometric-service.md`. **Blackbox probe / failed-check alert not added** |
+| B6 infra | `compose.biometric.yml`, `biometric.sops.env`, backups, runbook `infra/runbooks/biometric-service.md`, monitoring (probe + 5 alerts, see F12) |
 | `smoke:biometric-credo` (mock, staging) | **PASSED 18/18** |
 | `smoke:sdk-biometric-android` (mock, phone) | **PASSED 12/12** |
 | `smoke:sdk-biometric-android` (aws, phone) | **Run:** real pass (match 99.9) and real mismatch refused (match 2.7); script 7/10 because the attempts were done out of order (see "AWS run") |
@@ -143,6 +143,18 @@ The minified release onboards on the phone (`state=Ready`). R8 prints one warnin
 - The biometric log is `exchange_gate_events`, with a `session_id`; `exchange_gates.settled_at` marks that the agent has been told.
 - **Wallet binding** is the same-tenant wallet token plus the DIDComm thread id, as planned. The routing-key binding was not built.
 - **The mock provider** is on in staging (`BIOMETRIC_ENABLE_MOCK=true`); the AWS provider is offered because 12id's principal keys are in `biometric.sops.env`. For now these are the owner's IAM user keys, which the owner will rotate.
+
+**F12 · Monitoring (2026-09-21, *run*).**
+- **Probe.** biometric-service `/healthz` is published on 127.0.0.1:3430 and probed by a new plain-HTTP blackbox module `http_2xx_local` (job `blackbox-http-local`). The public `http_2xx` module requires TLS, and the first attempt failed on exactly that.
+- **Exporter.** A new `postgres-exporter-biometric` (127.0.0.1:9189) reads platform-api's biometric log: `biometric_attempts_last_15m{decision}`, `biometric_vendor_failures_last_15m`, `biometric_gates_unsettled`, `biometric_gates_overdue_pending`.
+- **Alerts:** `BiometricServiceDown`, `BiometricFailureRateHigh`, `BiometricVendorErrors`, `BiometricGateStuck`, `BiometricExpiryStalled`. Validated with promtool (19 rules); all inactive against live data.
+
+Found on the way, all pre-existing:
+- **Alertmanager** had been restarting forever: the image runs as `nobody` and the `/run/smtp` tmpfs was root-owned. Fixed with `uid=65534,gid=65534,mode=0700`.
+- **indy-vdr-proxy** answered 502 for 26 h: it started before the ledger after the reboot and never retries its pool connection. Restarted, and the ledger boot unit now restarts it after the validators.
+- **cAdvisor** sat at its 256 MiB cap: scrapes timed out (up about 7% of 12 h) and it used about 40% CPU. Raised to 512 MiB; the VM load fell from about 5.8 to about 2.
+
+**Email delivery works (2026-09-21):** the owner added `GMAIL_APP_PASSWORD` with the new `infra/scripts/set-secret.sh`, which prompts for the value hidden and needs no editor. A test alert was sent to onetwoidadmin@gmail.com: `alertmanager_notifications_total{integration="email"} 1`, 0 failed.
 
 ## Evidence
 

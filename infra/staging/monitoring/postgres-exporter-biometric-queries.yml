@@ -1,0 +1,52 @@
+# Phase 6 biometric gate metrics, read from platform-api's biometric log (database platform_api on
+# agent-postgres). Every series is always emitted (0 when empty) so alerts do not go stale.
+
+# biometric_attempts_last_15m{decision}: face-check attempts decided in the last 15 minutes.
+biometric_attempts:
+  query: |
+    SELECT d.decision, COALESCE(e.n, 0) AS last_15m
+    FROM (VALUES ('passed'), ('failed')) AS d(decision)
+    LEFT JOIN (
+      SELECT decision, count(*) AS n
+      FROM exchange_gate_events
+      WHERE type = 'attempt_completed' AND at > now() - interval '15 minutes'
+      GROUP BY decision
+    ) e USING (decision)
+  metrics:
+    - decision:
+        usage: LABEL
+        description: passed or failed
+    - last_15m:
+        usage: GAUGE
+        description: Attempts decided in the last 15 minutes
+
+# biometric_vendor_failures_last_15m: attempts the vendor itself failed or expired (not a mismatch).
+biometric_vendor_failures:
+  query: |
+    SELECT count(*) AS last_15m
+    FROM exchange_gate_events
+    WHERE type = 'attempt_completed' AND reason IN ('vendor_failed', 'vendor_expired') AND at > now() - interval '15 minutes'
+  metrics:
+    - last_15m:
+        usage: GAUGE
+        description: Vendor-side failures in the last 15 minutes
+
+# biometric_gates_unsettled: decided more than 10 minutes ago, but the agent was never told (issue,
+#   accept or abandon failing): holders wait forever.
+# biometric_gates_overdue_pending: pending more than 10 minutes past expiry (the expiry loop is not running).
+biometric_gates:
+  query: |
+    SELECT
+      count(*) FILTER (
+        WHERE settled_at IS NULL AND decided_at < now() - interval '10 minutes'
+          AND (status IN ('failed', 'expired') OR (status = 'passed' AND hold_reached_at IS NOT NULL))
+      ) AS unsettled,
+      count(*) FILTER (WHERE status = 'pending' AND expires_at < now() - interval '10 minutes') AS overdue_pending
+    FROM exchange_gates
+  metrics:
+    - unsettled:
+        usage: GAUGE
+        description: Decided gates whose exchange was never released or abandoned
+    - overdue_pending:
+        usage: GAUGE
+        description: Pending gates more than 10 minutes past their expiry
