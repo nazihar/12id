@@ -18,8 +18,9 @@ Phase 2 adds the agent stack's own Postgres (`agent-postgres`), dumped to `agent
 | `agent_root` | agent-service root Askar store: every tenant's keys, DIDs, connections, cred def private keys, exchange records | Tenants cannot issue against their published cred defs (private keys gone); all holder connections dead |
 | `agent_service` | tenants, catalogue (both id forms), outbox | Platform loses the mapping from catalogue ids to ledger objects |
 | `endorser_service` | tenant→DID bindings, endorsement audit | The endorser refuses every tenant until bindings are restored; audit trail lost |
+| `biometric` (Phase 6) | tenants' biometric vendor config and reference images, both AES-GCM with per-tenant keys wrapped by `BIOMETRIC_MASTER_KEY`; sessions, scores, decisions | Tenants re-enter their provider; pending face checks fail and their exchanges are re-offered. Scores stay in platform-api's biometric log |
 
-Restore of `agent_root` needs `AGENT_ASKAR_STORE_KEY` from `secrets/agent.sops.env`.
+Restore of `agent_root` needs `AGENT_ASKAR_STORE_KEY` from `secrets/agent.sops.env`. Reading anything encrypted in `biometric` needs `BIOMETRIC_MASTER_KEY` from `secrets/biometric.sops.env`, which is not in the dump: a restored dump alone exposes no face image. Reference images live only about 30 minutes (until the decision or the check's expiry), so most dumps hold none.
 
 Each dump is `pg_dump --format=custom`, piped straight into `age` with the VM's age recipient, so no plaintext dump touches disk. Output goes to `/opt/12id/backups/<UTC timestamp>/` with a `SHA256SUMS` file. Directories older than 7 days are deleted.
 

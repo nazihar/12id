@@ -33,6 +33,12 @@ class DebugReceiver : BroadcastReceiver() {
                     }
                     "DECLINE_PROOFS" -> OneTwoId.pendingProofRequests().forEach { OneTwoId.declineProofRequest(it.id) }
                     "WIPE_WALLET_KEEP_STATE" -> wipeWalletKeepState(context)
+                    // Phase 6: preset the mock capture (same|other|none|not-live) and run every pending face check.
+                    // Needs MainActivity in the foreground (am start first): a capture shows UI.
+                    "VERIFY_FACES" -> {
+                        Captures.mockPreset = intent.getStringExtra("preset")
+                        SampleCommands.verifyAll.emit(Unit)
+                    }
                     "DUMP" -> Unit
                 }
                 Log.i(SampleApp.TAG, "dump ${dump()}")
@@ -52,8 +58,8 @@ class DebugReceiver : BroadcastReceiver() {
         return json
             .put("connections", JSONArray(OneTwoId.connections().map { JSONObject().put("id", it.id).put("label", it.label).put("status", it.status.name) }))
             .put("credentials", JSONArray(OneTwoId.credentials().map { JSONObject().put("id", it.id).put("credentialDefinitionId", it.credentialDefinitionId).put("attributes", JSONObject(it.attributes)) }))
-            .put("offers", JSONArray(OneTwoId.pendingOffers().map { JSONObject().put("id", it.id).put("attributes", JSONObject(it.attributes)) }))
-            .put("proofRequests", JSONArray(OneTwoId.pendingProofRequests().map { JSONObject().put("id", it.id).put("name", it.name) }))
+            .put("offers", JSONArray(OneTwoId.pendingOffers().map { JSONObject().put("id", it.id).put("attributes", JSONObject(it.attributes)).put("biometric", it.biometric?.let { b -> JSONObject().put("status", b.status.name).put("attemptsRemaining", b.attemptsRemaining).put("provider", b.provider) }) }))
+            .put("proofRequests", JSONArray(OneTwoId.pendingProofRequests().map { JSONObject().put("id", it.id).put("name", it.name).put("biometric", it.biometric?.let { b -> JSONObject().put("status", b.status.name).put("attemptsRemaining", b.attemptsRemaining).put("provider", b.provider) }) }))
     }
 
     /**

@@ -14,9 +14,16 @@ export type SchemaRow = Ok<'/v1/schemas', 'get'>[number]
 export type CredentialDefinitionRow = Ok<'/v1/credential-definitions', 'get'>[number]
 export type TemplateRow = Ok<'/v1/proof-templates', 'get'>[number]
 export type WebhookEndpoint = Ok<'/v1/webhook', 'get'>
+// Phase 6 biometric gate.
+export type BiometricLog = Ok<'/v1/credentials/{id}/biometric-log', 'get'>
+export type BiometricLogEvent = BiometricLog['events'][number]
+export type BiometricSettings = Ok<'/v1/biometrics', 'get'>
+export type BiometricProviderEntry = Ok<'/v1/biometrics/providers', 'get'>['providers'][number]
+export type CredentialDefinitionBiometricPolicy = Ok<'/v1/credential-definitions/{id}/biometric-policy', 'get'>
+export type ExchangeKind = 'credential' | 'proof'
 
 export const DELIVERY_STATUSES = ['pending', 'sending', 'delivered', 'dead'] as const
 export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number]
 
-export const WEBHOOK_EVENT_TYPES = ['connection.state_changed', 'credential.state_changed', 'proof.state_changed', 'wallet.sync_requested'] as const
+export const WEBHOOK_EVENT_TYPES = ['connection.state_changed', 'credential.state_changed', 'proof.state_changed', 'wallet.sync_requested', 'biometric.check_completed'] as const
 export type WebhookEventType = (typeof WEBHOOK_EVENT_TYPES)[number]

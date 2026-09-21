@@ -38,4 +38,6 @@ dependencyResolutionManagement {
 rootProject.name = "12id-sdk-android"
 include ':ariesframework'
 include ':sdk'
+include ':biometrics-mock'
+include ':biometrics-aws'
 include ':sample'

@@ -1,0 +1,2 @@
+# spike state (role ARN, external id, session ids): local only
+*.local.json

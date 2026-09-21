@@ -1095,6 +1095,21 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 200
+                  },
+                  "biometric": {
+                    "description": "Required when the biometric policy for this credential definition or proof template applies; ignored otherwise.",
+                    "type": "object",
+                    "properties": {
+                      "referenceImage": {
+                        "type": "string",
+                        "minLength": 100,
+                        "maxLength": 7000000,
+                        "description": "Base64 JPEG or PNG, at most 5 MB decoded, one face."
+                      }
+                    },
+                    "required": [
+                      "referenceImage"
+                    ]
                   }
                 },
                 "required": [
@@ -1166,6 +1181,91 @@
                         "null"
                       ]
                     },
+                    "biometric": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "required": {
+                              "type": "boolean",
+                              "enum": [
+                                true
+                              ]
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "pending",
+                                "passed",
+                                "failed",
+                                "expired",
+                                "cancelled"
+                              ]
+                            },
+                            "attempts": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "attemptsRemaining": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "livenessScore": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "matchScore": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "reason": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "expiresAt": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            },
+                            "decidedAt": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "required",
+                            "status",
+                            "attempts",
+                            "attemptsRemaining",
+                            "livenessScore",
+                            "matchScore",
+                            "reason",
+                            "expiresAt",
+                            "decidedAt"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time",
@@ -1186,6 +1286,7 @@
                     "credentialDefinitionId",
                     "attributes",
                     "errorMessage",
+                    "biometric",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -1241,6 +1342,29 @@
             }
           },
           "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "422": {
             "description": "Default Response",
             "content": {
               "application/json": {
@@ -1363,6 +1487,91 @@
                           "null"
                         ]
                       },
+                      "biometric": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "required": {
+                                "type": "boolean",
+                                "enum": [
+                                  true
+                                ]
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "pending",
+                                  "passed",
+                                  "failed",
+                                  "expired",
+                                  "cancelled"
+                                ]
+                              },
+                              "attempts": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "attemptsRemaining": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "livenessScore": {
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              },
+                              "matchScore": {
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              },
+                              "reason": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "expiresAt": {
+                                "type": "string",
+                                "format": "date-time",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                              },
+                              "decidedAt": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "format": "date-time",
+                                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "required",
+                              "status",
+                              "attempts",
+                              "attemptsRemaining",
+                              "livenessScore",
+                              "matchScore",
+                              "reason",
+                              "expiresAt",
+                              "decidedAt"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time",
@@ -1383,6 +1592,7 @@
                       "credentialDefinitionId",
                       "attributes",
                       "errorMessage",
+                      "biometric",
                       "createdAt",
                       "updatedAt"
                     ],
@@ -1473,6 +1683,91 @@
                         "null"
                       ]
                     },
+                    "biometric": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "required": {
+                              "type": "boolean",
+                              "enum": [
+                                true
+                              ]
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "pending",
+                                "passed",
+                                "failed",
+                                "expired",
+                                "cancelled"
+                              ]
+                            },
+                            "attempts": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "attemptsRemaining": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "livenessScore": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "matchScore": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "reason": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "expiresAt": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            },
+                            "decidedAt": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "required",
+                            "status",
+                            "attempts",
+                            "attemptsRemaining",
+                            "livenessScore",
+                            "matchScore",
+                            "reason",
+                            "expiresAt",
+                            "decidedAt"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time",
@@ -1493,6 +1788,7 @@
                     "credentialDefinitionId",
                     "attributes",
                     "errorMessage",
+                    "biometric",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -1671,6 +1967,21 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 200
+                  },
+                  "biometric": {
+                    "description": "Required when the biometric policy for this credential definition or proof template applies; ignored otherwise.",
+                    "type": "object",
+                    "properties": {
+                      "referenceImage": {
+                        "type": "string",
+                        "minLength": 100,
+                        "maxLength": 7000000,
+                        "description": "Base64 JPEG or PNG, at most 5 MB decoded, one face."
+                      }
+                    },
+                    "required": [
+                      "referenceImage"
+                    ]
                   }
                 },
                 "required": [
@@ -1752,6 +2063,91 @@
                         "null"
                       ]
                     },
+                    "biometric": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "required": {
+                              "type": "boolean",
+                              "enum": [
+                                true
+                              ]
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "pending",
+                                "passed",
+                                "failed",
+                                "expired",
+                                "cancelled"
+                              ]
+                            },
+                            "attempts": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "attemptsRemaining": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "livenessScore": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "matchScore": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "reason": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "expiresAt": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            },
+                            "decidedAt": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "required",
+                            "status",
+                            "attempts",
+                            "attemptsRemaining",
+                            "livenessScore",
+                            "matchScore",
+                            "reason",
+                            "expiresAt",
+                            "decidedAt"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time",
@@ -1773,6 +2169,7 @@
                     "verified",
                     "disclosed",
                     "errorMessage",
+                    "biometric",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -1828,6 +2225,29 @@
             }
           },
           "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "422": {
             "description": "Default Response",
             "content": {
               "application/json": {
@@ -1962,6 +2382,91 @@
                           "null"
                         ]
                       },
+                      "biometric": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "required": {
+                                "type": "boolean",
+                                "enum": [
+                                  true
+                                ]
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "pending",
+                                  "passed",
+                                  "failed",
+                                  "expired",
+                                  "cancelled"
+                                ]
+                              },
+                              "attempts": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "attemptsRemaining": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "livenessScore": {
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              },
+                              "matchScore": {
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              },
+                              "reason": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "expiresAt": {
+                                "type": "string",
+                                "format": "date-time",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                              },
+                              "decidedAt": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "format": "date-time",
+                                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "required",
+                              "status",
+                              "attempts",
+                              "attemptsRemaining",
+                              "livenessScore",
+                              "matchScore",
+                              "reason",
+                              "expiresAt",
+                              "decidedAt"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time",
@@ -1983,6 +2488,7 @@
                       "verified",
                       "disclosed",
                       "errorMessage",
+                      "biometric",
                       "createdAt",
                       "updatedAt"
                     ],
@@ -2085,6 +2591,91 @@
                         "null"
                       ]
                     },
+                    "biometric": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "required": {
+                              "type": "boolean",
+                              "enum": [
+                                true
+                              ]
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "pending",
+                                "passed",
+                                "failed",
+                                "expired",
+                                "cancelled"
+                              ]
+                            },
+                            "attempts": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "attemptsRemaining": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "livenessScore": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "matchScore": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "reason": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "expiresAt": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            },
+                            "decidedAt": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "required",
+                            "status",
+                            "attempts",
+                            "attemptsRemaining",
+                            "livenessScore",
+                            "matchScore",
+                            "reason",
+                            "expiresAt",
+                            "decidedAt"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time",
@@ -2106,8 +2697,1667 @@
                     "verified",
                     "disclosed",
                     "errorMessage",
+                    "biometric",
                     "createdAt",
                     "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/credentials/{id}/biometric-log": {
+      "get": {
+        "summary": "Biometric log of a credential exchange",
+        "tags": [
+          "credentials"
+        ],
+        "description": "Every step of the biometric gate for this exchange, oldest first: attempts with liveness and match scores against the thresholds, decisions, and what the platform did with the exchange. Never contains images. `biometric` is null when the exchange was not gated.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "biometric": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "required": {
+                              "type": "boolean",
+                              "enum": [
+                                true
+                              ]
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "pending",
+                                "passed",
+                                "failed",
+                                "expired",
+                                "cancelled"
+                              ]
+                            },
+                            "attempts": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "attemptsRemaining": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "livenessScore": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "matchScore": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "reason": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "expiresAt": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            },
+                            "decidedAt": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "required",
+                            "status",
+                            "attempts",
+                            "attemptsRemaining",
+                            "livenessScore",
+                            "matchScore",
+                            "reason",
+                            "expiresAt",
+                            "decidedAt"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "events": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                          },
+                          "type": {
+                            "type": "string"
+                          },
+                          "attempt": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "providerId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "vendorSessionId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "livenessScore": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "matchScore": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "thresholds": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "minLivenessScore": {
+                                    "type": "number"
+                                  },
+                                  "minMatchScore": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "minLivenessScore",
+                                  "minMatchScore"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "decision": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "reason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "at",
+                          "type",
+                          "attempt",
+                          "providerId",
+                          "vendorSessionId",
+                          "livenessScore",
+                          "matchScore",
+                          "thresholds",
+                          "decision",
+                          "reason"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "biometric",
+                    "events"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/proofs/{id}/biometric-log": {
+      "get": {
+        "summary": "Biometric log of a proof exchange",
+        "tags": [
+          "proofs"
+        ],
+        "description": "Every step of the biometric gate for this exchange, oldest first: attempts with liveness and match scores against the thresholds, decisions, and what the platform did with the exchange. Never contains images. `biometric` is null when the exchange was not gated.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "biometric": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "required": {
+                              "type": "boolean",
+                              "enum": [
+                                true
+                              ]
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "pending",
+                                "passed",
+                                "failed",
+                                "expired",
+                                "cancelled"
+                              ]
+                            },
+                            "attempts": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "attemptsRemaining": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "livenessScore": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "matchScore": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "reason": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "expiresAt": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            },
+                            "decidedAt": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "required",
+                            "status",
+                            "attempts",
+                            "attemptsRemaining",
+                            "livenessScore",
+                            "matchScore",
+                            "reason",
+                            "expiresAt",
+                            "decidedAt"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "events": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                          },
+                          "type": {
+                            "type": "string"
+                          },
+                          "attempt": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "providerId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "vendorSessionId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "livenessScore": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "matchScore": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "thresholds": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "minLivenessScore": {
+                                    "type": "number"
+                                  },
+                                  "minMatchScore": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "minLivenessScore",
+                                  "minMatchScore"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "decision": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "reason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "at",
+                          "type",
+                          "attempt",
+                          "providerId",
+                          "vendorSessionId",
+                          "livenessScore",
+                          "matchScore",
+                          "thresholds",
+                          "decision",
+                          "reason"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "biometric",
+                    "events"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/biometrics": {
+      "get": {
+        "summary": "Biometric settings",
+        "tags": [
+          "biometrics",
+          "console-only"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "defaultPolicy": {
+                      "type": "object",
+                      "properties": {
+                        "required": {
+                          "type": "boolean"
+                        },
+                        "minMatchScore": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "minLivenessScore": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "maxAttempts": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 5
+                        },
+                        "ttlMinutes": {
+                          "type": "integer",
+                          "minimum": 5,
+                          "maximum": 1440
+                        }
+                      },
+                      "required": [
+                        "required",
+                        "minMatchScore",
+                        "minLivenessScore",
+                        "maxAttempts",
+                        "ttlMinutes"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "externalId": {
+                      "type": "string"
+                    },
+                    "provider": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "publicConfig": {
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string"
+                              },
+                              "additionalProperties": {}
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "untested",
+                                "ok",
+                                "failed"
+                              ]
+                            },
+                            "lastTestedAt": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "lastError": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "publicConfig",
+                            "status",
+                            "lastTestedAt",
+                            "lastError"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "enabled",
+                    "defaultPolicy",
+                    "externalId",
+                    "provider"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/biometrics/settings": {
+      "put": {
+        "summary": "Switch biometrics on or off and set the default policy",
+        "tags": [
+          "biometrics",
+          "console-only"
+        ],
+        "description": "Switching on needs a provider whose connection test passed.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "defaultPolicy": {
+                    "type": "object",
+                    "properties": {
+                      "required": {
+                        "type": "boolean"
+                      },
+                      "minMatchScore": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 100
+                      },
+                      "minLivenessScore": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 100
+                      },
+                      "maxAttempts": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 5
+                      },
+                      "ttlMinutes": {
+                        "type": "integer",
+                        "minimum": 5,
+                        "maximum": 1440
+                      }
+                    },
+                    "required": [
+                      "required",
+                      "minMatchScore",
+                      "minLivenessScore",
+                      "maxAttempts",
+                      "ttlMinutes"
+                    ]
+                  }
+                },
+                "required": [
+                  "enabled",
+                  "defaultPolicy"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "defaultPolicy": {
+                      "type": "object",
+                      "properties": {
+                        "required": {
+                          "type": "boolean"
+                        },
+                        "minMatchScore": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "minLivenessScore": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "maxAttempts": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 5
+                        },
+                        "ttlMinutes": {
+                          "type": "integer",
+                          "minimum": 5,
+                          "maximum": 1440
+                        }
+                      },
+                      "required": [
+                        "required",
+                        "minMatchScore",
+                        "minLivenessScore",
+                        "maxAttempts",
+                        "ttlMinutes"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "externalId": {
+                      "type": "string"
+                    },
+                    "provider": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "publicConfig": {
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string"
+                              },
+                              "additionalProperties": {}
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "untested",
+                                "ok",
+                                "failed"
+                              ]
+                            },
+                            "lastTestedAt": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "lastError": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "publicConfig",
+                            "status",
+                            "lastTestedAt",
+                            "lastError"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "enabled",
+                    "defaultPolicy",
+                    "externalId",
+                    "provider"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/biometrics/providers": {
+      "get": {
+        "summary": "Biometric providers offered by this deployment",
+        "tags": [
+          "biometrics",
+          "console-only"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "providers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "displayName": {
+                            "type": "string"
+                          },
+                          "configSchema": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          },
+                          "captureModule": {
+                            "type": "object",
+                            "properties": {
+                              "provider": {
+                                "type": "string"
+                              },
+                              "minVersion": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "provider",
+                              "minVersion"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "displayName",
+                          "configSchema",
+                          "captureModule"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "providers"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/biometrics/provider": {
+      "put": {
+        "summary": "Configure the biometric provider",
+        "tags": [
+          "biometrics",
+          "console-only"
+        ],
+        "description": "Write-only: the configuration is stored encrypted in biometric-service and only its non-secret part is ever returned. A new configuration must pass its connection test before gating resumes.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "providerId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "config": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {}
+                  }
+                },
+                "required": [
+                  "providerId",
+                  "config"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "defaultPolicy": {
+                      "type": "object",
+                      "properties": {
+                        "required": {
+                          "type": "boolean"
+                        },
+                        "minMatchScore": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "minLivenessScore": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "maxAttempts": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 5
+                        },
+                        "ttlMinutes": {
+                          "type": "integer",
+                          "minimum": 5,
+                          "maximum": 1440
+                        }
+                      },
+                      "required": [
+                        "required",
+                        "minMatchScore",
+                        "minLivenessScore",
+                        "maxAttempts",
+                        "ttlMinutes"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "externalId": {
+                      "type": "string"
+                    },
+                    "provider": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "publicConfig": {
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string"
+                              },
+                              "additionalProperties": {}
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "untested",
+                                "ok",
+                                "failed"
+                              ]
+                            },
+                            "lastTestedAt": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "lastError": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "publicConfig",
+                            "status",
+                            "lastTestedAt",
+                            "lastError"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "enabled",
+                    "defaultPolicy",
+                    "externalId",
+                    "provider"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Remove the biometric provider",
+        "tags": [
+          "biometrics",
+          "console-only"
+        ],
+        "description": "Also switches biometrics off.",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "defaultPolicy": {
+                      "type": "object",
+                      "properties": {
+                        "required": {
+                          "type": "boolean"
+                        },
+                        "minMatchScore": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "minLivenessScore": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "maxAttempts": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 5
+                        },
+                        "ttlMinutes": {
+                          "type": "integer",
+                          "minimum": 5,
+                          "maximum": 1440
+                        }
+                      },
+                      "required": [
+                        "required",
+                        "minMatchScore",
+                        "minLivenessScore",
+                        "maxAttempts",
+                        "ttlMinutes"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "externalId": {
+                      "type": "string"
+                    },
+                    "provider": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "publicConfig": {
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string"
+                              },
+                              "additionalProperties": {}
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "untested",
+                                "ok",
+                                "failed"
+                              ]
+                            },
+                            "lastTestedAt": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "lastError": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "publicConfig",
+                            "status",
+                            "lastTestedAt",
+                            "lastError"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "enabled",
+                    "defaultPolicy",
+                    "externalId",
+                    "provider"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/biometrics/provider/test": {
+      "post": {
+        "summary": "Test the biometric provider connection",
+        "tags": [
+          "biometrics",
+          "console-only"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "untested",
+                        "ok",
+                        "failed"
+                      ]
+                    },
+                    "error": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/biometrics/adoption": {
+      "get": {
+        "summary": "Capture add-ons reported by this tenant's wallets",
+        "tags": [
+          "biometrics",
+          "console-only"
+        ],
+        "description": "How many active wallets reported each capture add-on. Check it before switching provider: an app without the new add-on cannot pass the check.",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "walletsReporting": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "modules": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "module": {
+                            "type": "string"
+                          },
+                          "wallets": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "module",
+                          "wallets"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "walletsReporting",
+                    "modules"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/credential-definitions/{id}/biometric-policy": {
+      "get": {
+        "summary": "Biometric policy of a credential definition",
+        "tags": [
+          "catalogue"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "credentialDefinitionId": {
+                      "type": "string"
+                    },
+                    "biometricPolicy": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "inherit"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "mode"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "off"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "mode"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "required"
+                              ]
+                            },
+                            "minMatchScore": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 100
+                            },
+                            "minLivenessScore": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 100
+                            },
+                            "maxAttempts": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 5
+                            },
+                            "ttlMinutes": {
+                              "type": "integer",
+                              "minimum": 5,
+                              "maximum": 1440
+                            }
+                          },
+                          "required": [
+                            "mode"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "credentialDefinitionId",
+                    "biometricPolicy"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Set the biometric policy of a credential definition",
+        "tags": [
+          "catalogue"
+        ],
+        "description": "`inherit` follows the tenant default, `off` never gates, `required` gates with the given thresholds (missing values come from the tenant default). Applies to offers made after the change.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "enum": [
+                          "inherit"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "mode"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "enum": [
+                          "off"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "mode"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "enum": [
+                          "required"
+                        ]
+                      },
+                      "minMatchScore": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 100
+                      },
+                      "minLivenessScore": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 100
+                      },
+                      "maxAttempts": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 5
+                      },
+                      "ttlMinutes": {
+                        "type": "integer",
+                        "minimum": 5,
+                        "maximum": 1440
+                      }
+                    },
+                    "required": [
+                      "mode"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "credentialDefinitionId": {
+                      "type": "string"
+                    },
+                    "biometricPolicy": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "inherit"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "mode"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "off"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "mode"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "required"
+                              ]
+                            },
+                            "minMatchScore": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 100
+                            },
+                            "minLivenessScore": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 100
+                            },
+                            "maxAttempts": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 5
+                            },
+                            "ttlMinutes": {
+                              "type": "integer",
+                              "minimum": 5,
+                              "maximum": 1440
+                            }
+                          },
+                          "required": [
+                            "mode"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "credentialDefinitionId",
+                    "biometricPolicy"
                   ],
                   "additionalProperties": false
                 }
@@ -2146,7 +4396,7 @@
         "tags": [
           "proofs"
         ],
-        "description": "Each group discloses attributes from one credential and may add integer predicates. Credentials are referenced by schema name (all versions, or active only) or by credential definition id. `expiresAt` is always predicated and can never be disclosed.",
+        "description": "Each group discloses attributes from one credential and may add integer predicates. Credentials are referenced by schema name (all versions, or active only) or by credential definition id. `expiresAt` is always predicated and can never be disclosed. `biometricPolicy` (optional) overrides the tenant's biometric default for requests made from this template.",
         "requestBody": {
           "required": true,
           "content": {
@@ -2260,6 +4510,72 @@
                         "credentials"
                       ]
                     }
+                  },
+                  "biometricPolicy": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "mode": {
+                            "type": "string",
+                            "enum": [
+                              "inherit"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "mode"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "mode": {
+                            "type": "string",
+                            "enum": [
+                              "off"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "mode"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "mode": {
+                            "type": "string",
+                            "enum": [
+                              "required"
+                            ]
+                          },
+                          "minMatchScore": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 100
+                          },
+                          "minLivenessScore": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 100
+                          },
+                          "maxAttempts": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 5
+                          },
+                          "ttlMinutes": {
+                            "type": "integer",
+                            "minimum": 5,
+                            "maximum": 1440
+                          }
+                        },
+                        "required": [
+                          "mode"
+                        ]
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -2407,6 +4723,75 @@
                       ],
                       "additionalProperties": false
                     },
+                    "biometricPolicy": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "inherit"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "mode"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "off"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "mode"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "required"
+                              ]
+                            },
+                            "minMatchScore": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 100
+                            },
+                            "minLivenessScore": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 100
+                            },
+                            "maxAttempts": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 5
+                            },
+                            "ttlMinutes": {
+                              "type": "integer",
+                              "minimum": 5,
+                              "maximum": 1440
+                            }
+                          },
+                          "required": [
+                            "mode"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time",
@@ -2422,6 +4807,7 @@
                     "id",
                     "name",
                     "definition",
+                    "biometricPolicy",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -2599,6 +4985,75 @@
                         ],
                         "additionalProperties": false
                       },
+                      "biometricPolicy": {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "mode": {
+                                "type": "string",
+                                "enum": [
+                                  "inherit"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "mode"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "mode": {
+                                "type": "string",
+                                "enum": [
+                                  "off"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "mode"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "mode": {
+                                "type": "string",
+                                "enum": [
+                                  "required"
+                                ]
+                              },
+                              "minMatchScore": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 100
+                              },
+                              "minLivenessScore": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 100
+                              },
+                              "maxAttempts": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 5
+                              },
+                              "ttlMinutes": {
+                                "type": "integer",
+                                "minimum": 5,
+                                "maximum": 1440
+                              }
+                            },
+                            "required": [
+                              "mode"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time",
@@ -2614,6 +5069,7 @@
                       "id",
                       "name",
                       "definition",
+                      "biometricPolicy",
                       "createdAt",
                       "updatedAt"
                     ],
@@ -2781,6 +5237,75 @@
                       ],
                       "additionalProperties": false
                     },
+                    "biometricPolicy": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "inherit"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "mode"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "off"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "mode"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "required"
+                              ]
+                            },
+                            "minMatchScore": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 100
+                            },
+                            "minLivenessScore": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 100
+                            },
+                            "maxAttempts": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 5
+                            },
+                            "ttlMinutes": {
+                              "type": "integer",
+                              "minimum": 5,
+                              "maximum": 1440
+                            }
+                          },
+                          "required": [
+                            "mode"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time",
@@ -2796,6 +5321,7 @@
                     "id",
                     "name",
                     "definition",
+                    "biometricPolicy",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -2947,6 +5473,72 @@
                         "credentials"
                       ]
                     }
+                  },
+                  "biometricPolicy": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "mode": {
+                            "type": "string",
+                            "enum": [
+                              "inherit"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "mode"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "mode": {
+                            "type": "string",
+                            "enum": [
+                              "off"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "mode"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "mode": {
+                            "type": "string",
+                            "enum": [
+                              "required"
+                            ]
+                          },
+                          "minMatchScore": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 100
+                          },
+                          "minLivenessScore": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 100
+                          },
+                          "maxAttempts": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 5
+                          },
+                          "ttlMinutes": {
+                            "type": "integer",
+                            "minimum": 5,
+                            "maximum": 1440
+                          }
+                        },
+                        "required": [
+                          "mode"
+                        ]
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -3106,6 +5698,75 @@
                       ],
                       "additionalProperties": false
                     },
+                    "biometricPolicy": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "inherit"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "mode"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "off"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "mode"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "required"
+                              ]
+                            },
+                            "minMatchScore": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 100
+                            },
+                            "minLivenessScore": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 100
+                            },
+                            "maxAttempts": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 5
+                            },
+                            "ttlMinutes": {
+                              "type": "integer",
+                              "minimum": 5,
+                              "maximum": 1440
+                            }
+                          },
+                          "required": [
+                            "mode"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time",
@@ -3121,6 +5782,7 @@
                     "id",
                     "name",
                     "definition",
+                    "biometricPolicy",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -3208,6 +5870,346 @@
                   },
                   "required": [
                     "deleted"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/proof-templates/{id}/biometric-policy": {
+      "get": {
+        "summary": "Biometric policy of a proof template",
+        "tags": [
+          "proofs"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "templateId": {
+                      "type": "string"
+                    },
+                    "biometricPolicy": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "inherit"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "mode"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "off"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "mode"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "required"
+                              ]
+                            },
+                            "minMatchScore": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 100
+                            },
+                            "minLivenessScore": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 100
+                            },
+                            "maxAttempts": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 5
+                            },
+                            "ttlMinutes": {
+                              "type": "integer",
+                              "minimum": 5,
+                              "maximum": 1440
+                            }
+                          },
+                          "required": [
+                            "mode"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "templateId",
+                    "biometricPolicy"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Set the biometric policy of a proof template",
+        "tags": [
+          "proofs"
+        ],
+        "description": "`inherit` follows the tenant default, `off` never gates, `required` gates with the given thresholds. Applies to proof requests made from this template after the change.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "enum": [
+                          "inherit"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "mode"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "enum": [
+                          "off"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "mode"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "enum": [
+                          "required"
+                        ]
+                      },
+                      "minMatchScore": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 100
+                      },
+                      "minLivenessScore": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 100
+                      },
+                      "maxAttempts": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 5
+                      },
+                      "ttlMinutes": {
+                        "type": "integer",
+                        "minimum": 5,
+                        "maximum": 1440
+                      }
+                    },
+                    "required": [
+                      "mode"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "templateId": {
+                      "type": "string"
+                    },
+                    "biometricPolicy": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "inherit"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "mode"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "off"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "mode"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "required"
+                              ]
+                            },
+                            "minMatchScore": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 100
+                            },
+                            "minLivenessScore": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 100
+                            },
+                            "maxAttempts": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 5
+                            },
+                            "ttlMinutes": {
+                              "type": "integer",
+                              "minimum": 5,
+                              "maximum": 1440
+                            }
+                          },
+                          "required": [
+                            "mode"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "templateId",
+                    "biometricPolicy"
                   ],
                   "additionalProperties": false
                 }
@@ -3684,7 +6686,8 @@
                         "connection.state_changed",
                         "credential.state_changed",
                         "proof.state_changed",
-                        "wallet.sync_requested"
+                        "wallet.sync_requested",
+                        "biometric.check_completed"
                       ]
                     }
                   }
@@ -3717,7 +6720,8 @@
                               "connection.state_changed",
                               "credential.state_changed",
                               "proof.state_changed",
-                              "wallet.sync_requested"
+                              "wallet.sync_requested",
+                              "biometric.check_completed"
                             ]
                           }
                         },
@@ -3779,7 +6783,8 @@
                               "connection.state_changed",
                               "credential.state_changed",
                               "proof.state_changed",
-                              "wallet.sync_requested"
+                              "wallet.sync_requested",
+                              "biometric.check_completed"
                             ]
                           }
                         },
@@ -5223,6 +8228,415 @@
         }
       }
     },
+    "/v1/wallet/biometric-requirements": {
+      "get": {
+        "summary": "Biometric checks for exchanges this wallet holds",
+        "tags": [
+          "wallet (SDK)"
+        ],
+        "description": "The SDK asks by DIDComm thread id when an offer or proof request arrives. Threads without a check are omitted.",
+        "parameters": [
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                {
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                }
+              ]
+            },
+            "in": "query",
+            "name": "threadId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "walletToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "requirements": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "threadId": {
+                            "type": "string"
+                          },
+                          "recordType": {
+                            "type": "string",
+                            "enum": [
+                              "credential",
+                              "proof"
+                            ]
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "attemptsRemaining": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "captureProvider": {
+                            "type": "string"
+                          },
+                          "expiresAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                          }
+                        },
+                        "required": [
+                          "threadId",
+                          "recordType",
+                          "status",
+                          "attemptsRemaining",
+                          "captureProvider",
+                          "expiresAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "requirements"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/wallet/biometric-sessions": {
+      "post": {
+        "summary": "Start a biometric capture session",
+        "tags": [
+          "wallet (SDK)"
+        ],
+        "description": "Uses one attempt. `captureModules` lists the capture add-ons the app includes; `clientConfig` is for that add-on only.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "threadId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "captureModules": {
+                    "maxItems": 10,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "provider": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
+                        },
+                        "version": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "provider",
+                        "version"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "threadId",
+                  "captureModules"
+                ]
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "walletToken": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sessionId": {
+                      "type": "string"
+                    },
+                    "provider": {
+                      "type": "string"
+                    },
+                    "clientConfig": {},
+                    "attempt": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "attemptsRemaining": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "sessionId",
+                    "provider",
+                    "clientConfig",
+                    "attempt",
+                    "attemptsRemaining"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/wallet/biometric-sessions/{id}/complete": {
+      "post": {
+        "summary": "Complete a biometric capture session",
+        "tags": [
+          "wallet (SDK)"
+        ],
+        "description": "The platform fetches the result from the vendor itself; `clientOutput` is only what the add-on returned. 409 `result_not_ready` means the vendor is still processing: retry after a second.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "clientOutput": {}
+                },
+                "required": [
+                  "clientOutput"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "walletToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "outcome": {
+                      "type": "string",
+                      "enum": [
+                        "passed",
+                        "failed",
+                        "locked"
+                      ]
+                    },
+                    "attemptsRemaining": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "outcome",
+                    "attemptsRemaining"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/tenants": {
       "post": {
         "tags": [
@@ -6610,6 +10024,10 @@
     },
     {
       "name": "webhooks"
+    },
+    {
+      "name": "biometrics",
+      "description": "Biometric gate settings (console)"
     },
     {
       "name": "stats",

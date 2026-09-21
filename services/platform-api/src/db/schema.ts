@@ -7,7 +7,7 @@
  * outbox row with a higher id (at-least-once delivery, out-of-order safe).
  */
 import { sql } from 'drizzle-orm'
-import { bigint, bigserial, boolean, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
+import { bigint, bigserial, boolean, index, integer, jsonb, pgTable, primaryKey, real, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
 
 export const TENANT_STATUSES = ['provisioning', 'ready', 'failed'] as const
 
@@ -50,6 +50,8 @@ export const wallets = pgTable('wallets', {
   /** Cached after the first webhook lookup. */
   mediatorConnectionId: text('mediator_connection_id'),
   lastSyncRequestedAt: timestamp('last_sync_requested_at', { withTimezone: true }),
+  /** Biometric capture add-ons the SDK reported (`provider@version`), for the console's adoption view (Phase 6). */
+  captureModules: text('capture_modules').array(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
 }, (table) => [
@@ -127,6 +129,8 @@ export const proofTemplates = pgTable('proof_templates', {
   name: text('name').notNull(),
   /** Validated shape: `templateDefinition` in proof-templates.ts. */
   definition: jsonb('definition').$type<Record<string, unknown>>().notNull(),
+  /** Biometric gate override (Phase 6); outside `definition` so template expansion is untouched. */
+  biometricPolicy: jsonb('biometric_policy').$type<Record<string, unknown>>(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [index('proof_templates_tenant_idx').on(table.tenantId)])
@@ -203,3 +207,83 @@ export const consoleAudit = pgTable('console_audit', {
   statusCode: integer('status_code').notNull(),
   requestId: text('request_id').notNull(),
 }, (table) => [index('console_audit_at_idx').on(table.at), index('console_audit_tenant_idx').on(table.tenantId, table.at)])
+
+// --- Biometric gate (Phase 6, implement/16-phase-6-biometric.md B3) ------------------------
+// Vendor configuration and images live in biometric-service; these tables hold policy, the gate
+// state per exchange and the biometric log. No image bytes anywhere here.
+
+/** Per-tenant switch and default policy (`BiometricDefaultPolicy` in biometric/policy.ts). */
+export const biometricSettings = pgTable('biometric_settings', {
+  tenantId: uuid('tenant_id').primaryKey().references(() => tenants.id),
+  enabled: boolean('enabled').notNull().default(false),
+  defaultPolicy: jsonb('default_policy').$type<Record<string, unknown>>().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+/** Per credential definition override (`BiometricOverride`), keyed by the catalogue id. */
+export const credentialDefinitionPolicies = pgTable('credential_definition_policies', {
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+  credentialDefinitionId: text('credential_definition_id').notNull(),
+  biometricPolicy: jsonb('biometric_policy').$type<Record<string, unknown>>().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [primaryKey({ columns: [table.tenantId, table.credentialDefinitionId] })])
+
+export const GATE_STATUSES = ['pending', 'passed', 'failed', 'expired', 'cancelled'] as const
+export type GateStatus = (typeof GATE_STATUSES)[number]
+
+/**
+ * One gate per gated exchange. `hold_reached_at` is set when the exchange parks at
+ * request-received / presentation-received; `settled_at` when the platform has told the agent the
+ * outcome (issue/accept or abandon). The gate acts when both halves are known (gate.ts).
+ */
+export const exchangeGates = pgTable('exchange_gates', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+  recordType: text('record_type', { enum: ['credential', 'proof'] }).notNull(),
+  recordId: text('record_id').notNull(),
+  threadId: text('thread_id').notNull(),
+  checkId: uuid('check_id').notNull(),
+  providerId: text('provider_id').notNull(),
+  status: text('status', { enum: GATE_STATUSES }).notNull().default('pending'),
+  attempts: integer('attempts').notNull().default(0),
+  maxAttempts: integer('max_attempts').notNull(),
+  thresholds: jsonb('thresholds').$type<{ minLivenessScore: number; minMatchScore: number }>().notNull(),
+  livenessScore: real('liveness_score'),
+  matchScore: real('match_score'),
+  reason: text('reason'),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  holdReachedAt: timestamp('hold_reached_at', { withTimezone: true }),
+  decidedAt: timestamp('decided_at', { withTimezone: true }),
+  settledAt: timestamp('settled_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex('exchange_gates_record_unique').on(table.tenantId, table.recordType, table.recordId),
+  index('exchange_gates_thread_idx').on(table.tenantId, table.threadId),
+  index('exchange_gates_pending_expiry_idx').on(table.expiresAt).where(sql`${table.status} = 'pending'`),
+])
+
+export const GATE_EVENT_TYPES = ['gate_created', 'session_started', 'attempt_completed', 'hold_reached', 'issued', 'accepted', 'declined', 'expired', 'cancelled'] as const
+export type GateEventType = (typeof GATE_EVENT_TYPES)[number]
+
+/** The biometric log (append-only): what the console shows next to an exchange. Kept until Phase 7 H1 adds retention. */
+export const exchangeGateEvents = pgTable('exchange_gate_events', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  gateId: uuid('gate_id').notNull().references(() => exchangeGates.id),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+  at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+  type: text('type', { enum: GATE_EVENT_TYPES }).notNull(),
+  attempt: integer('attempt'),
+  /** biometric-service session id (for session_started / attempt_completed). */
+  sessionId: uuid('session_id'),
+  vendorSessionId: text('vendor_session_id'),
+  providerId: text('provider_id'),
+  livenessScore: real('liveness_score'),
+  matchScore: real('match_score'),
+  thresholds: jsonb('thresholds').$type<{ minLivenessScore: number; minMatchScore: number }>(),
+  decision: text('decision'),
+  reason: text('reason'),
+}, (table) => [
+  index('exchange_gate_events_gate_idx').on(table.gateId, table.id),
+  uniqueIndex('exchange_gate_events_session_started_unique').on(table.sessionId).where(sql`${table.type} = 'session_started'`),
+])

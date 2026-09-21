@@ -4,6 +4,7 @@
  */
 import { z } from 'zod'
 
+import { type Gate, biometricView, toBiometricView } from './biometric/gate.ts'
 import type { connections, credentials, proofs, wallets } from './db/schema.ts'
 
 export const connectionView = z.object({
@@ -26,6 +27,8 @@ export const credentialView = z.object({
   credentialDefinitionId: z.string().nullable(),
   attributes: z.record(z.string(), z.string()).nullable(),
   errorMessage: z.string().nullable(),
+  /** null when the exchange is not biometric-gated (Phase 6). */
+  biometric: biometricView,
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 })
@@ -41,6 +44,8 @@ export const proofView = z.object({
   verified: z.boolean().nullable(),
   disclosed: z.record(z.string(), z.record(z.string(), z.string())).nullable(),
   errorMessage: z.string().nullable(),
+  /** null when not gated. While a gate has not passed, `verified` and `disclosed` stay null. */
+  biometric: biometricView,
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 })
@@ -61,7 +66,7 @@ export function toConnectionView(row: typeof connections.$inferSelect): Connecti
   return { id: row.recordId, state: row.state, invitationId: row.invitationId, theirLabel: row.theirLabel, externalId: row.externalId, createdAt: iso(row.createdAt), updatedAt: iso(row.updatedAt) }
 }
 
-export function toCredentialView(row: typeof credentials.$inferSelect): CredentialView {
+export function toCredentialView(row: typeof credentials.$inferSelect, gate?: Gate | null): CredentialView {
   return {
     id: row.recordId,
     state: row.state,
@@ -71,12 +76,14 @@ export function toCredentialView(row: typeof credentials.$inferSelect): Credenti
     credentialDefinitionId: row.credentialDefinitionId,
     attributes: row.attributes,
     errorMessage: row.errorMessage,
+    biometric: toBiometricView(gate),
     createdAt: iso(row.createdAt),
     updatedAt: iso(row.updatedAt),
   }
 }
 
-export function toProofView(row: typeof proofs.$inferSelect): ProofView {
+export function toProofView(row: typeof proofs.$inferSelect, gate?: Gate | null): ProofView {
+  const withheld = !!gate && gate.status !== 'passed'
   return {
     id: row.recordId,
     state: row.state,
@@ -84,9 +91,10 @@ export function toProofView(row: typeof proofs.$inferSelect): ProofView {
     threadId: row.threadId,
     externalId: row.externalId,
     templateId: row.templateId,
-    verified: row.verified,
-    disclosed: row.disclosed,
+    verified: withheld ? null : row.verified,
+    disclosed: withheld ? null : row.disclosed,
     errorMessage: row.errorMessage,
+    biometric: toBiometricView(gate),
     createdAt: iso(row.createdAt),
     updatedAt: iso(row.updatedAt),
   }

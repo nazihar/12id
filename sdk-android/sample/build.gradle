@@ -8,7 +8,8 @@ plugins {
 // repository (build/m2), never as a project dependency, so the published artifact is what gets
 // tested. Building the sample publishes the fork and the SDK there first.
 tasks.matching { it.name == 'preBuild' }.configureEach {
-    dependsOn ':ariesframework:publishReleasePublicationToLocalRepository', ':sdk:publishReleasePublicationToLocalRepository'
+    dependsOn ':ariesframework:publishReleasePublicationToLocalRepository', ':sdk:publishReleasePublicationToLocalRepository',
+        ':biometrics-aws:publishReleasePublicationToLocalRepository', ':biometrics-mock:publishReleasePublicationToLocalRepository'
 }
 
 android {
@@ -34,6 +35,15 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             signingConfig signingConfigs.debug
         }
+        // -PminifyDebug: R8 exactly as release, but with the debug hooks the adb smokes drive (Phase 6:
+        // the AWS biometric add-on and Amplify must survive shrinking).
+        debug {
+            if (project.hasProperty('minifyDebug')) {
+                minifyEnabled true
+                shrinkResources true
+                proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            }
+        }
     }
 
     // Phase 0 measured 165.8 MB for seven ABIs vs 51.7 MB for arm64 alone; ndk.abiFilters has no
@@ -52,6 +62,8 @@ android {
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_11
         targetCompatibility JavaVersion.VERSION_11
+        // Required by the AWS biometrics add-on: Amplify (core, aws-core, aws-predictions) needs desugaring (Phase 6).
+        coreLibraryDesugaringEnabled true
     }
 
     buildFeatures {
@@ -72,6 +84,10 @@ kotlin {
 
 dependencies {
     implementation "com.12id:holder-sdk-android:${project.property('sdkVersion')}"
+    // Phase 6 face-capture add-ons, consumed like a customer app would. The mock is debug-only.
+    implementation "com.12id:holder-sdk-android-biometrics-aws:${project.property('sdkVersion')}"
+    debugImplementation "com.12id:holder-sdk-android-biometrics-mock:${project.property('sdkVersion')}"
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
 
     implementation platform('androidx.compose:compose-bom:2025.09.01')
     implementation 'androidx.compose.material3:material3'
@@ -88,6 +104,9 @@ dependencies {
     implementation 'androidx.camera:camera-camera2:1.4.2'
     implementation 'androidx.camera:camera-lifecycle:1.4.2'
     implementation 'androidx.camera:camera-view:1.4.2'
+    // Amplify (AWS biometrics add-on) brings Guava at runtime and the empty listenablefuture stub at compile
+    // time, which hides CameraX's ListenableFuture. Declaring the same Guava restores it at no size cost (Phase 6).
+    implementation 'com.google.guava:guava:33.3.1-android'
     implementation 'com.google.mlkit:barcode-scanning:17.3.0'
 
     debugImplementation 'androidx.compose.ui:ui-tooling'

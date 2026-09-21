@@ -6,6 +6,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
+import { biometricOverride, biometricProviderInput, biometricSettingsInput } from '@/features/portal/biometrics.schemas'
 import { publishSchemaInput } from '@/features/portal/catalogue.schemas'
 import { connectionInvitationInput } from '@/features/portal/exchanges.schemas'
 import { webhookEndpointInput } from '@/features/portal/webhook.schemas'
@@ -188,4 +189,116 @@ export const revokePortalApiKey = createServerFn({ method: 'POST' })
   .handler(async ({ context, data }) => {
     assertSameOrganization(context.organization.id, data.organizationId)
     return unwrap(await platformFor(context.principal).DELETE('/v1/api-keys/{id}', { params: { path: { id: data.apiKeyId } } }))
+  })
+
+// --- biometric gate (Phase 6) -------------------------------------------------------------
+
+/** One exchange's biometric log; any member may read it, and platform-api audits every read. */
+export const getPortalBiometricLog = createServerFn({ method: 'GET' })
+  .middleware([tenantMiddleware()])
+  .validator(z.object({ kind: z.enum(['credential', 'proof']), id: z.string().min(1).max(100) }))
+  .handler(async ({ context, data }) => {
+    const platform = platformFor(context.principal)
+    const params = { params: { path: { id: data.id } } }
+    return unwrap(data.kind === 'credential' ? await platform.GET('/v1/credentials/{id}/biometric-log', params) : await platform.GET('/v1/proofs/{id}/biometric-log', params))
+  })
+
+export const getPortalBiometrics = createServerFn({ method: 'GET' })
+  .middleware([tenantMiddleware()])
+  .handler(async ({ context }) => {
+    const platform = platformFor(context.principal)
+    const [settings, providers] = await Promise.all([platform.GET('/v1/biometrics'), platform.GET('/v1/biometrics/providers')])
+    return { settings: serializableSettings(unwrap(settings)), providers: unwrap(providers).providers.map(providerForm) }
+  })
+
+type RawSettings = { enabled: boolean; defaultPolicy: { required: boolean; minMatchScore: number; minLivenessScore: number; maxAttempts: number; ttlMinutes: number }; externalId: string; provider: { id: string; publicConfig: Record<string, unknown>; status: 'ok' | 'failed' | 'untested'; lastTestedAt: string | null; lastError: string | null } | null }
+
+/** publicConfig values are strings in practice (region, role ARN); flatten so they cross the server boundary. */
+function serializableSettings(settings: RawSettings) {
+  return {
+    ...settings,
+    provider: settings.provider ? { ...settings.provider, publicConfig: Object.fromEntries(Object.entries(settings.provider.publicConfig).map(([k, v]) => [k, String(v)])) } : null,
+  }
+}
+
+/** The provider's JSON Schema reduced to the string fields the form renders (enum → select). */
+function providerForm(entry: { id: string; displayName: string; configSchema: Record<string, unknown>; captureModule: { provider: string; minVersion: number } }) {
+  const properties = (entry.configSchema.properties ?? {}) as Record<string, { enum?: unknown[]; pattern?: string; description?: string }>
+  return {
+    id: entry.id,
+    displayName: entry.displayName,
+    captureProvider: entry.captureModule.provider,
+    fields: Object.entries(properties).map(([key, property]) => ({
+      key,
+      options: Array.isArray(property.enum) ? property.enum.map(String) : null,
+      pattern: property.pattern ?? null,
+    })),
+  }
+}
+
+export const savePortalBiometricProvider = createServerFn({ method: 'POST' })
+  .middleware([tenantMiddleware({ biometrics: ['update'] })])
+  .validator(organizationInput.extend(biometricProviderInput.shape))
+  .handler(async ({ context, data }) => {
+    assertSameOrganization(context.organization.id, data.organizationId)
+    // Write-only: platform-api stores nothing; biometric-service keeps the config encrypted.
+    return serializableSettings(unwrap(await platformFor(context.principal).PUT('/v1/biometrics/provider', { body: { providerId: data.providerId, config: data.config } })))
+  })
+
+export const testPortalBiometricProvider = createServerFn({ method: 'POST' })
+  .middleware([tenantMiddleware({ biometrics: ['update'] })])
+  .validator(organizationInput)
+  .handler(async ({ context, data }) => {
+    assertSameOrganization(context.organization.id, data.organizationId)
+    return unwrap(await platformFor(context.principal).POST('/v1/biometrics/provider/test'))
+  })
+
+export const removePortalBiometricProvider = createServerFn({ method: 'POST' })
+  .middleware([tenantMiddleware({ biometrics: ['update'] })])
+  .validator(organizationInput)
+  .handler(async ({ context, data }) => {
+    assertSameOrganization(context.organization.id, data.organizationId)
+    return serializableSettings(unwrap(await platformFor(context.principal).DELETE('/v1/biometrics/provider')))
+  })
+
+export const savePortalBiometricSettings = createServerFn({ method: 'POST' })
+  .middleware([tenantMiddleware({ biometrics: ['update'] })])
+  .validator(organizationInput.extend(biometricSettingsInput.shape))
+  .handler(async ({ context, data }) => {
+    assertSameOrganization(context.organization.id, data.organizationId)
+    return serializableSettings(unwrap(await platformFor(context.principal).PUT('/v1/biometrics/settings', { body: { enabled: data.enabled, defaultPolicy: data.defaultPolicy } })))
+  })
+
+export const getPortalBiometricAdoption = createServerFn({ method: 'GET' })
+  .middleware([tenantMiddleware()])
+  .handler(async ({ context }) => unwrap(await platformFor(context.principal).GET('/v1/biometrics/adoption')))
+
+export const getPortalCredentialDefinitionPolicy = createServerFn({ method: 'GET' })
+  .middleware([tenantMiddleware()])
+  .validator(z.object({ credentialDefinitionId: z.string().min(1).max(300) }))
+  .handler(async ({ context, data }) =>
+    unwrap(await platformFor(context.principal).GET('/v1/credential-definitions/{id}/biometric-policy', { params: { path: { id: data.credentialDefinitionId } } }))
+  )
+
+export const savePortalCredentialDefinitionPolicy = createServerFn({ method: 'POST' })
+  .middleware([tenantMiddleware({ biometrics: ['update'] })])
+  .validator(organizationInput.extend({ credentialDefinitionId: z.string().min(1).max(300), policy: biometricOverride }))
+  .handler(async ({ context, data }) => {
+    assertSameOrganization(context.organization.id, data.organizationId)
+    return unwrap(
+      await platformFor(context.principal).PUT('/v1/credential-definitions/{id}/biometric-policy', { params: { path: { id: data.credentialDefinitionId } }, body: data.policy })
+    )
+  })
+
+export const getPortalTemplatePolicy = createServerFn({ method: 'GET' })
+  .middleware([tenantMiddleware()])
+  .validator(z.object({ templateId: z.uuid() }))
+  .handler(async ({ context, data }) => unwrap(await platformFor(context.principal).GET('/v1/proof-templates/{id}/biometric-policy', { params: { path: { id: data.templateId } } })))
+
+export const savePortalTemplatePolicy = createServerFn({ method: 'POST' })
+  .middleware([tenantMiddleware({ biometrics: ['update'] })])
+  .validator(organizationInput.extend({ templateId: z.uuid(), policy: biometricOverride }))
+  .handler(async ({ context, data }) => {
+    assertSameOrganization(context.organization.id, data.organizationId)
+    return unwrap(await platformFor(context.principal).PUT('/v1/proof-templates/{id}/biometric-policy', { params: { path: { id: data.templateId } }, body: data.policy }))
   })

@@ -1,0 +1,27 @@
+{
+  "name": "@12id/biometric-service",
+  "private": true,
+  "type": "module",
+  "description": "Internal biometric gate service (implement/16-phase-6-biometric.md B1): vendor adapters behind a port, per-tenant encrypted vendor config and reference images, liveness + face-match decisions. Reached by platform-api only.",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --test-concurrency=1 \"test/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@12id/credo-base": "*",
+    "@aws-sdk/client-rekognition": "3.1136.0",
+    "@aws-sdk/client-sts": "3.1136.0",
+    "drizzle-orm": "0.45.2",
+    "fastify": "5.12.4",
+    "fastify-type-provider-zod": "7.0.0",
+    "pg": "8.23.0",
+    "pino": "10.3.1",
+    "zod": "4.6.4"
+  },
+  "devDependencies": {
+    "@types/node": "22.18.1",
+    "@types/pg": "8.23.1",
+    "drizzle-kit": "0.31.10",
+    "typescript": "5.9.2"
+  }
+}

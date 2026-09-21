@@ -8,6 +8,7 @@
   },
   "workspaces": [
     "agent-service",
+    "biometric-service",
     "credo-base",
     "endorser-service",
     "platform-api",

@@ -63,6 +63,33 @@ Answer 2xx within 10 s. Failures are retried with exponential backoff (5 s doubl
 
 Sent when the mediator is holding messages for one of your wallets (`data.walletId`, `data.externalId`). Send a silent push to that installation with your own FCM/APNs setup; the app calls the SDK's `sync()`. At most one per wallet every 30 s. It may also arrive while the app is open, or right after first launch — treat it as "sync now", not as "a credential arrived".
 
+## Biometric checks
+
+Optional per tenant: before a credential is issued or a proof result is released, the holder passes a face **liveness** check and a **face match** against a reference image you provide. You configure your own vendor account (AWS Rekognition Face Liveness) in the console, switch the gate on, and choose where it applies:
+
+- **Default** for the organisation (console → Biometrics).
+- **Per credential definition:** `PUT /v1/credential-definitions/{id}/biometric-policy` with `{ "mode": "inherit" | "off" | "required", "minMatchScore", "minLivenessScore", "maxAttempts" }`. Scores are 0–100.
+- **Per proof template:** `biometricPolicy` in the template body, or `PUT /v1/proof-templates/{id}/biometric-policy`.
+
+When a policy applies, send the reference image with the command:
+
+```json
+POST /v1/credentials/offer
+{ "connectionId": "…", "credentialDefinitionId": "…", "attributes": { … }, "biometric": { "referenceImage": "<base64 JPEG or PNG, ≤ 5 MB, one face>" } }
+```
+
+Without it the call answers **422 `biometric_reference_required`**. The image is used for this exchange only and deleted as soon as the check is decided (or expires); it is never returned, logged or sent in a webhook.
+
+What happens next:
+
+- The holder's app runs the check (the SDK's `verifyFace`). Each attempt sends a **`biometric.check_completed`** webhook with the scores and the decision.
+- **Credentials** are issued only after a pass. If the holder accepts first, the exchange waits at `request-received`.
+- **Proofs**: `verified` and `disclosed` stay `null` until the check passes, even when the presentation has already arrived.
+- After the last failed attempt, or when the check expires (30 min by default), the exchange is **abandoned**; offer again if appropriate.
+- `GET /v1/credentials/{id}` and `/v1/proofs/{id}` include `biometric` (status, attempts left, last scores); `GET /v1/credentials/{id}/biometric-log` (and `/v1/proofs/{id}/biometric-log`) returns every step with the vendor session id, for audit.
+
+You are the controller of the reference images and must have the user's consent for the check.
+
 ## Data protection
 
 No personal data is written to the ledger. The platform stores exchange state and disclosed attributes for your tenant; credentials themselves live only on the holder's device. The mediator sees encrypted messages and their timing only.

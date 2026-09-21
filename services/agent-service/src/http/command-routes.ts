@@ -19,7 +19,10 @@ import {
   createInvitation,
   getConnection,
   getCredentialExchange,
+  abandonExchange,
+  acceptPresentation,
   getProofExchange,
+  issueCredential,
   listConnections,
   offerCredential,
   requestProof,
@@ -136,7 +139,7 @@ export const commandRoutes = (deps: CommandDeps): FastifyPluginAsyncZod => async
     {
       schema: {
         params: tenantParams,
-        body: z.object({ connectionId: z.string().min(1), credentialDefinitionObjectId: z.uuid(), values: z.record(z.string(), z.string()), correlationId: correlation }),
+        body: z.object({ connectionId: z.string().min(1), credentialDefinitionObjectId: z.uuid(), values: z.record(z.string(), z.string()), correlationId: correlation, hold: z.boolean().optional() }),
         response: { 202: z.object({ credentialExchangeId: z.string(), threadId: z.string(), state: z.string() }), 400: errorBody, 404: errorBody, 409: errorBody },
       },
     },
@@ -160,6 +163,7 @@ export const commandRoutes = (deps: CommandDeps): FastifyPluginAsyncZod => async
           name: z.string().min(1).max(100),
           groups: z.array(z.object({ key: z.string(), attributes: z.array(z.string()), credentialDefinitionIds: z.array(z.string()).min(1), predicates: z.array(predicate).optional() })).min(1),
           correlationId: correlation,
+          hold: z.boolean().optional(),
         }),
         response: { 202: z.object({ proofExchangeId: z.string(), threadId: z.string(), state: z.string() }), 400: errorBody, 404: errorBody, 409: errorBody },
       },
@@ -179,6 +183,24 @@ export const commandRoutes = (deps: CommandDeps): FastifyPluginAsyncZod => async
       },
     },
     async (request) => getProofExchange(deps.exchanges, request.params.tenantId, request.params.id)
+  )
+
+  // --- biometric gate hold points (Phase 6 B2) ----------------------------------------
+  const exchangeParams = tenantParams.extend({ id: z.string().min(1) })
+  const transition = z.object({ id: z.string(), state: z.string() })
+  const abandonBody = z.object({ reason: z.string().min(1).max(500) })
+
+  app.post('/tenants/:tenantId/credentials/:id/issue', { schema: { params: exchangeParams, response: { 200: transition, 404: errorBody, 409: errorBody } } }, async (request) =>
+    issueCredential(deps.exchanges, request.params.tenantId, request.params.id)
+  )
+  app.post('/tenants/:tenantId/credentials/:id/abandon', { schema: { params: exchangeParams, body: abandonBody, response: { 200: transition, 404: errorBody } } }, async (request) =>
+    abandonExchange(deps.exchanges, request.params.tenantId, 'credential', request.params.id, request.body.reason)
+  )
+  app.post('/tenants/:tenantId/proofs/:id/accept', { schema: { params: exchangeParams, response: { 200: transition, 404: errorBody, 409: errorBody } } }, async (request) =>
+    acceptPresentation(deps.exchanges, request.params.tenantId, request.params.id)
+  )
+  app.post('/tenants/:tenantId/proofs/:id/abandon', { schema: { params: exchangeParams, body: abandonBody, response: { 200: transition, 404: errorBody } } }, async (request) =>
+    abandonExchange(deps.exchanges, request.params.tenantId, 'proof', request.params.id, request.body.reason)
   )
 
   // --- outbox feed for the platform API (Phase 3 P0) --------------------------------

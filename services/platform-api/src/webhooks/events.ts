@@ -10,7 +10,7 @@ import { eq } from 'drizzle-orm'
 import type { Database } from '../db/client.ts'
 import { webhookDeliveries, webhookEndpoints } from '../db/schema.ts'
 
-export const EVENT_TYPES = ['connection.state_changed', 'credential.state_changed', 'proof.state_changed', 'wallet.sync_requested'] as const
+export const EVENT_TYPES = ['connection.state_changed', 'credential.state_changed', 'proof.state_changed', 'wallet.sync_requested', 'biometric.check_completed'] as const
 export type EventType = (typeof EVENT_TYPES)[number]
 
 export interface EventEnvelope {

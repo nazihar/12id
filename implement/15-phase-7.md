@@ -1,5 +1,6 @@
 # Pre-production review — security gaps and optimization opportunities
 
+**Phase:** this review's fix set is **Phase 7 — Pre-production hardening** (renumbered 2026-09-21 when the biometric gate became Phase 6, [`16-phase-6-biometric.md`](16-phase-6-biometric.md); this file was `15-phase-6.md`). The former Hardening is **Phase 8**.
 **Status:** review only, 2026-09-16. Nothing was changed on staging or in the code. Every finding names its file and line; a finding marked *run* has its command and output in this file, *source read* was verified in the code, *reasoned* was not exercised.
 **Scope:** platform-api, agent-service, endorser-service, credo-base, console, Android SDK, staging infra. The bucket-B follow-ups from the former `15-next-step.md` (its Phase 5b recommendation is carried in Appendix A below; the file itself was removed) are re-confirmed and ranked here (marked **B**).
 **Baseline runs (all green):** platform-api 36/36 (against the local Phase 2 Postgres), agent-service 43/43, endorser-service 30/30, credo-base 10/10, console Vitest 11/11 + `tsc`, SDK JVM 30/30 + `apiCheck`; `tsc --noEmit` clean in all four services. `npm audit --omit=dev`: 10 / 4 / 9 moderate, all transitive (§7).
@@ -41,7 +42,7 @@ Severity is exploitability × impact against the **production** threat model (cu
 | L6 | Low | mediator | The open multi-use startup invitation is still created and printed to logs | 2 h |
 | L7 | Low | mediator | `webhook-sink` debug container runs permanently in the stack | 10 min |
 | L8 | Low | dev machine | `console/.staging/` holds a live staging API key, owner password and TOTP secrets in plaintext (git-ignored) | rotate |
-| L9 | Low | agent-service | Askar Postgres pool size not set (`maxConnections` default) vs `TENANT_SESSION_LIMIT` 100 | verify in Phase 7 |
+| L9 | Low | agent-service | Askar Postgres pool size not set (`maxConnections` default) vs `TENANT_SESSION_LIMIT` 100 | verify in Phase 8 |
 | L10 | Low | platform-api | Console audit records route + status only, never the change; a bad edit cannot be reconstructed | 0.5 d |
 | L11 | Low | console | Tenant-member sessions last 7 days sliding (operators 12 h) | 10 min |
 | L12 | Low | all | npm audit: transitive moderates only (valibot via unused `dcql`; esbuild via `drizzle-kit`) | with next Credo bump |
@@ -65,6 +66,7 @@ Severity is exploitability × impact against the **production** threat model (cu
 **Evidence:** *source read*; the only DELETE routes are api-keys, proof-templates, wallets (revoke), webhook (endpoint). No `delete(` on any exchange table in either service.
 **Impact:** §5.3 tells customers "delete our platform records" answers an erasure request; today nothing can. Every enterprise legal review will ask. Also unbounded table growth.
 **Fix:** (a) `DELETE /v1/credentials/{id}`, `/v1/proofs/{id}`, `/v1/connections/{id}` that scrub `attributes`/`disclosed`, null the delivery bodies for that record, and call a new agent-service route that deletes the Credo exchange record; (b) a tenant-level retention setting (default e.g. 90 d after `done`/`abandoned`) enforced by a nightly job over the mirror tables, `webhook_deliveries` (keep metadata, null the body) and `outbox`; (c) write the customer-facing §5.3 document from what (a)+(b) actually do. Test: unit test per table + a staging run that issues, deletes, and greps every store for the value.
+**Added by Phase 6 (biometric gate):** (a) and (b) must also cover the biometric log. That means platform-api `exchange_gates` and `exchange_gate_events` (scores, decisions, AWS session ids) and biometric-service `checks`, `sessions` and `results`. Phase 6 deliberately ships **no automatic deletion** of these; face images themselves are already deleted at decision time.
 
 ### M2 · Medium · Webhook dispatcher head-of-line blocking
 **Where:** `services/platform-api/src/webhooks/dispatcher.ts:95-127` — `for (const delivery of claimed) { … await deliverOnce(…) }` with `batch = 20`, `timeoutMs = 10_000`.
@@ -121,7 +123,7 @@ Hashed tokens with prefix lookup and length-checked `timingSafeEqual` (`auth/tok
 **Where:** `node_modules/@credo-ts/node/build/transport/DidCommHttpInboundTransport.mjs:19` (`limit: "5mb"`), `services/agent-service/src/config.ts` (`PROCESS_MESSAGES_CONCURRENTLY` default false), `Caddyfile` (`agent_per_ip 300`, no `request_body`).
 **Evidence:** *run* — `POST https://agent.<domain>/ -H 'content-type: application/ssi-agent-wire' --data '{"protected":"x"}'` → `500 Error processing message` with `X-Powered-By: Express` (junk reaches Credo). The body limit and serial processing are *source read*.
 **Impact:** 300 × 5 MB per minute per IP is JSON-parsed and unpacked in the one queue every tenant shares; legitimate holder replies (credential requests, presentations) wait behind it. No authentication exists on this endpoint by design.
-**Fix:** Caddy `request_body { max_size 256KB }` on the `@didcomm` handle (a v1 credential message with 125 attributes is far below this — measure and set with margin); lower `agent_per_ip` to about 60/min; consider a small Express handler before the transport that answers 400 for a body that is not a JWE envelope; schedule the concurrency switch for the Phase 7 load test. Test: staging probe expecting 413 for a 300 KB body.
+**Fix:** Caddy `request_body { max_size 256KB }` on the `@didcomm` handle (a v1 credential message with 125 attributes is far below this — measure and set with margin); lower `agent_per_ip` to about 60/min; consider a small Express handler before the transport that answers 400 for a body that is not a JWE envelope; schedule the concurrency switch for the Phase 8 load test. Test: staging probe expecting 413 for a 300 KB body.
 
 ### M3 · Medium · Unlimited ledger writes per API key
 **Where:** `services/platform-api/src/http/routes/catalogue.ts:68` (any tenant principal), `services/endorser-service/src/policy.ts` (checks *who*, never *how many*).
@@ -149,9 +151,10 @@ Hashed tokens with prefix lookup and length-checked `timingSafeEqual` (`auth/tok
 **Evidence:** *source read*. Only `platform_ro` (Phase 3 P9) is a scoped role.
 **Impact:** a SQL injection or RCE in any one service (the mediator is third-party code facing the internet) yields every database on that instance, including the encrypted endorser store and all tenant wallets — Askar-encrypted, but the store keys are one `docker inspect` away (M11).
 **Fix:** one role per service with `CONNECT` and ownership of its own database only (`agent_service`, `endorser_service`, `platform_api`, `console`, `mediator_drizzle`, `mediator_pickup`, `agent_askar`, `endorser_askar`); move the `endorser` Askar database to a Postgres the mediator cannot reach (the agent instance, or its own); Askar's `adminAccount` only for provisioning. The restore drills already exist — re-run them after the role change. Test: `psql` as each role against another database → permission denied.
+**Added by Phase 6:** the `biometric` database (biometric-service) also lives on `agent-postgres` and connects as `postgres`. It needs its own role like the others. Revisit a dedicated instance only if production moves to instance-level backups or the role split cannot isolate it (`16-phase-6-biometric.md`).
 
 ### L9 · Low · Askar pool size
-`credo-base/src/askar-postgres.ts:24` sets only `connectTimeout`; `maxConnections` is Askar's default. With `TENANT_SESSION_LIMIT=100` and serial processing this is fine today; verify under the Phase 7 load profile before enabling concurrency.
+`credo-base/src/askar-postgres.ts:24` sets only `connectTimeout`; `maxConnections` is Askar's default. With `TENANT_SESSION_LIMIT=100` and serial processing this is fine today; verify under the Phase 8 load profile before enabling concurrency.
 
 ### Strengths (keep)
 The endorser signs and never submits; role-less NYM only; the author must be the tenant's bound DID; already-signed / multi-signed requests refused; sha256 of every request audited **before the signature is released** (`endorser-api.ts:97-108`); single-flight onboarding with compare-and-set (`tenants/single-flight.ts`); `InMemoryLruCache` without `useCachedStorageService` (T1); pino redaction of `key`/`password`/`storeKey` at three depths (`credo-base/src/logger.ts:17-20`); genesis pinned by sha256 at start; drained shutdown; reconciliation of stuck exchanges; both images run as `USER node`.
@@ -220,7 +223,7 @@ create index if not exists oob_rkf_gin on "DidcommOutOfBand" using gin (recipien
 create index if not exists queued_recipient_dids_gin on queued_message using gin (recipient_dids);
 create index if not exists queued_pending_idx on queued_message (connection_id, created_at) where state = 'pending';
 ```
-Confirm the exact predicate shapes with `auto_explain` / `pg_stat_statements` on staging before finalising (the column list above is from the tag → column mapping in drizzle-storage; the planner decides). File upstream alongside the queue bug. Test: `EXPLAIN (ANALYZE)` of a poll's queries with 10 k synthetic `Did` + connection rows, before/after; the Phase 7 load test then measures the real profile.
+Confirm the exact predicate shapes with `auto_explain` / `pg_stat_statements` on staging before finalising (the column list above is from the tag → column mapping in drizzle-storage; the planner decides). File upstream alongside the queue bug. Test: `EXPLAIN (ANALYZE)` of a poll's queries with 10 k synthetic `Did` + connection rows, before/after; the Phase 8 load test then measures the real profile.
 
 ### L1 · Low · Header hygiene
 *run*: `X-Powered-By: Express` on `agent.` and `mediator.`; HSTS `max-age=31536000` without `includeSubDomains`/`preload`; `Server: Caddy` on `genesis.` 404s. Fix: `header -X-Powered-By` in the `hardening` snippet; `Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"` (every subdomain is TLS already); `handle_errors` on genesis.
@@ -274,7 +277,7 @@ A branded `Principal` only the middleware can create; the tenant resolved from t
 - `internal/SdkStore.kt`: state in `noBackupFilesDir`, atomic replace; the invitation URL and label are not secrets. The wallet token is never persisted by the SDK (provider callback) — good; the **sample** keeps it in plain `SharedPreferences` (`sample/…/CustomerBackend.kt:19`) — say so in the guide.
 - `internal/PlatformClient.kt`: OkHttp 4.12.0, 15 s / 30 s timeouts, platform TLS trust, no pinning — acceptable given M15 is the real anchor.
 - Manifest: only `INTERNET`; no `usesCleartextTraffic` flag (M14 covers API 24–27).
-- 10 s foreground polling is the framework's `PickUpV1` design; battery and mediator load are Phase 7 measurements.
+- 10 s foreground polling is the framework's `PickUpV1` design; battery and mediator load are Phase 8 measurements.
 
 ### Strengths (keep)
 Explicit API mode, `apiDump` committed and `ApiSurfaceTest` refusing framework types (30/30 + `apiCheck` green in this review); typed `OneTwoIdException`; `Throwable` caught at the boundary (trap 43); spent-invitation recovery bounded to one retry and only with no organisation connections (trap 31); R8 consumer rules; the slf4j binding that makes stalls diagnosable (trap 40).
@@ -354,7 +357,7 @@ Checked each against the actual code paths. Only the third has anything in it, a
 
 The two per-request credential lookups (`requireApiKey`, `requireWalletToken`) are single indexed reads on small tables and are **deliberately left uncached**: caching them puts a TTL between `DELETE /v1/api-keys/{id}` and the key actually stopping, which trades immediate revocation for microseconds. Not worth it.
 
-Two cheap adjacent wins while in here: `GET /v1/ledger` returns static, env-derived config with **no `Cache-Control`** (verified: `curl -I` shows none) although every SDK installation fetches it — `public, max-age=300` costs nothing (**L15**); and the outbox and webhook workers each poll Postgres every second whether or not there is work (`OUTBOX_POLL_MS` / `WEBHOOK_POLL_MS` default 1000, about 172 k idle queries a day per worker) — cheap, but `LISTEN/NOTIFY` would make both event-driven if the Phase 7 load test says it matters.
+Two cheap adjacent wins while in here: `GET /v1/ledger` returns static, env-derived config with **no `Cache-Control`** (verified: `curl -I` shows none) although every SDK installation fetches it — `public, max-age=300` costs nothing (**L15**); and the outbox and webhook workers each poll Postgres every second whether or not there is work (`OUTBOX_POLL_MS` / `WEBHOOK_POLL_MS` default 1000, about 172 k idle queries a day per worker) — cheap, but `LISTEN/NOTIFY` would make both event-driven if the Phase 8 load test says it matters.
 
 ### What to do in this phase
 - **Nothing shared.** Leave Valkey to the mediator.
@@ -368,11 +371,11 @@ Two cheap adjacent wins while in here: `GET /v1/ledger` returns static, env-deri
 - Mediator image CVEs (`docker scout` / `trivy` not installed here); the base is `mediator:375518d` (December 2025, Credo 0.6.0, that date's Node image).
 - Invited-member acceptance through real SMTP; the operator 12 h cap in practice (both bucket B).
 - Everything on iOS; x86_64 / minSdk 24 on Android; restrictive corporate Wi-Fi; a real FCM push; production ledger + TAA — unchanged from `4-init-post-phase-0.md` §0.1.
-- Load behaviour (M1, M2, L9) — reasoned from code; Phase 7 (Hardening) measures it.
+- Load behaviour (M1, M2, L9) — reasoned from code; Phase 8 (Hardening) measures it.
 
 ---
 
-## 10. Recommended fix set — Phase 6: pre-production hardening
+## 10. Recommended fix set — Phase 7: pre-production hardening
 
 **Build now (each under a day unless noted), in this order:**
 
@@ -392,7 +395,7 @@ Two cheap adjacent wins while in here: `GET /v1/ledger` returns static, env-deri
 
 **Owner decisions (not code):** M13 off-site backups and a second age recipient; M16 alert channel; M17 / 5b.3 CI and tag policy; L2 whether Grafana and the ledger browser exist in production at all; L8 rotate the `.staging` credentials; §12.1 ledger topology, a clean production host, TAA (bucket C).
 
-**Defer to their phases:** M15 with 5b.1 (the wrapper rebuild changes the size budget); L9, M1's concurrency switch and M2's numbers with the Phase 7 load tests; L3, L10, L11 when those surfaces are next touched.
+**Defer to their phases:** M15 with 5b.1 (the wrapper rebuild changes the size budget); L9, M1's concurrency switch and M2's numbers with the Phase 8 load tests; L3, L10, L11 when those surfaces are next touched.
 
 **Explicitly not doing:** sharing the mediator's Valkey with the other services, or adding Redis anywhere (§8). Build M4's rate limiter in-process behind a small store interface so it can move to Redis the day platform-api runs a second replica.
 
@@ -402,11 +405,13 @@ Two cheap adjacent wins while in here: `GET /v1/ledger` returns static, env-deri
 - `4-init-post-phase-0.md` §0.1 and §10: pointer to this file; the review fix set is **Phase 6 — Pre-production hardening** and the former Phase 6 (load tests, failover, key rotation, DR) is now **Phase 7 — Hardening**.
 - `15-next-step.md` removed; this file takes its number. Its Phase 5b recommendation (Android SDK release) is preserved in Appendix A and follows Phase 6.
 
+**Renumbering (2026-09-21):** the biometric gate was inserted as **Phase 6** ([`16-phase-6-biometric.md`](16-phase-6-biometric.md)). This file was renamed from `15-phase-6.md` to `15-phase-7.md`, its fix set is now **Phase 7 — Pre-production hardening**, and Hardening is **Phase 8**. The references in the body were updated; the bullets above keep the numbering of their date. Appendix A (5b) now runs after Phase 7.
+
 ---
 
 ## Appendix A — Phase 5b: Android SDK release (carried over from the removed `15-next-step.md`)
 
-Runs after Phase 6. It is the one item the design names as a first-customer blocker (§9 original: "resolve before the first customer integration"; §12.16): the SDK is local-Maven only, consumers need three repositories, the wrappers' x86_64 libraries do not load (no emulator testing, minSdk 24 unverified), and there is no CI.
+Runs after Phase 7. It is the one item the design names as a first-customer blocker (§9 original: "resolve before the first customer integration"; §12.16): the SDK is local-Maven only, consumers need three repositories, the wrappers' x86_64 libraries do not load (no emulator testing, minSdk 24 unverified), and there is no CI.
 
 **5b.1 Rebuild the UniFFI wrappers under our coordinates** (finding 9 / trap 42)
 - Fork `LF-Decentralized-Trust-labs/aries-uniffi-wrappers`; build askar / anoncreds / indy-vdr for `arm64-v8a`, `armeabi-v7a`, `x86_64` (drop the four dead ABIs), linking compiler-rt builtins statically so `__extenddftf2` resolves on x86_64.
@@ -428,4 +433,4 @@ Runs after Phase 6. It is the one item the design names as a first-customer bloc
 - Emulator matrix API 24/26/28/36 x86_64: `wallet ready` + one offer accepted.
 - CI green on a PR touching all three areas; a tagged release lands in the repository and the sample builds from a clean Gradle cache.
 
-**After 5b:** production readiness (§12.1 ledger decision, a clean production host, TAA run, production endorser + genesis v1 — the actual gate to a paying customer, owner decision first); customer-facing documents (data-protection posture §5.3 once H1 is built, no-revocation + wallet-recovery story, attribute-encoding rules §5.2); then Phase 5-iOS and Phase 7 Hardening.
+**After 5b:** production readiness (§12.1 ledger decision, a clean production host, TAA run, production endorser + genesis v1 — the actual gate to a paying customer, owner decision first); customer-facing documents (data-protection posture §5.3 once H1 is built, no-revocation + wallet-recovery story, attribute-encoding rules §5.2); then Phase 5-iOS and Phase 8 Hardening.

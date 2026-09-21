@@ -3,6 +3,10 @@ package com.onetwoid.sample
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import android.util.Log
+import androidx.activity.ComponentActivity
+import com.onetwoid.sdk.BiometricOutcome
+import com.onetwoid.sdk.BiometricStatus
 import com.onetwoid.sdk.Connection
 import com.onetwoid.sdk.Credential
 import com.onetwoid.sdk.CredentialOffer
@@ -52,6 +56,29 @@ class WalletViewModel(application: Application) : AndroidViewModel(application) 
 
     fun connect(invitationUrl: String) = action("Connecting") { OneTwoId.connect(invitationUrl.trim()); "Connection requested" }
     fun acceptOffer(id: String) = action("Accepting offer") { OneTwoId.acceptOffer(id); "Offer accepted; waiting for the credential" }
+    /** Phase 6: the organisation requires a face check before accept / share. */
+    fun verifyFace(activity: ComponentActivity, id: String) = action("Checking your face") {
+        val outcome = OneTwoId.verifyFace(activity, id)
+        Log.i(SampleApp.TAG, "biometric outcome $id ${outcome.javaClass.simpleName} $outcome")
+        when (outcome) {
+            BiometricOutcome.Passed -> "Face check passed; you can continue"
+            is BiometricOutcome.Failed -> "Face check failed; ${outcome.attemptsRemaining} attempts left"
+            BiometricOutcome.Locked -> "Face check failed; the organisation will cancel this"
+        }
+    }
+
+    /** Runs the face check for every pending gated offer and proof request (debug smoke driving). */
+    fun verifyAllPending(activity: ComponentActivity) = viewModelScope.launch {
+        val gated = OneTwoId.pendingOffers().filter { it.biometric?.status == BiometricStatus.Pending }.map { it.id } +
+            OneTwoId.pendingProofRequests().filter { it.biometric?.status == BiometricStatus.Pending }.map { it.id }
+        for (id in gated) {
+            runCatching { OneTwoId.verifyFace(activity, id) }
+                .onSuccess { Log.i(SampleApp.TAG, "biometric outcome $id ${it.javaClass.simpleName} $it") }
+                .onFailure { Log.e(SampleApp.TAG, "biometric outcome $id error ${it.javaClass.simpleName}: ${it.message}", it) }
+        }
+        refresh()
+    }
+
     fun declineOffer(id: String) = action("Declining offer") { OneTwoId.declineOffer(id); "Offer declined" }
     fun declineProof(id: String) = action("Declining request") { OneTwoId.declineProofRequest(id); "Request declined" }
     fun respondToProof(id: String, selection: ProofSelection) = action("Sharing proof") { OneTwoId.respondToProofRequest(id, selection); "Proof shared" }

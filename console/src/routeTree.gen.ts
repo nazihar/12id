@@ -29,6 +29,7 @@ import { Route as AuthedOpsTenantsIndexRouteImport } from './routes/_authed/ops/
 import { Route as AuthedOpsTenantsTenantIdRouteImport } from './routes/_authed/ops/tenants/$tenantId'
 import { Route as AuthedTOrgSlugIndexRouteImport } from './routes/_authed/t/$orgSlug/index'
 import { Route as AuthedTOrgSlugApiKeysRouteImport } from './routes/_authed/t/$orgSlug/api-keys'
+import { Route as AuthedTOrgSlugBiometricsRouteImport } from './routes/_authed/t/$orgSlug/biometrics'
 import { Route as AuthedTOrgSlugCatalogueRouteImport } from './routes/_authed/t/$orgSlug/catalogue'
 import { Route as AuthedTOrgSlugExchangesRouteImport } from './routes/_authed/t/$orgSlug/exchanges'
 import { Route as AuthedTOrgSlugMembersRouteImport } from './routes/_authed/t/$orgSlug/members'
@@ -36,6 +37,7 @@ import { Route as AuthedTOrgSlugWalletsRouteImport } from './routes/_authed/t/$o
 import { Route as AuthedTOrgSlugWebhooksRouteImport } from './routes/_authed/t/$orgSlug/webhooks'
 import { Route as AuthedOpsTenantsTenantIdIndexRouteImport } from './routes/_authed/ops/tenants/$tenantId/index'
 import { Route as AuthedOpsTenantsTenantIdApiKeysRouteImport } from './routes/_authed/ops/tenants/$tenantId/api-keys'
+import { Route as AuthedOpsTenantsTenantIdBiometricsRouteImport } from './routes/_authed/ops/tenants/$tenantId/biometrics'
 import { Route as AuthedOpsTenantsTenantIdCatalogueRouteImport } from './routes/_authed/ops/tenants/$tenantId/catalogue'
 import { Route as AuthedOpsTenantsTenantIdExchangesRouteImport } from './routes/_authed/ops/tenants/$tenantId/exchanges'
 import { Route as AuthedOpsTenantsTenantIdTemplatesRouteImport } from './routes/_authed/ops/tenants/$tenantId/templates'
@@ -145,6 +147,12 @@ const AuthedTOrgSlugApiKeysRoute = AuthedTOrgSlugApiKeysRouteImport.update({
   path: '/api-keys',
   getParentRoute: () => AuthedTOrgSlugRoute,
 } as any)
+const AuthedTOrgSlugBiometricsRoute =
+  AuthedTOrgSlugBiometricsRouteImport.update({
+    id: '/biometrics',
+    path: '/biometrics',
+    getParentRoute: () => AuthedTOrgSlugRoute,
+  } as any)
 const AuthedTOrgSlugCatalogueRoute = AuthedTOrgSlugCatalogueRouteImport.update({
   id: '/catalogue',
   path: '/catalogue',
@@ -180,6 +188,12 @@ const AuthedOpsTenantsTenantIdApiKeysRoute =
   AuthedOpsTenantsTenantIdApiKeysRouteImport.update({
     id: '/api-keys',
     path: '/api-keys',
+    getParentRoute: () => AuthedOpsTenantsTenantIdRoute,
+  } as any)
+const AuthedOpsTenantsTenantIdBiometricsRoute =
+  AuthedOpsTenantsTenantIdBiometricsRouteImport.update({
+    id: '/biometrics',
+    path: '/biometrics',
     getParentRoute: () => AuthedOpsTenantsTenantIdRoute,
   } as any)
 const AuthedOpsTenantsTenantIdCatalogueRoute =
@@ -249,6 +263,7 @@ export interface FileRoutesByFullPath {
   '/ops/': typeof AuthedOpsIndexRoute
   '/ops/tenants/$tenantId': typeof AuthedOpsTenantsTenantIdRouteWithChildren
   '/t/$orgSlug/api-keys': typeof AuthedTOrgSlugApiKeysRoute
+  '/t/$orgSlug/biometrics': typeof AuthedTOrgSlugBiometricsRoute
   '/t/$orgSlug/catalogue': typeof AuthedTOrgSlugCatalogueRoute
   '/t/$orgSlug/exchanges': typeof AuthedTOrgSlugExchangesRoute
   '/t/$orgSlug/members': typeof AuthedTOrgSlugMembersRoute
@@ -257,6 +272,7 @@ export interface FileRoutesByFullPath {
   '/ops/tenants/': typeof AuthedOpsTenantsIndexRoute
   '/t/$orgSlug/': typeof AuthedTOrgSlugIndexRoute
   '/ops/tenants/$tenantId/api-keys': typeof AuthedOpsTenantsTenantIdApiKeysRoute
+  '/ops/tenants/$tenantId/biometrics': typeof AuthedOpsTenantsTenantIdBiometricsRoute
   '/ops/tenants/$tenantId/catalogue': typeof AuthedOpsTenantsTenantIdCatalogueRoute
   '/ops/tenants/$tenantId/exchanges': typeof AuthedOpsTenantsTenantIdExchangesRoute
   '/ops/tenants/$tenantId/templates': typeof AuthedOpsTenantsTenantIdTemplatesRoute
@@ -282,6 +298,7 @@ export interface FileRoutesByTo {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/ops': typeof AuthedOpsIndexRoute
   '/t/$orgSlug/api-keys': typeof AuthedTOrgSlugApiKeysRoute
+  '/t/$orgSlug/biometrics': typeof AuthedTOrgSlugBiometricsRoute
   '/t/$orgSlug/catalogue': typeof AuthedTOrgSlugCatalogueRoute
   '/t/$orgSlug/exchanges': typeof AuthedTOrgSlugExchangesRoute
   '/t/$orgSlug/members': typeof AuthedTOrgSlugMembersRoute
@@ -290,6 +307,7 @@ export interface FileRoutesByTo {
   '/ops/tenants': typeof AuthedOpsTenantsIndexRoute
   '/t/$orgSlug': typeof AuthedTOrgSlugIndexRoute
   '/ops/tenants/$tenantId/api-keys': typeof AuthedOpsTenantsTenantIdApiKeysRoute
+  '/ops/tenants/$tenantId/biometrics': typeof AuthedOpsTenantsTenantIdBiometricsRoute
   '/ops/tenants/$tenantId/catalogue': typeof AuthedOpsTenantsTenantIdCatalogueRoute
   '/ops/tenants/$tenantId/exchanges': typeof AuthedOpsTenantsTenantIdExchangesRoute
   '/ops/tenants/$tenantId/templates': typeof AuthedOpsTenantsTenantIdTemplatesRoute
@@ -320,6 +338,7 @@ export interface FileRoutesById {
   '/_authed/ops/': typeof AuthedOpsIndexRoute
   '/_authed/ops/tenants/$tenantId': typeof AuthedOpsTenantsTenantIdRouteWithChildren
   '/_authed/t/$orgSlug/api-keys': typeof AuthedTOrgSlugApiKeysRoute
+  '/_authed/t/$orgSlug/biometrics': typeof AuthedTOrgSlugBiometricsRoute
   '/_authed/t/$orgSlug/catalogue': typeof AuthedTOrgSlugCatalogueRoute
   '/_authed/t/$orgSlug/exchanges': typeof AuthedTOrgSlugExchangesRoute
   '/_authed/t/$orgSlug/members': typeof AuthedTOrgSlugMembersRoute
@@ -328,6 +347,7 @@ export interface FileRoutesById {
   '/_authed/ops/tenants/': typeof AuthedOpsTenantsIndexRoute
   '/_authed/t/$orgSlug/': typeof AuthedTOrgSlugIndexRoute
   '/_authed/ops/tenants/$tenantId/api-keys': typeof AuthedOpsTenantsTenantIdApiKeysRoute
+  '/_authed/ops/tenants/$tenantId/biometrics': typeof AuthedOpsTenantsTenantIdBiometricsRoute
   '/_authed/ops/tenants/$tenantId/catalogue': typeof AuthedOpsTenantsTenantIdCatalogueRoute
   '/_authed/ops/tenants/$tenantId/exchanges': typeof AuthedOpsTenantsTenantIdExchangesRoute
   '/_authed/ops/tenants/$tenantId/templates': typeof AuthedOpsTenantsTenantIdTemplatesRoute
@@ -358,6 +378,7 @@ export interface FileRouteTypes {
     | '/ops/'
     | '/ops/tenants/$tenantId'
     | '/t/$orgSlug/api-keys'
+    | '/t/$orgSlug/biometrics'
     | '/t/$orgSlug/catalogue'
     | '/t/$orgSlug/exchanges'
     | '/t/$orgSlug/members'
@@ -366,6 +387,7 @@ export interface FileRouteTypes {
     | '/ops/tenants/'
     | '/t/$orgSlug/'
     | '/ops/tenants/$tenantId/api-keys'
+    | '/ops/tenants/$tenantId/biometrics'
     | '/ops/tenants/$tenantId/catalogue'
     | '/ops/tenants/$tenantId/exchanges'
     | '/ops/tenants/$tenantId/templates'
@@ -391,6 +413,7 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/ops'
     | '/t/$orgSlug/api-keys'
+    | '/t/$orgSlug/biometrics'
     | '/t/$orgSlug/catalogue'
     | '/t/$orgSlug/exchanges'
     | '/t/$orgSlug/members'
@@ -399,6 +422,7 @@ export interface FileRouteTypes {
     | '/ops/tenants'
     | '/t/$orgSlug'
     | '/ops/tenants/$tenantId/api-keys'
+    | '/ops/tenants/$tenantId/biometrics'
     | '/ops/tenants/$tenantId/catalogue'
     | '/ops/tenants/$tenantId/exchanges'
     | '/ops/tenants/$tenantId/templates'
@@ -428,6 +452,7 @@ export interface FileRouteTypes {
     | '/_authed/ops/'
     | '/_authed/ops/tenants/$tenantId'
     | '/_authed/t/$orgSlug/api-keys'
+    | '/_authed/t/$orgSlug/biometrics'
     | '/_authed/t/$orgSlug/catalogue'
     | '/_authed/t/$orgSlug/exchanges'
     | '/_authed/t/$orgSlug/members'
@@ -436,6 +461,7 @@ export interface FileRouteTypes {
     | '/_authed/ops/tenants/'
     | '/_authed/t/$orgSlug/'
     | '/_authed/ops/tenants/$tenantId/api-keys'
+    | '/_authed/ops/tenants/$tenantId/biometrics'
     | '/_authed/ops/tenants/$tenantId/catalogue'
     | '/_authed/ops/tenants/$tenantId/exchanges'
     | '/_authed/ops/tenants/$tenantId/templates'
@@ -601,6 +627,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedTOrgSlugApiKeysRouteImport
       parentRoute: typeof AuthedTOrgSlugRoute
     }
+    '/_authed/t/$orgSlug/biometrics': {
+      id: '/_authed/t/$orgSlug/biometrics'
+      path: '/biometrics'
+      fullPath: '/t/$orgSlug/biometrics'
+      preLoaderRoute: typeof AuthedTOrgSlugBiometricsRouteImport
+      parentRoute: typeof AuthedTOrgSlugRoute
+    }
     '/_authed/t/$orgSlug/catalogue': {
       id: '/_authed/t/$orgSlug/catalogue'
       path: '/catalogue'
@@ -648,6 +681,13 @@ declare module '@tanstack/react-router' {
       path: '/api-keys'
       fullPath: '/ops/tenants/$tenantId/api-keys'
       preLoaderRoute: typeof AuthedOpsTenantsTenantIdApiKeysRouteImport
+      parentRoute: typeof AuthedOpsTenantsTenantIdRoute
+    }
+    '/_authed/ops/tenants/$tenantId/biometrics': {
+      id: '/_authed/ops/tenants/$tenantId/biometrics'
+      path: '/biometrics'
+      fullPath: '/ops/tenants/$tenantId/biometrics'
+      preLoaderRoute: typeof AuthedOpsTenantsTenantIdBiometricsRouteImport
       parentRoute: typeof AuthedOpsTenantsTenantIdRoute
     }
     '/_authed/ops/tenants/$tenantId/catalogue': {
@@ -711,6 +751,7 @@ declare module '@tanstack/react-router' {
 
 interface AuthedOpsTenantsTenantIdRouteChildren {
   AuthedOpsTenantsTenantIdApiKeysRoute: typeof AuthedOpsTenantsTenantIdApiKeysRoute
+  AuthedOpsTenantsTenantIdBiometricsRoute: typeof AuthedOpsTenantsTenantIdBiometricsRoute
   AuthedOpsTenantsTenantIdCatalogueRoute: typeof AuthedOpsTenantsTenantIdCatalogueRoute
   AuthedOpsTenantsTenantIdExchangesRoute: typeof AuthedOpsTenantsTenantIdExchangesRoute
   AuthedOpsTenantsTenantIdTemplatesRoute: typeof AuthedOpsTenantsTenantIdTemplatesRoute
@@ -722,6 +763,8 @@ interface AuthedOpsTenantsTenantIdRouteChildren {
 const AuthedOpsTenantsTenantIdRouteChildren: AuthedOpsTenantsTenantIdRouteChildren =
   {
     AuthedOpsTenantsTenantIdApiKeysRoute: AuthedOpsTenantsTenantIdApiKeysRoute,
+    AuthedOpsTenantsTenantIdBiometricsRoute:
+      AuthedOpsTenantsTenantIdBiometricsRoute,
     AuthedOpsTenantsTenantIdCatalogueRoute:
       AuthedOpsTenantsTenantIdCatalogueRoute,
     AuthedOpsTenantsTenantIdExchangesRoute:
@@ -763,6 +806,7 @@ const AuthedOpsRouteWithChildren = AuthedOpsRoute._addFileChildren(
 
 interface AuthedTOrgSlugRouteChildren {
   AuthedTOrgSlugApiKeysRoute: typeof AuthedTOrgSlugApiKeysRoute
+  AuthedTOrgSlugBiometricsRoute: typeof AuthedTOrgSlugBiometricsRoute
   AuthedTOrgSlugCatalogueRoute: typeof AuthedTOrgSlugCatalogueRoute
   AuthedTOrgSlugExchangesRoute: typeof AuthedTOrgSlugExchangesRoute
   AuthedTOrgSlugMembersRoute: typeof AuthedTOrgSlugMembersRoute
@@ -776,6 +820,7 @@ interface AuthedTOrgSlugRouteChildren {
 
 const AuthedTOrgSlugRouteChildren: AuthedTOrgSlugRouteChildren = {
   AuthedTOrgSlugApiKeysRoute: AuthedTOrgSlugApiKeysRoute,
+  AuthedTOrgSlugBiometricsRoute: AuthedTOrgSlugBiometricsRoute,
   AuthedTOrgSlugCatalogueRoute: AuthedTOrgSlugCatalogueRoute,
   AuthedTOrgSlugExchangesRoute: AuthedTOrgSlugExchangesRoute,
   AuthedTOrgSlugMembersRoute: AuthedTOrgSlugMembersRoute,

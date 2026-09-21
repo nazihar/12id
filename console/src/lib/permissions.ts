@@ -21,6 +21,8 @@ export const tenantStatements = {
   catalogue: ['publish', 'deprecate'],
   template: ['create', 'update', 'delete'],
   exchange: ['create'],
+  // Phase 6: the biometric provider, the switch and every biometric policy (default, cred def, template).
+  biometrics: ['update'],
 } as const
 
 export const tenantAc = createAccessControl(tenantStatements)
@@ -31,6 +33,8 @@ const consoleResources = {
   catalogue: ['publish', 'deprecate'],
   template: ['create', 'update', 'delete'],
   exchange: ['create'],
+  // Phase 6: the biometric provider, the switch and every biometric policy (default, cred def, template).
+  biometrics: ['update'],
 } as const
 
 export const tenantRoles = {

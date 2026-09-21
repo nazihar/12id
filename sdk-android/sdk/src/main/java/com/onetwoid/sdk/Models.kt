@@ -43,6 +43,8 @@ public data class CredentialOffer(
     val credentialDefinitionId: String?,
     val attributes: Map<String, String>,
     val receivedAtEpochSeconds: Long,
+    /** Set when the organisation requires a face check first ([OneTwoId.verifyFace]); null otherwise or when unknown offline. */
+    val biometric: BiometricRequirement? = null,
 )
 
 /** One group of attributes a verifier asks to see, all from the same credential. */
@@ -60,6 +62,8 @@ public data class ProofRequest(
     val attributeGroups: List<RequestedAttributeGroup>,
     val predicates: List<RequestedPredicate>,
     val receivedAtEpochSeconds: Long,
+    /** Set when the verifier requires a face check first ([OneTwoId.verifyFace]); null otherwise or when unknown offline. */
+    val biometric: BiometricRequirement? = null,
 )
 
 /** A stored credential that can answer one group or predicate of a proof request. */

@@ -42,12 +42,18 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import com.onetwoid.sdk.BiometricRequirement
+import com.onetwoid.sdk.BiometricStatus
 import com.onetwoid.sdk.Credential
 import com.onetwoid.sdk.CredentialOffer
 import com.onetwoid.sdk.ProofRequest
 import com.onetwoid.sdk.ProofRequestOptions
 import com.onetwoid.sdk.ProofSelection
 import com.onetwoid.sdk.WalletState
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private val viewModel: WalletViewModel by viewModels()
@@ -55,6 +61,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent { MaterialTheme { WalletScreen(viewModel) } }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) { SampleCommands.verifyAll.collect { viewModel.verifyAllPending(this@MainActivity) } }
+        }
     }
 
     override fun onResume() {
@@ -160,6 +169,9 @@ private fun OffersTab(offers: List<CredentialOffer>, viewModel: WalletViewModel)
                     Text("From ${offer.connectionLabel ?: offer.connectionId}", style = MaterialTheme.typography.titleMedium)
                     offer.attributes.forEach { (k, v) -> Text("$k: $v") }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        offer.biometric?.let { BiometricNote(it) }
+                        val activity = LocalContext.current as ComponentActivity
+                        if (offer.biometric?.status == BiometricStatus.Pending) Button(onClick = { viewModel.verifyFace(activity, offer.id) }) { Text("Verify face") }
                         Button(onClick = { viewModel.acceptOffer(offer.id) }) { Text("Accept") }
                         OutlinedButton(onClick = { viewModel.declineOffer(offer.id) }) { Text("Decline") }
                     }
@@ -182,6 +194,9 @@ private fun ProofsTab(requests: List<ProofRequest>, options: Map<String, ProofRe
                     val selection: ProofSelection? = option?.defaultSelection()
                     if (option != null && selection == null) Text("No matching credential", style = MaterialTheme.typography.labelMedium)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        request.biometric?.let { BiometricNote(it) }
+                        val activity = LocalContext.current as ComponentActivity
+                        if (request.biometric?.status == BiometricStatus.Pending) Button(onClick = { viewModel.verifyFace(activity, request.id) }) { Text("Verify face") }
                         Button(enabled = selection != null, onClick = { selection?.let { viewModel.respondToProof(request.id, it) } }) { Text("Share") }
                         OutlinedButton(onClick = { viewModel.declineProof(request.id) }) { Text("Decline") }
                     }
@@ -189,4 +204,15 @@ private fun ProofsTab(requests: List<ProofRequest>, options: Map<String, ProofRe
             }
         }
     }
+}
+
+/** Phase 6: shown on offers and proof requests that need a face check. */
+@Composable
+private fun BiometricNote(requirement: BiometricRequirement) {
+    val text = when (requirement.status) {
+        BiometricStatus.Pending -> "Face check required (${requirement.attemptsRemaining} attempts left)"
+        BiometricStatus.Passed -> "Face check passed"
+        else -> "Face check ${requirement.status.name.lowercase()}"
+    }
+    Text(text, style = MaterialTheme.typography.labelMedium)
 }

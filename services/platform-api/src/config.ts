@@ -38,6 +38,11 @@ const configSchema = z.object({
   GENESIS_SIGNING_PUBLIC_KEY: z.string().min(1),
   VDR_PROXY_URL: z.url().optional(),
 
+  /** biometric-service (Phase 6), private network. Both unset: no biometric routes and nothing is ever gated. */
+  BIOMETRIC_SERVICE_URL: z.url().optional(),
+  BIOMETRIC_SERVICE_TOKEN: secret.optional(),
+  BIOMETRIC_EXPIRY_POLL_MS: z.coerce.number().int().positive().default(30_000),
+
   OUTBOX_POLL_MS: z.coerce.number().int().positive().default(1_000),
   OUTBOX_BATCH: z.coerce.number().int().min(1).max(500).default(200),
   WEBHOOK_POLL_MS: z.coerce.number().int().positive().default(1_000),

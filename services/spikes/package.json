@@ -7,6 +7,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@aws-sdk/client-iam": "3.1136.0",
+    "@aws-sdk/client-rekognition": "3.1136.0",
+    "@aws-sdk/client-sts": "3.1136.0",
     "@credo-ts/anoncreds": "0.7.0",
     "@credo-ts/askar": "0.7.0",
     "@credo-ts/core": "0.7.0",

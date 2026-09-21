@@ -1,6 +1,6 @@
 # SSI Platform — System Architecture and Implementation Plan
 
-**Status:** Design handover document — **revised after Phase 0 (Android pass), Phase 1 (staging infrastructure), Phase 2 (agent services on staging), Phase 3 (platform API on staging), Phase 4 (console) and Phase 5 (Android holder SDK)**
+**Status:** Design handover document — **revised after Phase 0 (Android pass), Phase 1 (staging infrastructure), Phase 2 (agent services on staging), Phase 3 (platform API on staging), Phase 4 (console) and Phase 5 (Android holder SDK); Phase 6 (biometric gate) on staging with the mock provider**
 **Audience:** Implementation engineer / coding agent
 **Stack decision:** Credo-TS 0.7 + DIDComm v1 + AnonCreds + Hyperledger Indy
 **Evidence:** every Phase 0 claim below is backed by a run or a source read recorded in [`3-phase-0-findings.md`](3-phase-0-findings.md). The pre-Phase-0 version of this document is kept at [`init.pre-phase0.md`](init.pre-phase0.md).
@@ -63,7 +63,20 @@ Phase 0 ran the stack end to end on Android. Content now falls into these tiers,
 - production (non-von-network) ledgers and the TAA;
 - a real FCM push (the smoke simulates it with a broadcast on the same code path).
 
-**Reviewed, not fixed (2026-09-16).** [`15-pre-production-review.md`](15-pre-production-review.md) audited every component above for security gaps and optimisation opportunities: 3 High (data retention/deletion, shared internal token + network reaching the endorser, Postgres superuser everywhere), 18 Medium, 12 Low. Its §9 is the Phase 6 fix set; nothing in it has been built.
+**Reviewed, not fixed (2026-09-16).** [`15-phase-7.md`](15-phase-7.md) audited every component above for security gaps and optimisation opportunities: 3 High (data retention/deletion, shared internal token + network reaching the endorser, Postgres superuser everywhere), 18 Medium, 12 Low. Its §10 is the **Phase 7** fix set (renumbered when the biometric gate became Phase 6); nothing in it has been built.
+
+**Confirmed (Phase 6, run, 2026-09-21).** The optional biometric gate (§2.8, §4.9, §12.17), evidence in [`17-phase-6-biometric-findings.md`](17-phase-6-biometric-findings.md), with the `mock` provider:
+- **Gated issuance** held at `request-received` until a pass (both event orders).
+- **Lockout** after the last failed attempt abandons the exchange.
+- **Gated proofs:** `verified`/`disclosed` withheld until a pass.
+- **Audit and data:** the biometric log for every step, and no reference image in any store, log, webhook or backup after the decision.
+- **SDK on the phone:** `verifyFace` and the `BiometricRequired` guard, through the mock add-on.
+
+**Confirmed with real AWS (Phase 6, run):** the tenant role with an external id, on-device Face Liveness through the add-on, and `CompareFaces` (same face 99.9, different face 2.7).
+
+**Not yet tested (Phase 6):**
+- screen-replay (video) attacks; the liveness default of 90 is close to one genuine score (93.2);
+- the Kotlin holder's handling of the `issuance-abandoned` problem report.
 
 Phase 0 found that the architecture holds. It also found that **three configuration switches, two holder fork changes and one mediator setting** must all be right, and each fails silently when wrong (§2.7.1, §2.7.4, §2.3). Treat those as load-bearing.
 
@@ -223,6 +236,7 @@ Responsibilities:
 - **Wallets** (per-installation tokens), per-wallet mediator invitations, and the mediator webhook receiver that relays wake-ups to the customer (§4.8, §12.12). No device tokens are stored
 - Admin UI (the Phase 4 console reaches it through the console scope), including **aggregate stats for the console's dashboards** — per-tenant and platform-wide counters, a daily series and attention lists, computed from the mirror tables only, never through agent-service (Phase 4 C8)
 - Business-data-to-credential-attribute mapping
+- **Biometric gate** (planned, Phase 6, §2.8): policies per tenant, credential definition and proof template; the gate state; the biometric log; the SDK's biometric wallet routes; the `biometric.check_completed` webhook. Vendor code and images stay in biometric-service
 
 **Runtime.** Node.js/TypeScript. Own Postgres database, separate from the agent wallet storage.
 
@@ -316,7 +330,7 @@ With `QueueAndLiveModeDelivery` the mediator checks for a *live-mode* session (a
 **Consequences:**
 - Pin `PickUpV1` in the SDK. The sample app's `Implicit` default must not ship.
 - Live delivery latency is bounded by `mediatorPollingInterval` (default 10 s) — observed immediate in practice while the socket was open, but do not promise sub-second delivery.
-- Every open wallet polls the mediator on that interval. That is the load profile to test (§10 Phase 7).
+- Every open wallet polls the mediator on that interval. That is the load profile to test (§10 Phase 8).
 - The pre-Phase-0 guidance ("implicit → `DirectDelivery` **or** `QueueAndLiveModeDelivery`") was wrong in both directions.
 
 ### 2.7.4 Required holder fork changes
@@ -332,6 +346,28 @@ With `QueueAndLiveModeDelivery` the mediator checks for a *live-mode* session (a
 **Phase 5 added four more (all small, `sdk-android/FORK.md`):** F3 restartable pickup (`startPickup()`/`stopPickup()`, so the SDK pauses polling in the background), F4 `AgentEvents.PickupEvent(messageCount)` after every batch (so `sync()` knows when the queue is drained), F5 logback out of the library (the SDK ships an slf4j binding that forwards framework logs to the host app instead), F6 consumer R8 rules. No further source change was needed for the SDK.
 
 **Swift (not yet tested):** check both of the same points, plus pickup strategy support and `did:sov` prefix handling, before assuming parity.
+
+### 2.8 Biometric service — planned (Phase 6)
+
+**Purpose.** An optional, per-tenant **biometric gate**. Before a credential is issued, or before a proof result is released to the tenant, the end user must pass **liveness** and a **face match** against a reference image the tenant sends with the offer or proof request. It is a third-party integration that we own. The tenant enables it, configures its own vendor account and sets the policy; it writes no vendor code.
+
+**Runtime.** Split into three parts:
+- **`biometric-service`** (new, internal only, reached by platform-api alone with its own token). It holds:
+  - the vendor adapters behind a `BiometricProvider` port (`aws-rekognition` and `mock` in Phase 6; FaceTec and in-house later);
+  - the tenant's vendor configuration and the reference images, encrypted per tenant (AES-256-GCM, master key in SOPS).
+- **platform-api**. It holds:
+  - the policies (tenant default, per credential definition, per proof template: required, minimum liveness and match score, attempts, TTL);
+  - the gate state and the **biometric log** (`exchange_gates`, `exchange_gate_events`);
+  - the wallet-token routes the SDK calls, and the `biometric.check_completed` webhook.
+- **The SDK side** is a vendor-neutral `BiometricCapture` port in the core SDK, plus one native add-on per vendor and platform (`com.12id:holder-sdk-android-biometrics-aws`; iOS mirrors it in Phase 5-iOS).
+
+**Storage.** A `biometric` database on the shared `agent-postgres`, backed up like the other databases. Reference images are wiped at the decision (or at check expiry, 30 min by default) and only scores, decisions and hashes remain. Role scoping is H3 and log retention is H1, both in Phase 7.
+
+**Enforcement is at the agent.** Gated exchanges are created with Credo's per-record `autoAccept: Never`:
+- issuance parks at `request-received` until the gate passes;
+- a presentation parks at `presentation-received`, and `verified`/`disclosed` are withheld from the tenant until it passes. The holder has already sent its presentation by then, so the SDK runs the check before responding.
+
+The device only captures. The result comes from AWS server-side, so a modified app cannot skip the check.
 
 ---
 
@@ -356,6 +392,10 @@ With `QueueAndLiveModeDelivery` the mediator checks for a *live-mode* session (a
 | Browser (operator / tenant staff) | Console | HTTPS, Better Auth session cookie (host-only) | HTTPS | Inbound | Phase 4; `12id.<domain>` |
 | Console (server functions) | Platform API | REST with the console scope headers | HTTP (Docker network) | Outbound | Phase 4; never reachable from the internet, audited per call |
 | Platform API | Customer backend | HTTPS webhook | HTTPS | Outbound | Signed payloads, with retry |
+| Holder SDK | Platform API | REST: `/v1/wallet/biometric-requirements`, `/v1/wallet/biometric-sessions` (wallet token) | HTTPS | Outbound from device | **Planned, Phase 6** (§2.8); keyed by the exchange's thread id |
+| Biometric add-on (in the host app) | AWS Rekognition | Face Liveness streaming with short-lived STS credentials from the session | HTTPS/WSS | Outbound from device | **Planned, Phase 6**; the tenant's own AWS account |
+| Platform API | Biometric service | internal REST, own token | HTTP (private `12id-biometric` network) | Outbound | **Planned, Phase 6**; never reachable from the internet |
+| Biometric service | AWS STS / Rekognition | `AssumeRole`, `CreateFaceLivenessSession`, `GetFaceLivenessSessionResults`, `CompareFaces` | HTTPS | Outbound | **Planned, Phase 6**; tenant role + external id |
 
 **Network exposure summary.**
 
@@ -454,6 +494,25 @@ If revocation is added later, the original flow applies (registry entries batche
 
 > Design note: the SDK exposes `sync()` for the host app to call from its own notification handler, rather than claiming a notification category. Customers already have push infrastructure. Two Android limits apply to *any* push: a **force-stopped** app (Settings → Force stop, OEM clean-up tools) is in the stopped state and receives nothing until the user opens it, and **MIUI** additionally needs the user's "Autostart" permission (app-op 10008) to start a killed app. Both are documented for customers in `sdk-android/docs/integration.md`.
 
+### 4.9 Biometric gate — planned (Phase 6)
+
+Issuance is shown; a proof follows the same steps with `presentation-received` and accept. Plan and details: [`16-phase-6-biometric.md`](16-phase-6-biometric.md).
+
+1. The customer backend calls `POST /v1/credentials/offer` with `biometric.referenceImage`.
+   - Platform API resolves the policy: the credential definition's policy, else the tenant default.
+   - It creates a check in biometric-service (image encrypted, thresholds snapshotted).
+   - It sends the offer with per-record `autoAccept: Never`.
+   - It records the gate (`gate_created`) and returns 202 with `biometric.status: pending`.
+2. The offer reaches the wallet. The SDK looks up the requirement by the offer's thread id (`GET /v1/wallet/biometric-requirements`), and the host app sees `offer.biometric`.
+3. The host app calls `OneTwoId.verifyFace(activity, offerId)`:
+   - The SDK opens a session (`POST /v1/wallet/biometric-sessions`). Platform API checks the wallet's tenant, then biometric-service assumes the tenant's AWS role and creates a Face Liveness session.
+   - The AWS add-on runs the liveness UI and streams to AWS.
+   - The SDK completes the session. biometric-service fetches the result, runs `CompareFaces` against the reference, applies the thresholds, and wipes the images.
+   - Platform API records the attempt and fires `biometric.check_completed`.
+4. The host app calls `acceptOffer(id)`. The credential request parks at `request-received`, and `advanceGate()` issues once the gate has passed. A fail after the last attempt, or no pass before the TTL, declines the exchange (`abandoned`).
+
+Every step writes a row to the biometric log (`exchange_gate_events`), which the console shows next to the exchange. No step stores or sends an image outside biometric-service.
+
 ---
 
 ## 5. Data and storage
@@ -466,6 +525,8 @@ If revocation is added later, the original flow applies (registry entries batche
 | Redis | Mediator cache, multi-instance delivery streams, platform job queue | — |
 | Device (Askar/SQLite) | User's keys, link secret, credentials, connections, cached genesis file | Askar, key in Keychain/Keystore |
 | Indy ledger | DIDs, schemas, cred defs | Public, unencrypted, immutable |
+| Biometric database (Postgres `biometric` on `agent-postgres`) — **planned, Phase 6** | Tenant vendor config; reference images for the ~30-min check window only; sessions; scores and decisions with image hashes | Per-tenant AES-256-GCM (master key in SOPS); images wiped at the decision |
+| Platform database, biometric part — **planned, Phase 6** | Biometric policies; `exchange_gates` and the biometric log `exchange_gate_events` (scores, decisions, AWS session ids, no images) | Standard DB encryption; no automatic deletion until Phase 7 H1 |
 
 **Never store on the ledger:** personal data, credential attribute values, connection records, presentation records, hashes of personal data.
 
@@ -505,6 +566,12 @@ Write this up once as a customer-facing document — every enterprise customer's
 - **Mediator metadata** leaks traffic patterns per connection, including a poll every 10 seconds from each open wallet. Document this for customers.
 - **Genesis file integrity** matters — a malicious genesis file points a wallet at a fake ledger. Serve it over HTTPS with pinning, or sign it. *Phase 5: the Android SDK verifies the sha256 from `/v1/ledger` over TLS; the minisign signature is published but not yet verified on device (no BLAKE2b in the SDK's dependencies).*
 - **No revocation in v1** means a leaked or wrongly issued credential cannot be invalidated before its expiry attribute passes (§4.7).
+- **Biometric data is special-category personal data** (GDPR Art. 9, BIPA; planned, Phase 6):
+  - Reference images are encrypted per tenant, kept only for the check window, and wiped at the decision. They are never logged, never in webhooks, never in the console.
+  - The biometric log keeps scores, decisions and AWS session ids with no automatic deletion until Phase 7 H1.
+  - The `biometric` database shares `agent-postgres` and its superuser access until H3.
+  - The pass/fail result is always fetched from the vendor server-side; the device is never trusted to report it.
+  - Tenants are the controllers and must collect the end user's consent. Say so in the customer-facing documents.
 - **Wallet files must be excluded from Android Auto Backup** (Phase 5). The key stays in the Keystore; restored wallet files are unreadable and the SDK reports `WalletKeyLost`. The integration guide gives the `dataExtractionRules`.
 
 ---
@@ -830,11 +897,25 @@ Plan: [`13-phase-5-android.md`](13-phase-5-android.md); evidence: [`14-phase-5-a
 - [ ] Parity test suite running both SDKs against the same issuer in CI, including the offline-delivery scenario
 - [ ] Strip unused architectures; integration guide + sample app
 
-### Phase 6 — Pre-production hardening (from the review; not started)
+### Phase 6 — Biometric gate — **on staging (mock provider); AWS pending the tenant role**
 
-Findings and the ordered fix set: [`15-pre-production-review.md`](15-pre-production-review.md) §9. Highest first: per-hop internal tokens and an endorser-only network (H2); per-service Postgres roles and the endorser store off the mediator instance (H3); file-based secrets (M11); DIDComm body cap (M1); the trap 44 root cause is agent-service's `connectionTimeout`, not the platform client (M5); deletion routes and a retention job so §5.3 is true (H1).
+Plan: [`16-phase-6-biometric.md`](16-phase-6-biometric.md); evidence: [`17-phase-6-biometric-findings.md`](17-phase-6-biometric-findings.md). An optional, per-tenant liveness + face-match check that guards credential issuance and proof results (§2.8, §4.9, §12.17).
 
-### Phase 7 — Hardening
+- [~] B0 spike: the server-side calls ran with the owner's keys (session without S3 output). The device capture, AssumeRole and `CompareFaces` thresholds wait for the tenant role. Amplify's detector takes an injected credentials provider (source read, compiled); size +8.3 MB release; the host app needs core library desugaring
+- [x] B1 `biometric-service`: envelope encryption, `mock` + `aws-rekognition` adapters, internal API, expiry job; `biometric` database on `agent-postgres`
+- [x] B2 agent-service: per-record `autoAccept: Never`; issue/accept/abandon routes; the reconciler covers the held states
+- [x] B3 platform-api: policies (tenant, credential definition, template), gate engine, biometric log, wallet routes, `biometric.check_completed`
+- [x] B4 Android SDK: `BiometricCapture` port, `verifyFace`, `holder-sdk-android-biometrics-aws` / `-mock`, sample, integration guide. The wallet token is now cached (findings F1)
+- [x] B5 console: settings, policies, Biometric column + log dialog (tenant + operator) deployed; Playwright `biometrics.spec.ts` passes locally
+- [~] B6 infra: compose, secrets, backup + restore drill, runbook; blackbox probe / failed-check alert not added
+- [x] `smoke:biometric-credo` (mock) **PASSED 18/18**; `smoke:sdk-biometric-android` (mock, phone) **PASSED 12/12**; grep check clean
+- [x] `smoke:sdk-biometric-android PROVIDER=aws` on the phone with the owner's AWS account: real liveness 99+, same face match 99.9 → issued, different face 2.7 → refused (findings "AWS run"). A printed or on-screen photo was refused (liveness 0.13, match 99.99), and the AWS capture passed in an R8-shrunk build (`-PminifyDebug`)
+
+### Phase 7 — Pre-production hardening (from the review; not started)
+
+Findings and the ordered fix set: [`15-phase-7.md`](15-phase-7.md) §10 (this was Phase 6 before the biometric gate was inserted). H1 and H3 now also cover the biometric tables and database. Highest first: per-hop internal tokens and an endorser-only network (H2); per-service Postgres roles and the endorser store off the mediator instance (H3); file-based secrets (M11); DIDComm body cap (M1); the trap 44 root cause is agent-service's `connectionTimeout`, not the platform client (M5); deletion routes and a retention job so §5.3 is true (H1).
+
+### Phase 8 — Hardening
 
 - [ ] Load test the mediator with the real profile: N open wallets each polling every 10 s (`PickUpV1`), plus one webhook per queued message
 - [ ] Failover test: kill one Indy validator, confirm reads and writes continue
@@ -937,6 +1018,12 @@ Findings and the ordered fix set: [`15-pre-production-review.md`](15-pre-product
 
 45. **A tree sync that includes `infra/staging/secrets/` overwrites secrets edited on the VM** (Phase 4 C8). `*.sops.env` files are committed, but keys added on the VM with `sops` (`CONSOLE_TOKEN` in `platform.sops.env`, runbook step 1) were never committed back, so extracting a tarball of the repo over `/opt/12id` silently replaced the file with the older committed one and the next `deploy.sh platform` failed at interpolation. Nothing running was affected; the value was recoverable from `console.sops.env`, which holds the same token and is not in the repo. Exclude `infra/staging/secrets/` from every sync, or commit the VM's file first.
 
+46. **The SDK must not ask the host app for a token on every call** (Phase 6, F1). A customer backend that retries `POST /v1/wallets` rotates the token, so concurrent SDK calls invalidated each other (401s, timeouts). The SDK caches the token and asks again only after a 401.
+
+47. **von-network does not come back after a VM reboot** (Phase 6, F5). Restart policy `no`; the staging ledger was down for 25 hours after an unattended-upgrades reboot and nothing alerted. Restart with `./manage start <public IP>` (never `down`). Since 2026-09-21: `12id-von-network.service` starts it at boot, and the containers have `restart: unless-stopped`.
+
+48. **Biometric add-ons change the host app's build** (Phase 6, F3). Amplify needs core library desugaring and leaves the empty `listenablefuture` stub on the compile classpath, which hides CameraX's `ListenableFuture` from app code. Both fixes are in the integration guide.
+
 ---
 
 ## 12. Decisions
@@ -966,7 +1053,7 @@ Decided before Phase 0. Consequences now designed in: no tails server; credentia
 
 ### 12.4 Issuer/verifier deployment split — decided: one codebase, one deployment
 
-**Decision (Phase 2 planning):** `agent-service` issues and verifies in one process (`AGENT_ROLES=issuer,verifier`, splittable later). DIDComm connections live in the tenant's wallet inside one agent; separate issuer and verifier processes would need either two connections per end user or a shared tenant store that Credo does not coordinate. Revisit if verification load ever starves issuance (Phase 7 load test).
+**Decision (Phase 2 planning):** `agent-service` issues and verifies in one process (`AGENT_ROLES=issuer,verifier`, splittable later). DIDComm connections live in the tenant's wallet inside one agent; separate issuer and verifier processes would need either two connections per end user or a shared tenant store that Credo does not coordinate. Revisit if verification load ever starves issuance (Phase 8 load test).
 
 ### 12.5 Identifier format — decided: legacy unqualified on the wire
 
@@ -1040,6 +1127,26 @@ The product is offered as SaaS and will also be self-hostable by an organization
 Maven group **`com.12id`** (the product domain, 12id.com), artifact `holder-sdk-android` (the fork as `aries-framework-kotlin`); Kotlin package **`com.onetwoid`** (a package segment cannot start with a digit; `com._12id` was rejected as unreadable; the company domain was rejected because the SDK is a product artefact). Entry point `com.onetwoid.sdk.OneTwoId`.
 
 Distribution is **source / local Maven only** (`sdk-android/build/m2`, consumed by the sample the way a customer would) until a public repository is chosen before the first customer. Two things must happen with that step: republish the UniFFI wrappers under our coordinates — **rebuilt**, because the upstream x86_64 libraries do not load on any Android (missing compiler-rt builtins, §9) and emulator testing depends on it — and vendor or mirror the one JitPack dependency (`com.github.multiformats:java-multibase`), so that a consumer needs a single repository. Maven Central remains possible later (namespace verification against 12id.com).
+
+### 12.17 Biometric gate — decided: optional per tenant, own service, bring-your-own AWS first (new, Phase 6 planning)
+
+An optional liveness + face-match gate on issuance and proof results (§2.8, §4.9). Planned in [`16-phase-6-biometric.md`](16-phase-6-biometric.md). Decided:
+
+| Item | Decision |
+|---|---|
+| Phase placement | **Phase 6**, after the Android SDK and before the review fix set. The review becomes Phase 7 (`15-phase-7.md`) and Hardening becomes Phase 8 |
+| Vendor lock-in | Ports and adapters: a `BiometricProvider` port on the server, and a `BiometricCapture` port in the SDK with one native add-on per vendor and platform. A new vendor is one adapter plus one add-on per platform |
+| Server placement | New internal `biometric-service` (vendor code, vendor config, images, its own key). platform-api owns policies, the gate, the log and every public route |
+| Database | A `biometric` database on the shared `agent-postgres`, backed up like the others (images short-lived and encrypted). A scoped role comes with H3; a dedicated instance only if production needs instance-level backups or H3 cannot isolate it |
+| Vendor accounts | **Bring your own** only (the tenant's AWS role + our external id) |
+| Vendors in Phase 6 | **AWS Rekognition Face Liveness** (tested with the owner's AWS account) + `mock`. FaceTec and in-house later |
+| Reference image | Per request, deleted at the decision. No enrolled references |
+| Device capture | Native add-ons, platform-specific, named after the core (`com.12id:holder-sdk-android-biometrics-aws`, package `com.onetwoid.sdk.biometrics.aws`). Switching vendor means the tenant's app ships the new add-on first |
+| Enforcement | At the agent (per-record `autoAccept: Never`); the result is fetched from the vendor server-side. For proofs the tenant never receives `verified`/`disclosed` without a pass |
+| Audit | Biometric log per exchange (`exchange_gate_events`), shown in the console exchanges list for tenants and operators |
+| Log retention | No automatic deletion in Phase 6; part of Phase 7 H1 |
+
+Rejected for Phase 6: hosted web capture (weaker against injection; revisit if app releases per vendor switch hurt), 12id-managed vendor accounts, stored per-subject reference images, credential-embedded photos.
 
 ## Appendix A — Repository reference
 

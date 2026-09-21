@@ -16,6 +16,8 @@ import { jsonSchemaTransform, serializerCompiler, validatorCompiler, type ZodTyp
 import type { Logger as PinoLogger } from 'pino'
 
 import type { AgentClient } from '../agent-client.ts'
+import type { BiometricClient } from '../biometric-client.ts'
+import type { GateEngine } from '../biometric/gate.ts'
 import type { PlatformConfig } from '../config.ts'
 import type { Database } from '../db/client.ts'
 import type { MediatorClient } from '../mediator-client.ts'
@@ -25,6 +27,7 @@ import { CONSOLE_TOKEN_HEADER, requireOperator, requireTenantPrincipal, requireW
 import { platformErrorHandler } from './errors.ts'
 import { useIdempotency } from './idempotency.ts'
 import { adminRoutes } from './routes/admin.ts'
+import { biometricRoutes, walletBiometricRoutes } from './routes/biometrics.ts'
 import { catalogueRoutes } from './routes/catalogue.ts'
 import { CONSOLE_ONLY_TAG, consoleRoutes } from './routes/console.ts'
 import { exchangeRoutes } from './routes/exchanges.ts'
@@ -49,6 +52,8 @@ export interface AppDeps {
   logger: PinoLogger
   readiness: () => Promise<ReadinessReport>
   wake: (connectionId: string) => Promise<WakeOutcome>
+  /** Phase 6: both present when biometric-service is configured. */
+  biometric?: { client: BiometricClient; gates: GateEngine }
 }
 
 export interface BuildOptions {
@@ -95,6 +100,7 @@ export function buildApp(deps: AppDeps, options: BuildOptions = {}) {
         { name: 'wallets', description: 'Wallets (customer backend)' },
         { name: 'wallet (SDK)', description: 'Wallet endpoints called by the app with its wallet token' },
         { name: 'webhooks' },
+        ...(deps.biometric ? [{ name: 'biometrics', description: 'Biometric gate settings (console)' }] : []),
         ...(consoleSpec
           ? [
               { name: 'stats', description: 'Dashboard aggregates, served to the console only' },
@@ -128,7 +134,8 @@ export function buildApp(deps: AppDeps, options: BuildOptions = {}) {
     scope.addHook('onRequest', requireTenantPrincipal(deps.db, deps.config.CONSOLE_TOKEN))
     useIdempotency(scope, deps.db)
     await scope.register(catalogueRoutes({ agent: deps.agent }))
-    await scope.register(exchangeRoutes({ db: deps.db, agent: deps.agent }))
+    await scope.register(exchangeRoutes({ db: deps.db, agent: deps.agent, biometric: deps.biometric?.client, gates: deps.biometric?.gates }))
+    if (deps.biometric) await scope.register(biometricRoutes({ db: deps.db, agent: deps.agent, biometric: deps.biometric.client }))
     await scope.register(proofTemplateRoutes({ db: deps.db }))
     await scope.register(walletCustomerRoutes({ db: deps.db }))
     await scope.register(webhookRoutes({ db: deps.db }))
@@ -140,6 +147,7 @@ export function buildApp(deps: AppDeps, options: BuildOptions = {}) {
   app.register(async (scope) => {
     scope.addHook('onRequest', requireWalletToken(deps.db))
     await scope.register(walletDeviceRoutes({ db: deps.db, mediator: deps.mediator }))
+    if (deps.biometric) await scope.register(walletBiometricRoutes({ gates: deps.biometric.gates }))
   })
 
   // Operator scope.

@@ -36,6 +36,8 @@ for (const [spec, file] of [['customer', 'openapi.json'], ['console', 'openapi.c
       logger: pino({ level: 'silent' }),
       readiness: async () => ({ ready: true, draining: false, checks: {} }),
       wake: async () => 'unknown_connection',
+      // Phase 6: document the biometric routes, which exist only when biometric-service is configured.
+      biometric: { client: inert as never, gates: inert as never },
     },
     { spec }
   )

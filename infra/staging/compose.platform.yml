@@ -1,10 +1,12 @@
 # Platform stack (Phase 3 P9): platform-provision (init job) + platform-api.
 #
-#   EXTRA_SECRETS="agent mediator" infra/scripts/deploy.sh platform
+#   EXTRA_SECRETS="agent mediator biometric" infra/scripts/deploy.sh platform
 #
 # secrets/platform.sops.env: PLATFORM_ADMIN_TOKEN, MEDIATOR_WEBHOOK_SECRET, MEDIATOR_ADMIN_TOKEN,
 # PLATFORM_RO_PASSWORD (read-only role on the mediator's drizzle database, runbooks/platform-api.md),
 # CONSOLE_TOKEN (Phase 4 console scope, runbooks/console.md).
+# Phase 6: EXTRA_SECRETS "biometric" adds BIOMETRIC_INTERNAL_TOKEN; deploy the biometric stack first
+# (platform-api joins its 12id-biometric network).
 # EXTRA_SECRETS adds AGENT_POSTGRES_PASSWORD + AGENT_INTERNAL_TOKEN (agent stack) and nothing
 # from the mediator file is needed beyond consistency (MEDIATOR_ADMIN_TOKEN must equal the
 # mediator stack's ADMIN_API_TOKEN; keep both files in step).
@@ -15,7 +17,7 @@
 # 3500 as api.<domain> and blocks /internal/* and /admin/*.
 name: platform
 
-x-image: &image 12id/services:phase4
+x-image: &image 12id/services:phase6
 
 x-platform-env: &platform-env
   LOG_LEVEL: ${PLATFORM_LOG_LEVEL:-info}
@@ -45,6 +47,10 @@ x-platform-env: &platform-env
   GENESIS_SIGNING_PUBLIC_KEY: ${GENESIS_SIGNING_PUBLIC_KEY:-RWStI9hNQFWSFkkkT1AbPYCeDpOk6zzSe3wCAdWYAdr/tbTIpkm9819Q}
   VDR_PROXY_URL: https://vdr.12id.naziharitsolution.com
 
+  # Phase 6 biometric gate (compose.biometric.yml).
+  BIOMETRIC_SERVICE_URL: http://biometric-service:3430
+  BIOMETRIC_SERVICE_TOKEN: ${BIOMETRIC_INTERNAL_TOKEN:?run with EXTRA_SECRETS="agent mediator biometric"}
+
   DRAIN_DEADLINE_MS: "15000"
 
 services:
@@ -67,7 +73,7 @@ services:
     environment: *platform-env
     ports:
       - '127.0.0.1:3500:3500'
-    networks: [agent, mediator]
+    networks: [agent, mediator, biometric]
     healthcheck:
       test: ['CMD-SHELL', 'node -e "fetch(\"http://127.0.0.1:3500/readyz\").then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"']
       interval: 10s
@@ -85,3 +91,6 @@ networks:
   mediator:
     external: true
     name: 12id-mediator
+  biometric:
+    external: true
+    name: 12id-biometric

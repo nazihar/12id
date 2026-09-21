@@ -5,6 +5,8 @@ import type { DeliveryStatus } from '@/features/tenant-data/types'
 import { listMembers } from './members.functions'
 import {
   getPortalCatalogue,
+  getPortalBiometricAdoption,
+  getPortalBiometrics,
   getPortalWebhook,
   listPortalApiKeys,
   listPortalConnections,
@@ -32,3 +34,5 @@ export const portalDeliveriesQuery = (slug: string, status?: DeliveryStatus) =>
   queryOptions({ queryKey: portalKey(slug, 'webhook-deliveries', status ?? 'all'), queryFn: () => listPortalDeliveries({ data: { status } }) })
 export const portalApiKeysQuery = (slug: string) => queryOptions({ queryKey: portalKey(slug, 'api-keys'), queryFn: () => listPortalApiKeys() })
 export const portalMembersQuery = (slug: string) => queryOptions({ queryKey: portalKey(slug, 'members'), queryFn: () => listMembers() })
+export const portalBiometricsQuery = (slug: string) => queryOptions({ queryKey: portalKey(slug, 'biometrics'), queryFn: () => getPortalBiometrics() })
+export const portalBiometricAdoptionQuery = (slug: string) => queryOptions({ queryKey: portalKey(slug, 'biometrics', 'adoption'), queryFn: () => getPortalBiometricAdoption() })

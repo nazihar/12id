@@ -5,6 +5,7 @@ import { PageHeader } from '@/components/page-header'
 import { RouteError } from '@/components/route-error'
 import { ConnectionInvitationDialog } from '@/features/portal/connection-invitation-dialog'
 import { portalConnectionsQuery, portalCredentialsQuery, portalProofsQuery } from '@/features/portal/portal.queries'
+import { getPortalBiometricLog } from '@/features/portal/portal-data.functions'
 import { ExchangeTables } from '@/features/tenant-data/panels'
 import { tenantCan } from '@/lib/permissions'
 
@@ -32,7 +33,7 @@ function PortalExchangesPage() {
         description="The latest 200 connections, credential exchanges and proof exchanges, newest first. Credential attribute values are not shown."
         actions={tenantCan(organization.role, { exchange: ['create'] }) && <ConnectionInvitationDialog organizationId={organization.id} orgSlug={orgSlug} />}
       />
-      <ExchangeTables connections={connections} credentials={credentials} proofs={proofs} />
+      <ExchangeTables connections={connections} credentials={credentials} proofs={proofs} loadBiometricLog={(kind, id) => getPortalBiometricLog({ data: { kind, id } })} />
     </div>
   )
 }

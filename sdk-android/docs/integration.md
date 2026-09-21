@@ -162,6 +162,74 @@ and reference both from `<application android:dataExtractionRules=… android:fu
   `Credential.isExpired()` tells you when to prompt for renewal. Attribute values are strings; see the
   platform guide for the encoding rules.
 
+## Biometric checks (face liveness + match)
+
+Some organisations require a face check before they issue a credential or accept a proof: the user
+proves they are live and match a reference photo the organisation holds. The SDK knows which offers and
+requests need it; the camera screen comes from a **capture add-on** for the organisation's vendor.
+
+**1. Add the add-on for your organisations' vendor** (one artifact per vendor, same version as the SDK):
+
+```groovy
+dependencies {
+    implementation "com.12id:holder-sdk-android:0.1.0"
+    implementation "com.12id:holder-sdk-android-biometrics-aws:0.1.0"   // AWS Rekognition Face Liveness
+}
+
+android {
+    compileOptions {
+        // Required by the AWS add-on (its Amplify dependencies use Java 8+ APIs).
+        coreLibraryDesugaringEnabled true
+    }
+}
+dependencies { coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5' }
+```
+
+The AWS add-on adds about 8 MB to an arm64 release APK. It declares the `CAMERA` permission and asks
+for it when the check starts. If your app also uses CameraX directly and fails to compile with
+"Cannot access class 'ListenableFuture'", add `implementation 'com.google.guava:guava:33.3.1-android'`
+(the add-on already brings it at runtime).
+
+**2. Register it once**, next to `initialize`:
+
+```kotlin
+OneTwoId.registerCapture(AwsFaceLivenessCapture())
+```
+
+**3. Check before accepting.** `CredentialOffer.biometric` and `ProofRequest.biometric` are set when a
+check is required:
+
+```kotlin
+val offer = OneTwoId.pendingOffers().first()
+if (offer.biometric?.status == BiometricStatus.Pending) {
+    when (val outcome = OneTwoId.verifyFace(activity, offer.id)) {   // shows the vendor's screen
+        BiometricOutcome.Passed -> OneTwoId.acceptOffer(offer.id)
+        is BiometricOutcome.Failed -> showRetry(outcome.attemptsRemaining)
+        BiometricOutcome.Locked -> showCancelled()                   // the organisation cancels the exchange
+    }
+} else {
+    OneTwoId.acceptOffer(offer.id)
+}
+```
+
+Proof requests work the same way with `respondToProofRequest`. Each `verifyFace` call uses one attempt.
+`acceptOffer` / `respondToProofRequest` throw `BiometricRequired` while the check has not passed. That
+is a convenience: the platform itself holds the credential (or withholds the proof result from the
+organisation) until the check passes, whatever the app does.
+
+| Exception | Meaning |
+|---|---|
+| `BiometricRequired` | Call `verifyFace` first |
+| `BiometricCaptureUnavailable(provider)` | Your app does not include the add-on for this organisation's vendor |
+| `BiometricCancelled` | The user left the capture screen |
+| `BiometricFailed` | No attempts left, or the check expired |
+
+**Switching vendor** is the organisation's decision, but your app must ship the new add-on first. The
+organisation's console shows how many of your installations report each add-on.
+
+The SDK never sees the result or any image: the vendor streams to the organisation's own vendor
+account, and the platform reads the result from there.
+
 ## Sample app
 
 `sdk-android/sample/` is a complete example: `SampleApp` (initialise + token provider),

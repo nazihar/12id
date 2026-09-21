@@ -14,6 +14,7 @@ import { StateBadge } from '@/components/state-badge'
 import { Badge } from '@/components/ui/badge'
 import { publishCredentialDefinition, setSchemaDeprecated } from '@/features/portal/portal-data.functions'
 import { portalCatalogueQuery, portalKey } from '@/features/portal/portal.queries'
+import { CredentialDefinitionPolicyAction } from '@/features/portal/biometric-policy-dialog'
 import { PublishSchemaDialog } from '@/features/portal/publish-schema-dialog'
 import type { CredentialDefinitionRow, SchemaRow } from '@/features/tenant-data/types'
 import { tenantCan } from '@/lib/permissions'
@@ -39,6 +40,22 @@ function PortalCataloguePage() {
   const { data } = useSuspenseQuery(portalCatalogueQuery(orgSlug))
   const canPublish = tenantCan(organization.role, { catalogue: ['publish'] })
   const canDeprecate = tenantCan(organization.role, { catalogue: ['deprecate'] })
+  const canBiometrics = tenantCan(organization.role, { biometrics: ['update'] })
+  // Phase 6: a face-check policy per credential definition (owners and admins).
+  const definitionColumnsWithPolicy = canBiometrics
+    ? [
+        ...definitionColumns,
+        definitionColumn.display({
+          id: 'biometric',
+          header: '',
+          cell: ({ row }) => (
+            <RowActions>
+              <CredentialDefinitionPolicyAction credentialDefinitionId={row.original.id} label={`${row.original.schemaName} ${row.original.schemaVersion}`} organizationId={organization.id} orgSlug={orgSlug} />
+            </RowActions>
+          ),
+        }),
+      ]
+    : definitionColumns
   const withDefinition = new Set(data.credentialDefinitions.map((definition) => definition.schemaId))
 
   const schemaColumns = schemaColumn.columns([
@@ -86,7 +103,7 @@ function PortalCataloguePage() {
       </section>
       <section className="space-y-3">
         <PageHeader level={2} title="Credential definitions" description="One per schema; publishing it lets your backend issue credentials of that schema." />
-        <DataTable columns={definitionColumns} data={data.credentialDefinitions} emptyMessage="No credential definitions published." testId="definitions-table" />
+        <DataTable columns={definitionColumnsWithPolicy} data={data.credentialDefinitions} emptyMessage="No credential definitions published." testId="definitions-table" />
       </section>
     </div>
   )

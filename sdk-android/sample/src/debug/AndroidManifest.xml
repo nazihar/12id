@@ -14,6 +14,7 @@
                 <action android:name="com.onetwoid.sample.DECLINE_PROOFS" />
                 <action android:name="com.onetwoid.sample.DUMP" />
                 <action android:name="com.onetwoid.sample.WIPE_WALLET_KEEP_STATE" />
+                <action android:name="com.onetwoid.sample.VERIFY_FACES" />
             </intent-filter>
         </receiver>
     </application>

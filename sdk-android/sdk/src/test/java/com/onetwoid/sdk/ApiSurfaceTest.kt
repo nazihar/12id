@@ -14,7 +14,8 @@ class ApiSurfaceTest {
         val dump = File("api/sdk.api")
         assertTrue("missing ${dump.absolutePath}: run ./gradlew :sdk:apiDump", dump.isFile)
 
-        val forbidden = listOf("org/hyperledger", "kotlinx/datetime", "okhttp3", "kotlinx/serialization", "askar_uniffi", "anoncreds_uniffi", "indy_vdr_uniffi", "org/slf4j")
+        // Vendor biometric SDKs (Phase 6) live only in the add-on artifacts, never in the core API.
+        val forbidden = listOf("org/hyperledger", "kotlinx/datetime", "okhttp3", "kotlinx/serialization", "askar_uniffi", "anoncreds_uniffi", "indy_vdr_uniffi", "org/slf4j", "com/amplifyframework", "aws/sdk", "com/amazonaws")
         // org/slf4j/impl classes are the slf4j binding contract (loaded by name), not SDK API: skip their blocks.
         var inBinding = false
         val offending = dump.readLines().filter { line ->

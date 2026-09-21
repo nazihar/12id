@@ -25,6 +25,7 @@ class SampleApp : Application() {
         super.onCreate()
         backend = CustomerBackend(this, BuildConfig.BACKEND_URL)
         OneTwoId.addListener(WalletListener { event -> Log.i(TAG, "event $event") })
+        Captures.register()
         scope.launch { initializeWallet() }
     }
 

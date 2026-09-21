@@ -5,8 +5,8 @@
  */
 import { type QueryKey, type UseQueryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createColumnHelper } from '@tanstack/react-table'
-import { EyeIcon, KeyRoundIcon, RotateCwIcon } from 'lucide-react'
-import { useState } from 'react'
+import { EyeIcon, KeyRoundIcon, RotateCwIcon, ScanFaceIcon } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
 import { DataTable } from '@/components/data-table/data-table'
@@ -19,7 +19,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { formatDateTime } from '@/lib/format'
 
 import { CreateApiKeyDialog } from './create-api-key-dialog'
-import type { ApiKeyRow, ConnectionRow, CredentialRow, DeliveryDetail, DeliveryRow, DeliveryStatus, ProofRow, WalletRow } from './types'
+import type { ApiKeyRow, BiometricLog, BiometricLogEvent, ConnectionRow, CredentialRow, DeliveryDetail, DeliveryRow, DeliveryStatus, ExchangeKind, ProofRow, WalletRow } from './types'
 
 const mono = (value: string | null) => <span className="font-mono text-xs">{value ?? '—'}</span>
 
@@ -34,26 +34,70 @@ const connectionColumns = connectionColumn.columns([
   connectionColumn.accessor('updatedAt', { header: 'Updated', cell: ({ getValue }) => formatDateTime(getValue()) }),
 ])
 
+type Biometric = CredentialRow['biometric']
+/** Loads one exchange's biometric log (Phase 6); each read is audited by platform-api. */
+export type BiometricLogLoader = (kind: ExchangeKind, id: string) => Promise<BiometricLog>
+
+/** Status badge plus the last match score; a dash when the exchange was not gated. */
+function BiometricCell({ biometric }: { biometric: Biometric }) {
+  if (!biometric) return <span className="text-muted-foreground">—</span>
+  return (
+    <span className="flex items-center gap-2" data-testid="biometric-cell">
+      <StateBadge state={biometric.status} />
+      {biometric.matchScore !== null && <span className="font-mono text-xs text-muted-foreground">match {biometric.matchScore.toFixed(1)}</span>}
+    </span>
+  )
+}
+
 const credentialColumn = createColumnHelper<DataTableFeatures, CredentialRow>()
-const credentialColumns = credentialColumn.columns([
-  credentialColumn.accessor('state', { header: 'State', cell: ({ getValue }) => <StateBadge state={getValue()} /> }),
-  credentialColumn.accessor('credentialDefinitionId', { header: 'Credential definition', cell: ({ getValue }) => mono(getValue()) }),
-  credentialColumn.accessor('externalId', { header: 'External id', cell: ({ getValue }) => mono(getValue()) }),
-  credentialColumn.accessor('errorMessage', { header: 'Error', cell: ({ getValue }) => getValue() ?? '' }),
-  credentialColumn.accessor('updatedAt', { header: 'Updated', cell: ({ getValue }) => formatDateTime(getValue()) }),
-])
+function credentialColumnsWith(onLog?: (id: string) => void) {
+  return credentialColumn.columns([
+    credentialColumn.accessor('state', { header: 'State', cell: ({ getValue }) => <StateBadge state={getValue()} /> }),
+    credentialColumn.accessor('biometric', { header: 'Biometric', cell: ({ getValue }) => <BiometricCell biometric={getValue()} /> }),
+    credentialColumn.accessor('credentialDefinitionId', { header: 'Credential definition', cell: ({ getValue }) => mono(getValue()) }),
+    credentialColumn.accessor('externalId', { header: 'External id', cell: ({ getValue }) => mono(getValue()) }),
+    credentialColumn.accessor('errorMessage', { header: 'Error', cell: ({ getValue }) => getValue() ?? '' }),
+    credentialColumn.accessor('updatedAt', { header: 'Updated', cell: ({ getValue }) => formatDateTime(getValue()) }),
+    credentialColumn.display({
+      id: 'actions',
+      header: '',
+      cell: ({ row }) => (onLog && row.original.biometric ? <RowActions><RowAction label="Biometric log" icon={ScanFaceIcon} onClick={() => onLog(row.original.id)} /></RowActions> : null),
+    }),
+  ])
+}
 
 const proofColumn = createColumnHelper<DataTableFeatures, ProofRow>()
-const proofColumns = proofColumn.columns([
-  proofColumn.accessor('state', { header: 'State', cell: ({ getValue }) => <StateBadge state={getValue()} /> }),
-  proofColumn.accessor('verified', { header: 'Verified', cell: ({ getValue }) => (getValue() === null ? '—' : getValue() ? 'yes' : 'no') }),
-  // Attribute names only: disclosed values are personal data.
-  proofColumn.accessor((row) => Object.entries(row.disclosed ?? {}).map(([group, values]) => `${group}: ${Object.keys(values).join(', ')}`).join(' · '), { id: 'disclosed', header: 'Disclosed attributes' }),
-  proofColumn.accessor('externalId', { header: 'External id', cell: ({ getValue }) => mono(getValue()) }),
-  proofColumn.accessor('updatedAt', { header: 'Updated', cell: ({ getValue }) => formatDateTime(getValue()) }),
-])
+function proofColumnsWith(onLog?: (id: string) => void) {
+  return proofColumn.columns([
+    proofColumn.accessor('state', { header: 'State', cell: ({ getValue }) => <StateBadge state={getValue()} /> }),
+    proofColumn.accessor('biometric', { header: 'Biometric', cell: ({ getValue }) => <BiometricCell biometric={getValue()} /> }),
+    proofColumn.accessor('verified', { header: 'Verified', cell: ({ getValue }) => (getValue() === null ? '—' : getValue() ? 'yes' : 'no') }),
+    // Attribute names only: disclosed values are personal data.
+    proofColumn.accessor((row) => Object.entries(row.disclosed ?? {}).map(([group, values]) => `${group}: ${Object.keys(values).join(', ')}`).join(' · '), { id: 'disclosed', header: 'Disclosed attributes' }),
+    proofColumn.accessor('externalId', { header: 'External id', cell: ({ getValue }) => mono(getValue()) }),
+    proofColumn.accessor('updatedAt', { header: 'Updated', cell: ({ getValue }) => formatDateTime(getValue()) }),
+    proofColumn.display({
+      id: 'actions',
+      header: '',
+      cell: ({ row }) => (onLog && row.original.biometric ? <RowActions><RowAction label="Biometric log" icon={ScanFaceIcon} onClick={() => onLog(row.original.id)} /></RowActions> : null),
+    }),
+  ])
+}
 
-export function ExchangeTables({ connections, credentials, proofs }: { connections: ConnectionRow[]; credentials: CredentialRow[]; proofs: ProofRow[] }) {
+export function ExchangeTables({
+  connections,
+  credentials,
+  proofs,
+  loadBiometricLog,
+}: {
+  connections: ConnectionRow[]
+  credentials: CredentialRow[]
+  proofs: ProofRow[]
+  loadBiometricLog?: BiometricLogLoader
+}) {
+  const [viewing, setViewing] = useState<{ kind: ExchangeKind; id: string } | null>(null)
+  const credentialColumns = useMemo(() => credentialColumnsWith(loadBiometricLog ? (id) => setViewing({ kind: 'credential', id }) : undefined), [loadBiometricLog])
+  const proofColumns = useMemo(() => proofColumnsWith(loadBiometricLog ? (id) => setViewing({ kind: 'proof', id }) : undefined), [loadBiometricLog])
   return (
     <div className="space-y-8">
       <section className="space-y-3">
@@ -68,7 +112,92 @@ export function ExchangeTables({ connections, credentials, proofs }: { connectio
         <PageHeader level={2} title="Proof exchanges" />
         <DataTable columns={proofColumns} data={proofs} emptyMessage="No proof exchanges." />
       </section>
+      {loadBiometricLog && <BiometricLogDialog target={viewing} load={loadBiometricLog} onClose={() => setViewing(null)} />}
     </div>
+  )
+}
+
+const EVENT_LABELS: Record<string, string> = {
+  gate_created: 'Check required',
+  session_started: 'Capture started',
+  attempt_completed: 'Attempt decided',
+  hold_reached: 'Holder answered; held',
+  issued: 'Credential issued',
+  accepted: 'Presentation accepted',
+  declined: 'Exchange abandoned',
+  expired: 'Check expired',
+  cancelled: 'Check cancelled',
+}
+
+const score = (value: number | null, threshold: number | undefined) =>
+  value === null ? '—' : `${value.toFixed(1)}${threshold === undefined ? '' : ` / ${threshold}`}`
+
+/**
+ * The biometric log of one exchange (Phase 6): every step with scores against the thresholds and the
+ * vendor session id for cross-checking in the organisation's vendor account. Never shows images.
+ */
+function BiometricLogDialog({ target, load, onClose }: { target: { kind: ExchangeKind; id: string } | null; load: BiometricLogLoader; onClose: () => void }) {
+  const log = useQuery({
+    queryKey: ['biometric-log', target?.kind, target?.id],
+    queryFn: () => load(target!.kind, target!.id),
+    enabled: target !== null,
+  })
+  return (
+    <Dialog open={target !== null} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-4xl">
+        <DialogHeader>
+          <DialogTitle>Biometric log</DialogTitle>
+          <DialogDescription>
+            Liveness and face-match steps for this {target?.kind === 'proof' ? 'proof' : 'credential'} exchange, oldest first. Scores are 0–100 against the policy's minimum. No images are kept. Opening this log is audited.
+          </DialogDescription>
+        </DialogHeader>
+        {log.error ? (
+          <p className="text-sm text-destructive">{log.error.message}</p>
+        ) : !log.data ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : (
+          <div className="space-y-3" data-testid="biometric-log">
+            {log.data.biometric && (
+              <p className="flex items-center gap-2 text-sm">
+                <StateBadge state={log.data.biometric.status} />
+                <span>
+                  {log.data.biometric.attempts} attempt{log.data.biometric.attempts === 1 ? '' : 's'}
+                  {log.data.biometric.reason ? ` · ${log.data.biometric.reason}` : ''}
+                </span>
+              </p>
+            )}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-left text-muted-foreground">
+                  <tr>
+                    <th className="py-1 pr-3 font-medium">Time</th>
+                    <th className="py-1 pr-3 font-medium">Step</th>
+                    <th className="py-1 pr-3 font-medium">Attempt</th>
+                    <th className="py-1 pr-3 font-medium">Liveness</th>
+                    <th className="py-1 pr-3 font-medium">Match</th>
+                    <th className="py-1 pr-3 font-medium">Decision</th>
+                    <th className="py-1 font-medium">Vendor session</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {log.data.events.map((event: BiometricLogEvent) => (
+                    <tr key={event.id} className="border-t">
+                      <td className="py-1 pr-3 whitespace-nowrap">{formatDateTime(event.at)}</td>
+                      <td className="py-1 pr-3">{EVENT_LABELS[event.type] ?? event.type}</td>
+                      <td className="py-1 pr-3">{event.attempt ?? ''}</td>
+                      <td className="py-1 pr-3 font-mono text-xs">{event.type === 'attempt_completed' ? score(event.livenessScore, event.thresholds?.minLivenessScore) : ''}</td>
+                      <td className="py-1 pr-3 font-mono text-xs">{event.type === 'attempt_completed' ? score(event.matchScore, event.thresholds?.minMatchScore) : ''}</td>
+                      <td className="py-1 pr-3">{event.decision ? <StateBadge state={event.decision} /> : null} {event.reason && event.reason !== 'passed' ? <span className="text-xs text-muted-foreground">{event.reason}</span> : null}</td>
+                      <td className="py-1">{event.vendorSessionId ? mono(event.vendorSessionId) : ''}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   )
 }
 

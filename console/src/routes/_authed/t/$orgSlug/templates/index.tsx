@@ -9,6 +9,7 @@ import type { DataTableFeatures } from '@/components/data-table/data-table-featu
 import { PageHeader } from '@/components/page-header'
 import { RouteError } from '@/components/route-error'
 import { RowAction, RowActions } from '@/components/row-action'
+import { TemplatePolicyAction } from '@/features/portal/biometric-policy-dialog'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { deletePortalTemplate } from '@/features/portal/portal-data.functions'
@@ -43,6 +44,7 @@ function PortalTemplatesPage() {
   const canCreate = tenantCan(organization.role, { template: ['create'] })
   const canUpdate = tenantCan(organization.role, { template: ['update'] })
   const canDelete = tenantCan(organization.role, { template: ['delete'] })
+  const canBiometrics = tenantCan(organization.role, { biometrics: ['update'] })
 
   const remove = useMutation({
     mutationFn: (template: TemplateRow) => deletePortalTemplate({ data: { organizationId: organization.id, templateId: template.id } }),
@@ -55,6 +57,7 @@ function PortalTemplatesPage() {
   const columns = column.columns([
     column.accessor('name', { header: 'Template' }),
     column.accessor((row) => summarize(row.definition), { id: 'summary', header: 'Requests', cell: ({ getValue }) => <span className="text-xs">{getValue()}</span> }),
+    column.accessor((row) => (row.biometricPolicy.mode === 'inherit' ? 'default' : row.biometricPolicy.mode === 'off' ? 'off' : 'required'), { id: 'biometric', header: 'Face check' }),
     column.accessor('updatedAt', { header: 'Updated', cell: ({ getValue }) => formatDateTime(getValue()) }),
     column.display({
       id: 'actions',
@@ -73,6 +76,7 @@ function PortalTemplatesPage() {
               <TooltipContent>Edit</TooltipContent>
             </Tooltip>
           )}
+          {canBiometrics && <TemplatePolicyAction templateId={row.original.id} label={row.original.name} organizationId={organization.id} orgSlug={orgSlug} />}
           {canDelete && (
             <RowAction
               label="Delete"

@@ -2,15 +2,19 @@ package com.onetwoid.sdk
 
 import android.content.Context
 import android.util.Base64
+import androidx.activity.ComponentActivity
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
+import com.onetwoid.sdk.internal.BiometricMapping
+import com.onetwoid.sdk.internal.CaptureModuleDto
 import com.onetwoid.sdk.internal.GenesisCache
 import com.onetwoid.sdk.internal.KeystoreKeyWrapper
 import com.onetwoid.sdk.internal.Mappers
 import com.onetwoid.sdk.internal.MediatorInvitationPolicy
 import com.onetwoid.sdk.internal.PlatformClient
+import com.onetwoid.sdk.internal.PlatformRefusal
 import com.onetwoid.sdk.internal.SdkLog
 import com.onetwoid.sdk.internal.SdkStore
 import kotlinx.coroutines.CancellationException
@@ -19,6 +23,7 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -49,6 +54,7 @@ import org.hyperledger.ariesframework.proofs.messages.RequestPresentationMessage
 import org.hyperledger.ariesframework.proofs.models.AutoAcceptProof
 import org.hyperledger.ariesframework.proofs.models.ProofState
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration
@@ -67,6 +73,7 @@ public object OneTwoId {
     private val _state = MutableStateFlow<WalletState>(WalletState.Uninitialized)
     private val _events = MutableSharedFlow<WalletEvent>(extraBufferCapacity = 64)
     private val listeners = CopyOnWriteArrayList<WalletListener>()
+    private val captures = ConcurrentHashMap<String, BiometricCapture>()
 
     @Volatile private var session: Session? = null
 
@@ -85,6 +92,14 @@ public object OneTwoId {
 
     public fun removeListener(listener: WalletListener) {
         listeners -= listener
+    }
+
+    /**
+     * Registers a face-capture add-on (e.g. `AwsFaceLivenessCapture` from
+     * `com.12id:holder-sdk-android-biometrics-aws`). Call it next to [initialize]; one add-on per provider.
+     */
+    public fun registerCapture(capture: BiometricCapture) {
+        captures[capture.provider] = capture
     }
 
     /**
@@ -149,14 +164,16 @@ public object OneTwoId {
     }
 
     public suspend fun pendingOffers(): List<CredentialOffer> = withSession { s ->
-        s.agent.credentialExchangeRepository.findByQuery(tagQuery("state", CredentialState.OfferReceived.name))
+        val records = s.agent.credentialExchangeRepository.findByQuery(tagQuery("state", CredentialState.OfferReceived.name))
             .filter { it.protocolVersion == "v1" }
-            .map { offer(s, it) }
+        val requirements = requirementsByThread(s, records.map { it.threadId })
+        records.map { offer(s, it).copy(biometric = requirements[it.threadId]) }
     }
 
     /** Requests the credential; it is stored when the organisation issues it ([WalletEvent.CredentialStored]). */
     public suspend fun acceptOffer(id: String): Unit = withSession { s ->
-        requireOffer(s, id)
+        val record = requireOffer(s, id)
+        BiometricMapping.guard(id, requirementsByThread(s, listOf(record.threadId))[record.threadId])
         // The per-record Always makes the framework store and acknowledge the credential when it arrives.
         s.agent.credentials.acceptOffer(AcceptOfferOptions(credentialRecordId = id, autoAcceptCredential = AutoAcceptCredential.Always))
         Unit
@@ -169,14 +186,16 @@ public object OneTwoId {
     }
 
     public suspend fun pendingProofRequests(): List<ProofRequest> = withSession { s ->
-        s.agent.proofRepository.findByQuery(tagQuery("state", ProofState.RequestReceived.name)).map { record ->
+        val records = s.agent.proofRepository.findByQuery(tagQuery("state", ProofState.RequestReceived.name))
+        val requirements = requirementsByThread(s, records.map { it.threadId })
+        records.map { record ->
             Mappers.proofRequest(
                 id = record.id,
                 connectionId = record.connectionId,
                 connectionLabel = connectionLabel(s, record.connectionId),
                 receivedAtEpochSeconds = record.createdAt.epochSeconds,
                 request = indyProofRequest(s, record.id),
-            )
+            ).copy(biometric = requirements[record.threadId])
         }
     }
 
@@ -188,7 +207,9 @@ public object OneTwoId {
 
     /** Sends a proof built from the chosen credentials. */
     public suspend fun respondToProofRequest(id: String, selection: ProofSelection): Unit = withSession { s ->
-        requireProofRequest(s, id)
+        val threadId = requireProofRequest(s, id)
+        // Before building the proof: a presentation sent without a pass is withheld by the platform anyway.
+        BiometricMapping.guard(id, requirementsByThread(s, listOf(threadId))[threadId])
         val requested = Mappers.requestedCredentials(s.agent.proofs.getRequestedCredentialsForProofRequest(id), selection)
         s.agent.proofs.acceptRequest(id, requested)
         Unit
@@ -198,6 +219,60 @@ public object OneTwoId {
         requireProofRequest(s, id)
         s.agent.proofs.declineRequest(id)
         Unit
+    }
+
+    /**
+     * The face check the organisation requires for this offer or proof request, or null when none is
+     * required. Asks the platform, so it needs the network.
+     */
+    public suspend fun biometricRequirement(exchangeId: String): BiometricRequirement? = withSession { s ->
+        val threadId = threadIdOf(s, exchangeId) ?: throw OneTwoIdException.NotFound(exchangeId)
+        s.platform.biometricRequirements(listOf(threadId)).firstOrNull()?.let(BiometricMapping::requirement)
+    }
+
+    /**
+     * Runs the face check for an offer or proof request: starts a session on the platform, shows the
+     * registered capture add-on's screen, and returns the platform's decision. Each call uses one attempt.
+     * On [BiometricOutcome.Passed], call [acceptOffer] or [respondToProofRequest].
+     *
+     * Needs an activity for the camera UI and the camera permission, which the add-on requests.
+     */
+    public suspend fun verifyFace(activity: ComponentActivity, exchangeId: String): BiometricOutcome = withSession { s ->
+        val threadId = threadIdOf(s, exchangeId) ?: throw OneTwoIdException.NotFound(exchangeId)
+        val requirement = s.platform.biometricRequirements(listOf(threadId)).firstOrNull()?.let(BiometricMapping::requirement)
+            ?: return@withSession BiometricOutcome.Passed
+        when (requirement.status) {
+            BiometricStatus.Passed -> return@withSession BiometricOutcome.Passed
+            BiometricStatus.Pending -> Unit
+            else -> return@withSession BiometricOutcome.Locked
+        }
+        val capture = captures[requirement.provider] ?: throw OneTwoIdException.BiometricCaptureUnavailable(requirement.provider)
+
+        val started = try {
+            s.platform.startBiometricSession(threadId, captures.values.map { CaptureModuleDto(it.provider, it.version) })
+        } catch (e: PlatformRefusal) {
+            when {
+                e.code == "capture_module_missing" -> throw OneTwoIdException.BiometricCaptureUnavailable(requirement.provider)
+                e.code.startsWith("check_") || e.code == "attempts_exhausted" -> return@withSession BiometricOutcome.Locked
+                else -> throw OneTwoIdException.PlatformError(e.status, "${e.code}: ${e.reason}")
+            }
+        }
+        s.log(LogLevel.Info, "biometric session started (attempt ${started.attempt}, provider ${started.provider})")
+
+        val output = withContext(Dispatchers.Main) {
+            capture.capture(activity, CaptureSession(started.provider, started.clientConfig?.toString() ?: "{}", started.attempt))
+        }
+
+        // The vendor may still be processing the capture: the platform answers result_not_ready.
+        repeat(BiometricMapping.RESULT_POLLS) {
+            try {
+                return@withSession BiometricMapping.outcome(s.platform.completeBiometricSession(started.sessionId, output.clientOutputJson))
+            } catch (e: PlatformRefusal) {
+                if (e.code != "result_not_ready") throw OneTwoIdException.PlatformError(e.status, "${e.code}: ${e.reason}")
+                delay(BiometricMapping.RESULT_POLL_DELAY_MS)
+            }
+        }
+        throw OneTwoIdException.NetworkUnavailable(IllegalStateException("the biometric result did not arrive in time"))
     }
 
     /**
@@ -304,7 +379,7 @@ public object OneTwoId {
                 runCatching { agent.wallet.delete() }
                 removeLeftovers = false
             }
-            val s = Session(context, config, agent, label, CoroutineScope(SupervisorJob() + Dispatchers.IO))
+            val s = Session(context, config, agent, label, platform, CoroutineScope(SupervisorJob() + Dispatchers.IO))
             // The framework's bus has no replay: subscribe before anything can be published.
             s.scope.launch(start = CoroutineStart.UNDISPATCHED) {
                 agent.eventBus.events.collect { onAgentEvent(s, it) }
@@ -467,10 +542,20 @@ public object OneTwoId {
         return record
     }
 
-    private suspend fun requireProofRequest(s: Session, id: String) {
+    private suspend fun requireProofRequest(s: Session, id: String): String {
         val record = s.agent.proofRepository.findById(id)
         if (record == null || record.state != ProofState.RequestReceived) throw OneTwoIdException.NotFound(id)
+        return record.threadId
     }
+
+    private suspend fun threadIdOf(s: Session, exchangeId: String): String? =
+        s.agent.credentialExchangeRepository.findById(exchangeId)?.threadId ?: s.agent.proofRepository.findById(exchangeId)?.threadId
+
+    /** Biometric requirements by thread id; empty when the platform cannot be reached (it enforces anyway). */
+    private suspend fun requirementsByThread(s: Session, threadIds: List<String>): Map<String, BiometricRequirement> =
+        runCatching { s.platform.biometricRequirements(threadIds).associate { it.threadId to BiometricMapping.requirement(it) } }
+            .onFailure { s.log(LogLevel.Warn, "biometric requirements unavailable", it) }
+            .getOrDefault(emptyMap())
 
     private suspend fun offer(s: Session, record: CredentialExchangeRecord): CredentialOffer {
         // processOffer stores the message, not its content, on the record.
@@ -501,6 +586,7 @@ public object OneTwoId {
         val config: OneTwoIdConfig,
         val agent: Agent,
         val label: String,
+        val platform: PlatformClient,
         val scope: CoroutineScope,
     ) {
         val offersReceived = AtomicInteger()

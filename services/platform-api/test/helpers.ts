@@ -7,6 +7,7 @@ import { Writable } from 'node:stream'
 import { pino } from 'pino'
 
 import { type AgentClient, type AgentLedgerObject, type OutboxRow } from '../src/agent-client.ts'
+import { BiometricError, type BiometricClient } from '../src/biometric-client.ts'
 import { type PlatformConfig } from '../src/config.ts'
 import { type Database, createDatabase } from '../src/db/client.ts'
 import { ensureDatabase, runMigrations } from '../src/db/migrate.ts'
@@ -37,7 +38,7 @@ export async function testDatabase(): Promise<{ db: Database; close: () => Promi
     }
   }
   if (!shared) return null
-  const tables = [schema.consoleAudit, schema.webhookDeliveries, schema.webhookEndpoints, schema.idempotencyKeys, schema.proofTemplates, schema.proofs, schema.credentials, schema.connections, schema.wallets, schema.apiKeys, schema.outboxCursor, schema.tenants]
+  const tables = [schema.exchangeGateEvents, schema.exchangeGates, schema.credentialDefinitionPolicies, schema.biometricSettings, schema.consoleAudit, schema.webhookDeliveries, schema.webhookEndpoints, schema.idempotencyKeys, schema.proofTemplates, schema.proofs, schema.credentials, schema.connections, schema.wallets, schema.apiKeys, schema.outboxCursor, schema.tenants]
   for (const table of tables) await shared.db.delete(table)
   const pool = shared.pool
   return { db: shared.db, close: async () => void pool }
@@ -71,6 +72,7 @@ export const testConfig: PlatformConfig = {
   WAKE_DEBOUNCE_MS: 30_000,
   IDEMPOTENCY_TTL_MS: 60_000,
   DRAIN_DEADLINE_MS: 1000,
+  BIOMETRIC_EXPIRY_POLL_MS: 30_000,
 }
 
 export const sampleCatalogue: AgentLedgerObject[] = [
@@ -109,8 +111,78 @@ export function fakeAgent(overrides: Partial<AgentClient> = {}) {
       return { rows: outbox.filter((r) => r.id > afterId).slice(0, limit) }
     },
     ackOutbox: record('ackOutbox', { acknowledged: 0 }),
+    issueCredential: record('issueCredential', { id: 'cred-1', state: 'credential-issued' }),
+    abandonCredential: record('abandonCredential', { id: 'cred-1', state: 'abandoned' }),
+    acceptPresentation: record('acceptPresentation', { id: 'proof-1', state: 'done' }),
+    abandonProof: record('abandonProof', { id: 'proof-1', state: 'abandoned' }),
     healthy: async () => true,
     ...overrides,
   }
   return { client, calls, outbox }
 }
+
+/**
+ * In-memory biometric-service double (Phase 6). Checks follow the real service's rules closely
+ * enough for the gate: attempts are counted at session start; `clientOutput.pass` decides.
+ */
+export function fakeBiometric(options: { providerStatus?: 'ok' | 'untested' | 'failed' } = {}) {
+  const calls: Array<{ method: string; args: unknown[] }> = []
+  const checks = new Map<string, { tenantId: string; status: string; attempts: number; maxAttempts: number; referenceImage: string }>()
+  const sessions = new Map<string, { checkId: string; attempt: number; completed: boolean }>()
+  let n = 0
+  const uuid = () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}`
+  const provider = { id: 'mock', publicConfig: {}, status: options.providerStatus ?? 'ok', lastTestedAt: null, lastError: null, updatedAt: new Date().toISOString() }
+
+  const client: BiometricClient = {
+    providers: async () => ({ providers: [{ id: 'mock', displayName: 'Mock', configSchema: { type: 'object' }, captureModule: { provider: 'mock', minVersion: 1 } }] }),
+    getProvider: async (tenantId) => ({ tenantId, externalId: '12id-ext', provider }),
+    putProvider: async (tenantId) => ({ tenantId, externalId: '12id-ext', provider }),
+    deleteProvider: async () => undefined,
+    testProvider: async () => ({ status: 'ok', error: null }),
+    createCheck: async (body) => {
+      calls.push({ method: 'createCheck', args: [body] })
+      if (provider.status !== 'ok') throw new BiometricError(409, 'provider_not_tested', 'not tested')
+      const checkId = uuid()
+      checks.set(checkId, { tenantId: body.tenantId, status: 'pending', attempts: 0, maxAttempts: body.maxAttempts, referenceImage: body.referenceImage })
+      return { checkId, providerId: 'mock', expiresAt: new Date(Date.now() + body.ttlSeconds * 1000).toISOString() }
+    },
+    getCheck: async () => { throw new Error('not used') },
+    cancelCheck: async (checkId) => {
+      calls.push({ method: 'cancelCheck', args: [checkId] })
+      const c = checks.get(checkId)
+      if (c && c.status === 'pending') c.status = 'cancelled'
+    },
+    startSession: async (checkId) => {
+      calls.push({ method: 'startSession', args: [checkId] })
+      const c = checks.get(checkId)!
+      if (c.status !== 'pending') throw new BiometricError(409, `check_${c.status}`, 'not pending')
+      if (c.attempts >= c.maxAttempts) throw new BiometricError(409, 'attempts_exhausted', 'none left')
+      c.attempts++
+      const sessionId = uuid()
+      sessions.set(sessionId, { checkId, attempt: c.attempts, completed: false })
+      return { sessionId, vendorSessionId: `vendor-${sessionId.slice(-4)}`, providerId: 'mock', captureModule: { provider: 'mock', minVersion: 1 }, clientConfig: { sessionId }, attempt: c.attempts, attemptsRemaining: c.maxAttempts - c.attempts }
+    },
+    completeSession: async (sessionId, clientOutput) => {
+      calls.push({ method: 'completeSession', args: [sessionId, clientOutput] })
+      const s = sessions.get(sessionId)!
+      if (s.completed) throw new BiometricError(409, 'session_already_completed', 'done')
+      s.completed = true
+      const c = checks.get(s.checkId)!
+      const pass = (clientOutput as { pass?: boolean }).pass === true
+      if (pass) c.status = 'passed'
+      else if (c.attempts >= c.maxAttempts) c.status = 'failed'
+      return {
+        sessionId,
+        vendorSessionId: `vendor-${sessionId.slice(-4)}`,
+        attempt: s.attempt,
+        result: { decision: pass ? 'passed' : 'failed', reason: pass ? 'passed' : 'match_below_threshold', livenessScore: 97, matchScore: pass ? 99 : 12 },
+        check: { status: c.status as 'pending', attemptsRemaining: c.status === 'pending' ? c.maxAttempts - c.attempts : 0 },
+      }
+    },
+    healthy: async () => true,
+  }
+  return { client, calls, checks }
+}
+
+/** A JPEG-looking reference image, base64. */
+export const referenceImage = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(200, 7)]).toString('base64')

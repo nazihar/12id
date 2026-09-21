@@ -1,0 +1,63 @@
+// Phase 6 test add-on: com.12id:holder-sdk-android-biometrics-mock. Pairs with biometric-service's
+// `mock` provider (staging and tests only; the platform refuses it in production).
+plugins {
+    id 'com.android.library'
+    id 'org.jetbrains.kotlin.android'
+    id 'maven-publish'
+}
+
+android {
+    namespace 'com.onetwoid.sdk.biometrics.mock'
+    compileSdk 36
+
+    defaultConfig {
+        minSdk 24
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+
+    buildFeatures {
+        buildConfig = false
+    }
+
+    publishing {
+        singleVariant('release') {
+            withSourcesJar()
+        }
+    }
+}
+
+kotlin {
+    explicitApi()
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11
+    }
+}
+
+dependencies {
+    // Published as a dependency on com.12id:holder-sdk-android at the same version.
+    api project(':sdk')
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2'
+}
+
+afterEvaluate {
+    publishing {
+        repositories {
+            maven {
+                name = 'local'
+                url = rootProject.layout.buildDirectory.dir('m2')
+            }
+        }
+        publications {
+            release(MavenPublication) {
+                from components.release
+                groupId 'com.12id'
+                artifactId 'holder-sdk-android-biometrics-mock'
+                version project.property('sdkVersion')
+            }
+        }
+    }
+}

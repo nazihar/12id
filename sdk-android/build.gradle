@@ -14,5 +14,6 @@ plugins {
 
 apiValidation {
     // Only the customer-facing SDK has a stable API; the fork and the sample are internal.
-    ignoredProjects += ['ariesframework', 'sample']
+    // The biometric add-ons have one public class each and implement the SDK's BiometricCapture port.
+    ignoredProjects += ['ariesframework', 'sample', 'biometrics-mock', 'biometrics-aws']
 }

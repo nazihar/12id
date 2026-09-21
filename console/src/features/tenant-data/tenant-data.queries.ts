@@ -2,6 +2,7 @@ import { queryOptions } from '@tanstack/react-query'
 
 import {
   getCatalogue,
+  getTenantBiometrics,
   getWebhookEndpoint,
   listConnections,
   listCredentials,
@@ -33,3 +34,4 @@ export const webhookEndpointQuery = (tenantId: string) => queryOptions({ queryKe
 
 export const webhookDeliveriesQuery = (tenantId: string, status?: DeliveryStatus) =>
   queryOptions({ queryKey: key(tenantId, 'webhook-deliveries', status ?? 'all'), queryFn: () => listWebhookDeliveries({ data: { tenantId, status } }) })
+export const tenantBiometricsQuery = (tenantId: string) => queryOptions({ queryKey: key(tenantId, 'biometrics'), queryFn: () => getTenantBiometrics({ data: { tenantId } }) })

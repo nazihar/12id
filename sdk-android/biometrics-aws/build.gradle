@@ -1,0 +1,73 @@
+// Phase 6 add-on: com.12id:holder-sdk-android-biometrics-aws. Wraps AWS Amplify UI Face Liveness
+// behind the core SDK's BiometricCapture port; the host app needs no Amplify configuration and no
+// Compose of its own (the detector runs in this module's activity).
+plugins {
+    id 'com.android.library'
+    id 'org.jetbrains.kotlin.android'
+    id 'org.jetbrains.kotlin.plugin.compose'
+    id 'maven-publish'
+}
+
+android {
+    namespace 'com.onetwoid.sdk.biometrics.aws'
+    compileSdk 36
+
+    defaultConfig {
+        // Amplify UI Liveness 1.11.0 declares minSdk 24, the same as the core SDK.
+        minSdk 24
+        consumerProguardFiles 'consumer-rules.pro'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+
+    buildFeatures {
+        buildConfig = false
+        compose = true
+    }
+
+    publishing {
+        singleVariant('release') {
+            withSourcesJar()
+        }
+    }
+}
+
+kotlin {
+    explicitApi()
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11
+    }
+}
+
+dependencies {
+    api project(':sdk')
+
+    // The vendor SDK. Pinned: the platform's aws-rekognition adapter and this UI move together.
+    implementation 'com.amplifyframework.ui:liveness:1.11.0'
+    implementation platform('androidx.compose:compose-bom:2025.09.01')
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.activity:activity-compose:1.11.0'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2'
+}
+
+afterEvaluate {
+    publishing {
+        repositories {
+            maven {
+                name = 'local'
+                url = rootProject.layout.buildDirectory.dir('m2')
+            }
+        }
+        publications {
+            release(MavenPublication) {
+                from components.release
+                groupId 'com.12id'
+                artifactId 'holder-sdk-android-biometrics-aws'
+                version project.property('sdkVersion')
+            }
+        }
+    }
+}

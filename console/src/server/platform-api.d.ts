@@ -636,6 +636,11 @@ export interface paths {
                             [key: string]: string;
                         };
                         externalId?: string;
+                        /** @description Required when the biometric policy for this credential definition or proof template applies; ignored otherwise. */
+                        biometric?: {
+                            /** @description Base64 JPEG or PNG, at most 5 MB decoded, one face. */
+                            referenceImage: string;
+                        };
                     };
                 };
             };
@@ -657,6 +662,20 @@ export interface paths {
                                 [key: string]: string;
                             } | null;
                             errorMessage: string | null;
+                            biometric: {
+                                /** @enum {boolean} */
+                                required: true;
+                                /** @enum {string} */
+                                status: "pending" | "passed" | "failed" | "expired" | "cancelled";
+                                attempts: number;
+                                attemptsRemaining: number;
+                                livenessScore: number | null;
+                                matchScore: number | null;
+                                reason: string | null;
+                                /** Format: date-time */
+                                expiresAt: string;
+                                decidedAt: string | null;
+                            } | null;
                             /** Format: date-time */
                             createdAt: string;
                             /** Format: date-time */
@@ -690,6 +709,18 @@ export interface paths {
                 };
                 /** @description Default Response */
                 409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                422: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -746,6 +777,20 @@ export interface paths {
                                 [key: string]: string;
                             } | null;
                             errorMessage: string | null;
+                            biometric: {
+                                /** @enum {boolean} */
+                                required: true;
+                                /** @enum {string} */
+                                status: "pending" | "passed" | "failed" | "expired" | "cancelled";
+                                attempts: number;
+                                attemptsRemaining: number;
+                                livenessScore: number | null;
+                                matchScore: number | null;
+                                reason: string | null;
+                                /** Format: date-time */
+                                expiresAt: string;
+                                decidedAt: string | null;
+                            } | null;
                             /** Format: date-time */
                             createdAt: string;
                             /** Format: date-time */
@@ -799,6 +844,20 @@ export interface paths {
                                 [key: string]: string;
                             } | null;
                             errorMessage: string | null;
+                            biometric: {
+                                /** @enum {boolean} */
+                                required: true;
+                                /** @enum {string} */
+                                status: "pending" | "passed" | "failed" | "expired" | "cancelled";
+                                attempts: number;
+                                attemptsRemaining: number;
+                                livenessScore: number | null;
+                                matchScore: number | null;
+                                reason: string | null;
+                                /** Format: date-time */
+                                expiresAt: string;
+                                decidedAt: string | null;
+                            } | null;
                             /** Format: date-time */
                             createdAt: string;
                             /** Format: date-time */
@@ -879,6 +938,11 @@ export interface paths {
                             }[];
                         };
                         externalId?: string;
+                        /** @description Required when the biometric policy for this credential definition or proof template applies; ignored otherwise. */
+                        biometric?: {
+                            /** @description Base64 JPEG or PNG, at most 5 MB decoded, one face. */
+                            referenceImage: string;
+                        };
                     };
                 };
             };
@@ -903,6 +967,20 @@ export interface paths {
                                 };
                             } | null;
                             errorMessage: string | null;
+                            biometric: {
+                                /** @enum {boolean} */
+                                required: true;
+                                /** @enum {string} */
+                                status: "pending" | "passed" | "failed" | "expired" | "cancelled";
+                                attempts: number;
+                                attemptsRemaining: number;
+                                livenessScore: number | null;
+                                matchScore: number | null;
+                                reason: string | null;
+                                /** Format: date-time */
+                                expiresAt: string;
+                                decidedAt: string | null;
+                            } | null;
                             /** Format: date-time */
                             createdAt: string;
                             /** Format: date-time */
@@ -936,6 +1014,18 @@ export interface paths {
                 };
                 /** @description Default Response */
                 409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                422: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -995,6 +1085,20 @@ export interface paths {
                                 };
                             } | null;
                             errorMessage: string | null;
+                            biometric: {
+                                /** @enum {boolean} */
+                                required: true;
+                                /** @enum {string} */
+                                status: "pending" | "passed" | "failed" | "expired" | "cancelled";
+                                attempts: number;
+                                attemptsRemaining: number;
+                                livenessScore: number | null;
+                                matchScore: number | null;
+                                reason: string | null;
+                                /** Format: date-time */
+                                expiresAt: string;
+                                decidedAt: string | null;
+                            } | null;
                             /** Format: date-time */
                             createdAt: string;
                             /** Format: date-time */
@@ -1051,6 +1155,20 @@ export interface paths {
                                 };
                             } | null;
                             errorMessage: string | null;
+                            biometric: {
+                                /** @enum {boolean} */
+                                required: true;
+                                /** @enum {string} */
+                                status: "pending" | "passed" | "failed" | "expired" | "cancelled";
+                                attempts: number;
+                                attemptsRemaining: number;
+                                livenessScore: number | null;
+                                matchScore: number | null;
+                                reason: string | null;
+                                /** Format: date-time */
+                                expiresAt: string;
+                                decidedAt: string | null;
+                            } | null;
                             /** Format: date-time */
                             createdAt: string;
                             /** Format: date-time */
@@ -1073,6 +1191,720 @@ export interface paths {
             };
         };
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/credentials/{id}/biometric-log": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Biometric log of a credential exchange
+         * @description Every step of the biometric gate for this exchange, oldest first: attempts with liveness and match scores against the thresholds, decisions, and what the platform did with the exchange. Never contains images. `biometric` is null when the exchange was not gated.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            biometric: {
+                                /** @enum {boolean} */
+                                required: true;
+                                /** @enum {string} */
+                                status: "pending" | "passed" | "failed" | "expired" | "cancelled";
+                                attempts: number;
+                                attemptsRemaining: number;
+                                livenessScore: number | null;
+                                matchScore: number | null;
+                                reason: string | null;
+                                /** Format: date-time */
+                                expiresAt: string;
+                                decidedAt: string | null;
+                            } | null;
+                            events: {
+                                id: number;
+                                /** Format: date-time */
+                                at: string;
+                                type: string;
+                                attempt: number | null;
+                                providerId: string | null;
+                                vendorSessionId: string | null;
+                                livenessScore: number | null;
+                                matchScore: number | null;
+                                thresholds: {
+                                    minLivenessScore: number;
+                                    minMatchScore: number;
+                                } | null;
+                                decision: string | null;
+                                reason: string | null;
+                            }[];
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/proofs/{id}/biometric-log": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Biometric log of a proof exchange
+         * @description Every step of the biometric gate for this exchange, oldest first: attempts with liveness and match scores against the thresholds, decisions, and what the platform did with the exchange. Never contains images. `biometric` is null when the exchange was not gated.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            biometric: {
+                                /** @enum {boolean} */
+                                required: true;
+                                /** @enum {string} */
+                                status: "pending" | "passed" | "failed" | "expired" | "cancelled";
+                                attempts: number;
+                                attemptsRemaining: number;
+                                livenessScore: number | null;
+                                matchScore: number | null;
+                                reason: string | null;
+                                /** Format: date-time */
+                                expiresAt: string;
+                                decidedAt: string | null;
+                            } | null;
+                            events: {
+                                id: number;
+                                /** Format: date-time */
+                                at: string;
+                                type: string;
+                                attempt: number | null;
+                                providerId: string | null;
+                                vendorSessionId: string | null;
+                                livenessScore: number | null;
+                                matchScore: number | null;
+                                thresholds: {
+                                    minLivenessScore: number;
+                                    minMatchScore: number;
+                                } | null;
+                                decision: string | null;
+                                reason: string | null;
+                            }[];
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/biometrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Biometric settings */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            enabled: boolean;
+                            defaultPolicy: {
+                                required: boolean;
+                                minMatchScore: number;
+                                minLivenessScore: number;
+                                maxAttempts: number;
+                                ttlMinutes: number;
+                            };
+                            externalId: string;
+                            provider: {
+                                id: string;
+                                publicConfig: {
+                                    [key: string]: unknown;
+                                };
+                                /** @enum {string} */
+                                status: "untested" | "ok" | "failed";
+                                lastTestedAt: string | null;
+                                lastError: string | null;
+                            } | null;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/biometrics/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Switch biometrics on or off and set the default policy
+         * @description Switching on needs a provider whose connection test passed.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        enabled: boolean;
+                        defaultPolicy: {
+                            required: boolean;
+                            minMatchScore: number;
+                            minLivenessScore: number;
+                            maxAttempts: number;
+                            ttlMinutes: number;
+                        };
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            enabled: boolean;
+                            defaultPolicy: {
+                                required: boolean;
+                                minMatchScore: number;
+                                minLivenessScore: number;
+                                maxAttempts: number;
+                                ttlMinutes: number;
+                            };
+                            externalId: string;
+                            provider: {
+                                id: string;
+                                publicConfig: {
+                                    [key: string]: unknown;
+                                };
+                                /** @enum {string} */
+                                status: "untested" | "ok" | "failed";
+                                lastTestedAt: string | null;
+                                lastError: string | null;
+                            } | null;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/biometrics/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Biometric providers offered by this deployment */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            providers: {
+                                id: string;
+                                displayName: string;
+                                configSchema: {
+                                    [key: string]: unknown;
+                                };
+                                captureModule: {
+                                    provider: string;
+                                    minVersion: number;
+                                };
+                            }[];
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/biometrics/provider": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Configure the biometric provider
+         * @description Write-only: the configuration is stored encrypted in biometric-service and only its non-secret part is ever returned. A new configuration must pass its connection test before gating resumes.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        providerId: string;
+                        config: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            enabled: boolean;
+                            defaultPolicy: {
+                                required: boolean;
+                                minMatchScore: number;
+                                minLivenessScore: number;
+                                maxAttempts: number;
+                                ttlMinutes: number;
+                            };
+                            externalId: string;
+                            provider: {
+                                id: string;
+                                publicConfig: {
+                                    [key: string]: unknown;
+                                };
+                                /** @enum {string} */
+                                status: "untested" | "ok" | "failed";
+                                lastTestedAt: string | null;
+                                lastError: string | null;
+                            } | null;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
+        post?: never;
+        /**
+         * Remove the biometric provider
+         * @description Also switches biometrics off.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            enabled: boolean;
+                            defaultPolicy: {
+                                required: boolean;
+                                minMatchScore: number;
+                                minLivenessScore: number;
+                                maxAttempts: number;
+                                ttlMinutes: number;
+                            };
+                            externalId: string;
+                            provider: {
+                                id: string;
+                                publicConfig: {
+                                    [key: string]: unknown;
+                                };
+                                /** @enum {string} */
+                                status: "untested" | "ok" | "failed";
+                                lastTestedAt: string | null;
+                                lastError: string | null;
+                            } | null;
+                        };
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/biometrics/provider/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Test the biometric provider connection */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @enum {string} */
+                            status: "untested" | "ok" | "failed";
+                            error: string | null;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/biometrics/adoption": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Capture add-ons reported by this tenant's wallets
+         * @description How many active wallets reported each capture add-on. Check it before switching provider: an app without the new add-on cannot pass the check.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            walletsReporting: number;
+                            modules: {
+                                module: string;
+                                wallets: number;
+                            }[];
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/credential-definitions/{id}/biometric-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Biometric policy of a credential definition */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            credentialDefinitionId: string;
+                            biometricPolicy: {
+                                /** @enum {string} */
+                                mode: "inherit";
+                            } | {
+                                /** @enum {string} */
+                                mode: "off";
+                            } | {
+                                /** @enum {string} */
+                                mode: "required";
+                                minMatchScore?: number;
+                                minLivenessScore?: number;
+                                maxAttempts?: number;
+                                ttlMinutes?: number;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
+        /**
+         * Set the biometric policy of a credential definition
+         * @description `inherit` follows the tenant default, `off` never gates, `required` gates with the given thresholds (missing values come from the tenant default). Applies to offers made after the change.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        mode: "inherit";
+                    } | {
+                        /** @enum {string} */
+                        mode: "off";
+                    } | {
+                        /** @enum {string} */
+                        mode: "required";
+                        minMatchScore?: number;
+                        minLivenessScore?: number;
+                        maxAttempts?: number;
+                        ttlMinutes?: number;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            credentialDefinitionId: string;
+                            biometricPolicy: {
+                                /** @enum {string} */
+                                mode: "inherit";
+                            } | {
+                                /** @enum {string} */
+                                mode: "off";
+                            } | {
+                                /** @enum {string} */
+                                mode: "required";
+                                minMatchScore?: number;
+                                minLivenessScore?: number;
+                                maxAttempts?: number;
+                                ttlMinutes?: number;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
         post?: never;
         delete?: never;
         options?: never;
@@ -1130,6 +1962,20 @@ export interface paths {
                                     }[];
                                 }[];
                             };
+                            biometricPolicy: {
+                                /** @enum {string} */
+                                mode: "inherit";
+                            } | {
+                                /** @enum {string} */
+                                mode: "off";
+                            } | {
+                                /** @enum {string} */
+                                mode: "required";
+                                minMatchScore?: number;
+                                minLivenessScore?: number;
+                                maxAttempts?: number;
+                                ttlMinutes?: number;
+                            };
                             /** Format: date-time */
                             createdAt: string;
                             /** Format: date-time */
@@ -1142,7 +1988,7 @@ export interface paths {
         put?: never;
         /**
          * Create a proof template
-         * @description Each group discloses attributes from one credential and may add integer predicates. Credentials are referenced by schema name (all versions, or active only) or by credential definition id. `expiresAt` is always predicated and can never be disclosed.
+         * @description Each group discloses attributes from one credential and may add integer predicates. Credentials are referenced by schema name (all versions, or active only) or by credential definition id. `expiresAt` is always predicated and can never be disclosed. `biometricPolicy` (optional) overrides the tenant's biometric default for requests made from this template.
          */
         post: {
             parameters: {
@@ -1176,6 +2022,20 @@ export interface paths {
                                 value: number;
                             }[];
                         }[];
+                        biometricPolicy?: {
+                            /** @enum {string} */
+                            mode: "inherit";
+                        } | {
+                            /** @enum {string} */
+                            mode: "off";
+                        } | {
+                            /** @enum {string} */
+                            mode: "required";
+                            minMatchScore?: number;
+                            minLivenessScore?: number;
+                            maxAttempts?: number;
+                            ttlMinutes?: number;
+                        };
                     };
                 };
             };
@@ -1212,6 +2072,20 @@ export interface paths {
                                         value: number;
                                     }[];
                                 }[];
+                            };
+                            biometricPolicy: {
+                                /** @enum {string} */
+                                mode: "inherit";
+                            } | {
+                                /** @enum {string} */
+                                mode: "off";
+                            } | {
+                                /** @enum {string} */
+                                mode: "required";
+                                minMatchScore?: number;
+                                minLivenessScore?: number;
+                                maxAttempts?: number;
+                                ttlMinutes?: number;
                             };
                             /** Format: date-time */
                             createdAt: string;
@@ -1292,6 +2166,20 @@ export interface paths {
                                     }[];
                                 }[];
                             };
+                            biometricPolicy: {
+                                /** @enum {string} */
+                                mode: "inherit";
+                            } | {
+                                /** @enum {string} */
+                                mode: "off";
+                            } | {
+                                /** @enum {string} */
+                                mode: "required";
+                                minMatchScore?: number;
+                                minLivenessScore?: number;
+                                maxAttempts?: number;
+                                ttlMinutes?: number;
+                            };
                             /** Format: date-time */
                             createdAt: string;
                             /** Format: date-time */
@@ -1348,6 +2236,20 @@ export interface paths {
                                 value: number;
                             }[];
                         }[];
+                        biometricPolicy?: {
+                            /** @enum {string} */
+                            mode: "inherit";
+                        } | {
+                            /** @enum {string} */
+                            mode: "off";
+                        } | {
+                            /** @enum {string} */
+                            mode: "required";
+                            minMatchScore?: number;
+                            minLivenessScore?: number;
+                            maxAttempts?: number;
+                            ttlMinutes?: number;
+                        };
                     };
                 };
             };
@@ -1384,6 +2286,20 @@ export interface paths {
                                         value: number;
                                     }[];
                                 }[];
+                            };
+                            biometricPolicy: {
+                                /** @enum {string} */
+                                mode: "inherit";
+                            } | {
+                                /** @enum {string} */
+                                mode: "off";
+                            } | {
+                                /** @enum {string} */
+                                mode: "required";
+                                minMatchScore?: number;
+                                minLivenessScore?: number;
+                                maxAttempts?: number;
+                                ttlMinutes?: number;
                             };
                             /** Format: date-time */
                             createdAt: string;
@@ -1456,6 +2372,142 @@ export interface paths {
                 };
             };
         };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/proof-templates/{id}/biometric-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Biometric policy of a proof template */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            templateId: string;
+                            biometricPolicy: {
+                                /** @enum {string} */
+                                mode: "inherit";
+                            } | {
+                                /** @enum {string} */
+                                mode: "off";
+                            } | {
+                                /** @enum {string} */
+                                mode: "required";
+                                minMatchScore?: number;
+                                minLivenessScore?: number;
+                                maxAttempts?: number;
+                                ttlMinutes?: number;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
+        /**
+         * Set the biometric policy of a proof template
+         * @description `inherit` follows the tenant default, `off` never gates, `required` gates with the given thresholds. Applies to proof requests made from this template after the change.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        mode: "inherit";
+                    } | {
+                        /** @enum {string} */
+                        mode: "off";
+                    } | {
+                        /** @enum {string} */
+                        mode: "required";
+                        minMatchScore?: number;
+                        minLivenessScore?: number;
+                        maxAttempts?: number;
+                        ttlMinutes?: number;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            templateId: string;
+                            biometricPolicy: {
+                                /** @enum {string} */
+                                mode: "inherit";
+                            } | {
+                                /** @enum {string} */
+                                mode: "off";
+                            } | {
+                                /** @enum {string} */
+                                mode: "required";
+                                minMatchScore?: number;
+                                minLivenessScore?: number;
+                                maxAttempts?: number;
+                                ttlMinutes?: number;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1687,7 +2739,7 @@ export interface paths {
                     content: {
                         "application/json": {
                             url: string;
-                            events: ("connection.state_changed" | "credential.state_changed" | "proof.state_changed" | "wallet.sync_requested")[] | null;
+                            events: ("connection.state_changed" | "credential.state_changed" | "proof.state_changed" | "wallet.sync_requested" | "biometric.check_completed")[] | null;
                             /** Format: date-time */
                             createdAt: string;
                             /** Format: date-time */
@@ -1725,7 +2777,7 @@ export interface paths {
                     "application/json": {
                         /** Format: uri */
                         url: string;
-                        events?: ("connection.state_changed" | "credential.state_changed" | "proof.state_changed" | "wallet.sync_requested")[];
+                        events?: ("connection.state_changed" | "credential.state_changed" | "proof.state_changed" | "wallet.sync_requested" | "biometric.check_completed")[];
                     };
                 };
             };
@@ -1738,7 +2790,7 @@ export interface paths {
                     content: {
                         "application/json": {
                             url: string;
-                            events: ("connection.state_changed" | "credential.state_changed" | "proof.state_changed" | "wallet.sync_requested")[] | null;
+                            events: ("connection.state_changed" | "credential.state_changed" | "proof.state_changed" | "wallet.sync_requested" | "biometric.check_completed")[] | null;
                             /** Format: date-time */
                             createdAt: string;
                             /** Format: date-time */
@@ -2407,6 +3459,236 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/wallet/biometric-requirements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Biometric checks for exchanges this wallet holds
+         * @description The SDK asks by DIDComm thread id when an offer or proof request arrives. Threads without a check are omitted.
+         */
+        get: {
+            parameters: {
+                query: {
+                    threadId: string | string[];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            requirements: {
+                                threadId: string;
+                                /** @enum {string} */
+                                recordType: "credential" | "proof";
+                                status: string;
+                                attemptsRemaining: number;
+                                captureProvider: string;
+                                /** Format: date-time */
+                                expiresAt: string;
+                            }[];
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/wallet/biometric-sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a biometric capture session
+         * @description Uses one attempt. `captureModules` lists the capture add-ons the app includes; `clientConfig` is for that add-on only.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        threadId: string;
+                        captureModules: {
+                            provider: string;
+                            version: number;
+                        }[];
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            sessionId: string;
+                            provider: string;
+                            clientConfig: unknown;
+                            attempt: number;
+                            attemptsRemaining: number;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/wallet/biometric-sessions/{id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Complete a biometric capture session
+         * @description The platform fetches the result from the vendor itself; `clientOutput` is only what the add-on returned. 409 `result_not_ready` means the vendor is still processing: retry after a second.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        clientOutput: unknown;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @enum {string} */
+                            outcome: "passed" | "failed" | "locked";
+                            attemptsRemaining: number;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;

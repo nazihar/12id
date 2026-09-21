@@ -83,3 +83,27 @@ export const retryWebhookDelivery = createServerFn({ method: 'POST' })
   .handler(async ({ context, data }) =>
     unwrap(await platformFor(context.principal, { tenantId: data.tenantId }).POST('/v1/webhook/deliveries/{id}/retry', { params: { path: { id: data.deliveryId } } }))
   )
+
+/** Phase 6: one exchange's biometric log. platform-api audits the read (auditRead). */
+export const getBiometricLog = createServerFn({ method: 'GET' })
+  .middleware([operatorMiddleware])
+  .validator(tenantInput.extend({ kind: z.enum(['credential', 'proof']), id: z.string().min(1).max(100) }))
+  .handler(async ({ context, data }) => {
+    const platform = platformFor(context.principal, { tenantId: data.tenantId })
+    const params = { params: { path: { id: data.id } } }
+    return unwrap(data.kind === 'credential' ? await platform.GET('/v1/credentials/{id}/biometric-log', params) : await platform.GET('/v1/proofs/{id}/biometric-log', params))
+  })
+
+/** Phase 6: the tenant's biometric settings, read-only for operators (tenants configure their own vendor). */
+export const getTenantBiometrics = createServerFn({ method: 'GET' })
+  .middleware([operatorMiddleware])
+  .validator(tenantInput)
+  .handler(async ({ context, data }) => {
+    const platform = platformFor(context.principal, { tenantId: data.tenantId })
+    const [settings, adoption] = await Promise.all([platform.GET('/v1/biometrics'), platform.GET('/v1/biometrics/adoption')])
+    const s = unwrap(settings)
+    return {
+      settings: { ...s, provider: s.provider ? { ...s.provider, publicConfig: Object.fromEntries(Object.entries(s.provider.publicConfig).map(([k, v]) => [k, String(v)])) } : null },
+      adoption: unwrap(adoption),
+    }
+  })

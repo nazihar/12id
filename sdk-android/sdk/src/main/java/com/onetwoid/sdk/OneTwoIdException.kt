@@ -35,6 +35,18 @@ public sealed class OneTwoIdException(message: String, cause: Throwable? = null)
      */
     public class WalletKeyLost(cause: Throwable? = null) : OneTwoIdException("the wallet key cannot be read", cause)
 
+    /** The organisation requires a face check that has not passed yet. Call [OneTwoId.verifyFace] first. */
+    public class BiometricRequired(public val exchangeId: String) : OneTwoIdException("a biometric check is required for $exchangeId")
+
+    /** The face check failed and no attempts are left (or it expired); the organisation cancels the exchange. */
+    public class BiometricFailed(public val attemptsRemaining: Int) : OneTwoIdException("the biometric check failed")
+
+    /** The app does not include the capture add-on this organisation's provider needs. */
+    public class BiometricCaptureUnavailable(public val provider: String) : OneTwoIdException("no capture add-on registered for $provider")
+
+    /** The user left the capture screen. The attempt may still count. */
+    public class BiometricCancelled : OneTwoIdException("the face capture was cancelled")
+
     /** An unexpected framework failure. */
     public class Internal(detail: String, cause: Throwable? = null) : OneTwoIdException(detail, cause)
 }

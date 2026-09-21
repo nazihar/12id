@@ -1,0 +1,21 @@
+[Unit]
+# Staging ledger at boot (Phase 6 findings F5 / trap 47): von-network's containers have no restart
+# policy, and after the 2026-09-20 reboot the ledger stayed down for 25 hours. `start` reuses the
+# existing containers and volumes (never `down`, which creates a new ledger and breaks the genesis).
+# The public IP must match the one in the published genesis (6-phase-1-findings W1).
+Description=12id staging ledger (von-network, 4 validators)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/12id/von-network
+ExecStart=/opt/12id/von-network/manage start 123.176.58.72
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

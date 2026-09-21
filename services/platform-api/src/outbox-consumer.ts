@@ -10,6 +10,7 @@ import { eq, sql } from 'drizzle-orm'
 import type { Logger as PinoLogger } from 'pino'
 
 import type { AgentClient, OutboxRow } from './agent-client.ts'
+import type { GateEngine } from './biometric/gate.ts'
 import type { Database } from './db/client.ts'
 import { connections, credentials, outboxCursor, proofs, tenants } from './db/schema.ts'
 import { toConnectionView, toCredentialView, toProofView } from './views.ts'
@@ -23,6 +24,8 @@ export interface ConsumerDeps {
   logger: PinoLogger
   endpoints: EndpointLookup
   batch?: number
+  /** Phase 6: told about every credential/proof transition so held exchanges are released or abandoned. */
+  gates?: GateEngine
 }
 
 export type TenantResolver = (agentTenantId: string) => Promise<string | null>
@@ -97,7 +100,8 @@ export async function applyRow(deps: ConsumerDeps, resolve: TenantResolver, row:
         await deps.db.update(credentials).set({ credentialDefinitionId: detail.credentialDefinitionId, attributes: detail.attributes, errorMessage: detail.errorMessage }).where(sql`${credentials.tenantId} = ${tenantId} and ${credentials.recordId} = ${row.recordId}`)
       }
     }
-    return { tenantId, type: 'credential.state_changed', data: { ...toCredentialView(updated), previousState: row.previousState } }
+    const gate = deps.gates ? await deps.gates.onExchangeState(tenantId, 'credential', row.recordId, row.state) : undefined
+    return { tenantId, type: 'credential.state_changed', data: { ...toCredentialView(updated, gate), previousState: row.previousState } }
   }
 
   const [updated] = await deps.db
@@ -119,7 +123,9 @@ export async function applyRow(deps: ConsumerDeps, resolve: TenantResolver, row:
       await deps.db.update(proofs).set({ verified: updated.verified, disclosed: updated.disclosed, errorMessage: updated.errorMessage }).where(sql`${proofs.tenantId} = ${tenantId} and ${proofs.recordId} = ${row.recordId}`)
     }
   }
-  return { tenantId, type: 'proof.state_changed', data: { ...toProofView(updated), previousState: row.previousState } }
+  // A gated proof's verified/disclosed are withheld from the view until its gate has passed.
+  const gate = deps.gates ? await deps.gates.onExchangeState(tenantId, 'proof', row.recordId, row.state) : undefined
+  return { tenantId, type: 'proof.state_changed', data: { ...toProofView(updated, gate), previousState: row.previousState } }
 }
 
 export function createOutboxConsumer(deps: ConsumerDeps) {

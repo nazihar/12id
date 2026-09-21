@@ -1,0 +1,242 @@
+import assert from 'node:assert/strict'
+import { after, beforeEach, describe, it } from 'node:test'
+
+import { eq } from 'drizzle-orm'
+
+import { ServiceError, decide, decodeReferenceImage } from '../src/biometric.ts'
+import type { Database } from '../src/db/client.ts'
+import * as schema from '../src/db/schema.ts'
+import type { BiometricProvider } from '../src/providers/types.ts'
+import { mockProvider } from '../src/providers/mock.ts'
+import { capturingLogger, closeTestDatabase, defaultCheck, fakeJpeg, mockTenant, testDatabase, testService } from './helpers.ts'
+
+const thresholds = { minLivenessScore: 90, minMatchScore: 90 }
+const ready = (livenessScore: number) => ({ status: 'ready' as const, livenessScore, probeImage: Buffer.alloc(0), raw: {} })
+
+describe('decide', () => {
+  it('applies liveness, face presence and match in that order', () => {
+    assert.deepEqual(decide(thresholds, ready(95), 95), { decision: 'passed', reason: 'passed' })
+    assert.equal(decide(thresholds, ready(80), 95).reason, 'liveness_below_threshold')
+    assert.equal(decide(thresholds, ready(95), null).reason, 'no_face')
+    assert.equal(decide(thresholds, ready(95), 89.9).reason, 'match_below_threshold')
+    assert.equal(decide(thresholds, { status: 'failed', reason: 'vendor_expired', raw: {} }, null).reason, 'vendor_expired')
+  })
+})
+
+describe('reference image validation', () => {
+  it('accepts JPEG and PNG base64 only, up to 5 MB', () => {
+    assert.equal(decodeReferenceImage(fakeJpeg().toString('base64')).length, 404)
+    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(10)])
+    assert.ok(decodeReferenceImage(png.toString('base64')))
+    assert.throws(() => decodeReferenceImage(Buffer.from('GIF89a....').toString('base64')), ServiceError)
+    assert.throws(() => decodeReferenceImage('not base64!!'), ServiceError)
+    assert.throws(() => decodeReferenceImage(fakeJpeg(5 * 1024 * 1024).toString('base64')), ServiceError)
+  })
+})
+
+describe('biometric service (database)', async () => {
+  let db: Database | null = null
+  beforeEach(async () => {
+    db = await testDatabase()
+  })
+  after(closeTestDatabase)
+
+  const skip = () => {
+    if (!db) {
+      console.log('# skipped: TEST_DATABASE_URL unreachable')
+      return true
+    }
+    return false
+  }
+
+  it('creates an external id per tenant and never returns the config ciphertext', async (t) => {
+    if (skip()) return t.skip()
+    const service = testService(db!)
+    const first = await service.getTenantProvider('tenant-a')
+    const again = await service.getTenantProvider('tenant-a')
+    assert.match(first.externalId, /^12id-[0-9a-f-]{36}$/)
+    assert.equal(first.externalId, again.externalId)
+    assert.notEqual((await service.getTenantProvider('tenant-b')).externalId, first.externalId)
+    assert.equal(first.provider, null)
+
+    const configured = await service.putTenantProvider('tenant-a', 'mock', {})
+    assert.deepEqual(Object.keys(configured.provider!).sort(), ['id', 'lastError', 'lastTestedAt', 'publicConfig', 'status', 'updatedAt'])
+    assert.equal(configured.provider!.status, 'untested')
+  })
+
+  it('refuses unknown providers, invalid config, and checks before a successful test', async (t) => {
+    if (skip()) return t.skip()
+    const service = testService(db!)
+    await assert.rejects(service.putTenantProvider('tenant-a', 'facetec', {}), { code: 'unknown_provider' })
+    await assert.rejects(service.putTenantProvider('tenant-a', 'mock', { extra: 1 }), { code: 'invalid_provider_config' })
+    await assert.rejects(service.createCheck(defaultCheck('tenant-a')), { code: 'provider_not_configured' })
+    await service.putTenantProvider('tenant-a', 'mock', {})
+    await assert.rejects(service.createCheck(defaultCheck('tenant-a')), { code: 'provider_not_tested' })
+  })
+
+  it('passes on the first attempt and wipes the reference image', async (t) => {
+    if (skip()) return t.skip()
+    const service = testService(db!)
+    const tenantId = await mockTenant(service)
+    const { checkId } = await service.createCheck(defaultCheck(tenantId))
+
+    const [stored] = await db!.select().from(schema.checks).where(eq(schema.checks.id, checkId))
+    assert.ok(stored!.referenceCiphertext && stored!.referenceCiphertext.length > 400, 'reference is stored encrypted')
+
+    const session = await service.startSession(checkId)
+    assert.equal(session.attempt, 1)
+    assert.equal(session.attemptsRemaining, 2)
+    assert.deepEqual(session.captureModule, { provider: 'mock', minVersion: 1 })
+
+    const done = await service.completeSession(session.sessionId, { live: true, face: 'same' })
+    assert.deepEqual(done.result, { decision: 'passed', reason: 'passed', livenessScore: 97, matchScore: 99 })
+    assert.deepEqual(done.check, { status: 'passed', attemptsRemaining: 0 })
+
+    const [after] = await db!.select().from(schema.checks).where(eq(schema.checks.id, checkId))
+    assert.equal(after!.referenceCiphertext, null)
+    assert.ok(after!.decidedAt)
+
+    const view = await service.getCheck(checkId)
+    assert.equal(view.sessions.length, 1)
+    assert.equal(view.sessions[0]!.result!.decision, 'passed')
+  })
+
+  it('keeps the check pending after a failed attempt, fails it when attempts run out', async (t) => {
+    if (skip()) return t.skip()
+    const service = testService(db!)
+    const tenantId = await mockTenant(service)
+    const { checkId } = await service.createCheck(defaultCheck(tenantId, { maxAttempts: 2 }))
+
+    const s1 = await service.startSession(checkId)
+    const r1 = await service.completeSession(s1.sessionId, { live: true, face: 'other' })
+    assert.deepEqual([r1.result.reason, r1.check.status, r1.check.attemptsRemaining], ['match_below_threshold', 'pending', 1])
+
+    const s2 = await service.startSession(checkId)
+    const r2 = await service.completeSession(s2.sessionId, { live: false, face: 'same' })
+    assert.deepEqual([r2.result.reason, r2.check.status], ['liveness_below_threshold', 'failed'])
+
+    await assert.rejects(service.startSession(checkId), { code: 'check_failed' })
+    const [row] = await db!.select().from(schema.checks).where(eq(schema.checks.id, checkId))
+    assert.equal(row!.referenceCiphertext, null)
+  })
+
+  it('counts abandoned sessions as attempts', async (t) => {
+    if (skip()) return t.skip()
+    const service = testService(db!)
+    const tenantId = await mockTenant(service)
+    const { checkId } = await service.createCheck(defaultCheck(tenantId, { maxAttempts: 2 }))
+    await service.startSession(checkId)
+    await service.startSession(checkId)
+    await assert.rejects(service.startSession(checkId), { code: 'attempts_exhausted' })
+  })
+
+  it('completes a session only once; an unfinished vendor result can be retried', async (t) => {
+    if (skip()) return t.skip()
+    const service = testService(db!)
+    const tenantId = await mockTenant(service)
+    const { checkId } = await service.createCheck(defaultCheck(tenantId))
+    const s = await service.startSession(checkId)
+
+    // The mock answers "pending" to output it cannot parse, like AWS while the device still streams.
+    await assert.rejects(service.completeSession(s.sessionId, { streaming: true }), { code: 'result_not_ready' })
+    await service.completeSession(s.sessionId, { live: true, face: 'same' })
+    await assert.rejects(service.completeSession(s.sessionId, { live: true, face: 'same' }), { code: 'session_already_completed' })
+  })
+
+  it('concurrent completes of one session: exactly one wins', async (t) => {
+    if (skip()) return t.skip()
+    const service = testService(db!)
+    const tenantId = await mockTenant(service)
+    const { checkId } = await service.createCheck(defaultCheck(tenantId))
+    const s = await service.startSession(checkId)
+    const outcomes = await Promise.allSettled([1, 2, 3].map(() => service.completeSession(s.sessionId, { live: true, face: 'same' })))
+    assert.equal(outcomes.filter((o) => o.status === 'fulfilled').length, 1)
+    assert.equal((await db!.select().from(schema.results).where(eq(schema.results.checkId, checkId))).length, 1)
+  })
+
+  it('reports no face in the probe as no_face', async (t) => {
+    if (skip()) return t.skip()
+    const service = testService(db!)
+    const tenantId = await mockTenant(service)
+    const { checkId } = await service.createCheck(defaultCheck(tenantId))
+    const s = await service.startSession(checkId)
+    assert.equal((await service.completeSession(s.sessionId, { live: true, face: 'none' })).result.reason, 'no_face')
+  })
+
+  it('expires overdue checks and wipes their images', async (t) => {
+    if (skip()) return t.skip()
+    const service = testService(db!)
+    const tenantId = await mockTenant(service)
+    const { checkId } = await service.createCheck(defaultCheck(tenantId, { ttlSeconds: 60 }))
+    await db!.update(schema.checks).set({ expiresAt: new Date(Date.now() - 1000) }).where(eq(schema.checks.id, checkId))
+
+    assert.deepEqual(await service.expireDue(), [checkId])
+    const [row] = await db!.select().from(schema.checks).where(eq(schema.checks.id, checkId))
+    assert.deepEqual([row!.status, row!.referenceCiphertext], ['expired', null])
+    await assert.rejects(service.startSession(checkId), { code: 'check_expired' })
+  })
+
+  it('refuses to start on an overdue check even before the sweep ran', async (t) => {
+    if (skip()) return t.skip()
+    const service = testService(db!)
+    const tenantId = await mockTenant(service)
+    const { checkId } = await service.createCheck(defaultCheck(tenantId, { ttlSeconds: 60 }))
+    await db!.update(schema.checks).set({ expiresAt: new Date(Date.now() - 1000) }).where(eq(schema.checks.id, checkId))
+    await assert.rejects(service.startSession(checkId), { code: 'check_expired' })
+    const [row] = await db!.select().from(schema.checks).where(eq(schema.checks.id, checkId))
+    assert.equal(row!.referenceCiphertext, null)
+  })
+
+  it('cancels a pending check and wipes it', async (t) => {
+    if (skip()) return t.skip()
+    const service = testService(db!)
+    const tenantId = await mockTenant(service)
+    const { checkId } = await service.createCheck(defaultCheck(tenantId))
+    await service.cancelCheck(checkId)
+    const [row] = await db!.select().from(schema.checks).where(eq(schema.checks.id, checkId))
+    assert.deepEqual([row!.status, row!.referenceCiphertext], ['cancelled', null])
+  })
+
+  it('refuses a session when the tenant switched provider after the check was created', async (t) => {
+    if (skip()) return t.skip()
+    const other: BiometricProvider = { ...mockProvider, id: 'mock-2', captureModule: { provider: 'mock-2', minVersion: 1 } }
+    const service = testService(db!, [mockProvider, other])
+    const tenantId = await mockTenant(service)
+    const { checkId } = await service.createCheck(defaultCheck(tenantId))
+    await service.putTenantProvider(tenantId, 'mock-2', {})
+    await assert.rejects(service.startSession(checkId), { code: 'provider_changed' })
+  })
+
+  it('does not consume an attempt when the vendor fails to create a session', async (t) => {
+    if (skip()) return t.skip()
+    let fail = true
+    const flaky: BiometricProvider = {
+      ...mockProvider,
+      async createSession(ctx, input) {
+        if (fail) throw new Error('vendor down')
+        return mockProvider.createSession(ctx, input)
+      },
+    }
+    const service = testService(db!, [flaky])
+    const tenantId = await mockTenant(service)
+    const { checkId } = await service.createCheck(defaultCheck(tenantId))
+    await assert.rejects(service.startSession(checkId))
+    fail = false
+    assert.equal((await service.startSession(checkId)).attempt, 1)
+  })
+
+  it('never logs image bytes or capture output', async (t) => {
+    if (skip()) return t.skip()
+    const { logger, lines } = capturingLogger()
+    const service = testService(db!, [mockProvider], logger)
+    const tenantId = await mockTenant(service)
+    const body = defaultCheck(tenantId)
+    const { checkId } = await service.createCheck(body)
+    const s = await service.startSession(checkId)
+    await service.completeSession(s.sessionId, { live: true, face: 'same' })
+    const all = lines.join('\n')
+    assert.ok(all.length > 0)
+    assert.equal(all.includes(body.referenceImage.slice(0, 40)), false)
+    assert.equal(all.includes('mock-probe'), false)
+  })
+})

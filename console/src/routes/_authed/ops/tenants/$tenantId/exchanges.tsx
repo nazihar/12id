@@ -4,6 +4,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { PageHeader } from '@/components/page-header'
 import { RouteError } from '@/components/route-error'
 import { ExchangeTables } from '@/features/tenant-data/panels'
+import { getBiometricLog } from '@/features/tenant-data/tenant-data.functions'
 import { connectionsQuery, credentialsQuery, proofsQuery } from '@/features/tenant-data/tenant-data.queries'
 
 export const Route = createFileRoute('/_authed/ops/tenants/$tenantId/exchanges')({
@@ -25,7 +26,7 @@ function ExchangesPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Exchanges" description="The latest 200 of each, newest first. Credential attribute values are not shown." />
-      <ExchangeTables connections={connections} credentials={credentials} proofs={proofs} />
+      <ExchangeTables connections={connections} credentials={credentials} proofs={proofs} loadBiometricLog={(kind, id) => getBiometricLog({ data: { tenantId, kind, id } })} />
     </div>
   )
 }

@@ -57,6 +57,8 @@ dependencies {
     // The fork's records expose kotlinx-datetime 0.4 Instants; keep the same line.
     implementation 'org.jetbrains.kotlinx:kotlinx-datetime:0.4.0'
     implementation 'androidx.lifecycle:lifecycle-process:2.9.4'
+    // Phase 6: BiometricCapture.capture takes a ComponentActivity (the add-on shows the camera UI).
+    api 'androidx.activity:activity:1.11.0'
 
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2'

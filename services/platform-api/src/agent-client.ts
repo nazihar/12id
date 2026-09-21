@@ -143,13 +143,19 @@ export function createAgentClient(options: AgentClientOptions) {
       call<AgentConnection[]>('GET', `${t(tenantId)}/connections${outOfBandId ? `?outOfBandId=${encodeURIComponent(outOfBandId)}` : ''}`),
     getConnection: (tenantId: string, id: string) => call<AgentConnection>('GET', `${t(tenantId)}/connections/${encodeURIComponent(id)}`),
 
-    offerCredential: (tenantId: string, input: { connectionId: string; credentialDefinitionObjectId: string; values: Record<string, string>; correlationId?: string }) =>
+    offerCredential: (tenantId: string, input: { connectionId: string; credentialDefinitionObjectId: string; values: Record<string, string>; correlationId?: string; hold?: boolean }) =>
       call<{ credentialExchangeId: string; threadId: string; state: string }>('POST', `${t(tenantId)}/credentials/offer`, input),
     getCredential: (tenantId: string, id: string) => call<AgentCredential>('GET', `${t(tenantId)}/credentials/${encodeURIComponent(id)}`),
 
-    requestProof: (tenantId: string, input: { connectionId: string; name: string; groups: AgentProofGroup[]; correlationId?: string }) =>
+    requestProof: (tenantId: string, input: { connectionId: string; name: string; groups: AgentProofGroup[]; correlationId?: string; hold?: boolean }) =>
       call<{ proofExchangeId: string; threadId: string; state: string }>('POST', `${t(tenantId)}/proofs/request`, input),
     getProof: (tenantId: string, id: string) => call<AgentProof>('GET', `${t(tenantId)}/proofs/${encodeURIComponent(id)}`),
+
+    // Biometric gate hold points (Phase 6 B2): release or abandon an exchange created with hold: true.
+    issueCredential: (tenantId: string, id: string) => call<{ id: string; state: string }>('POST', `${t(tenantId)}/credentials/${encodeURIComponent(id)}/issue`),
+    abandonCredential: (tenantId: string, id: string, reason: string) => call<{ id: string; state: string }>('POST', `${t(tenantId)}/credentials/${encodeURIComponent(id)}/abandon`, { reason }),
+    acceptPresentation: (tenantId: string, id: string) => call<{ id: string; state: string }>('POST', `${t(tenantId)}/proofs/${encodeURIComponent(id)}/accept`),
+    abandonProof: (tenantId: string, id: string, reason: string) => call<{ id: string; state: string }>('POST', `${t(tenantId)}/proofs/${encodeURIComponent(id)}/abandon`, { reason }),
 
     readOutbox: (afterId: number, limit: number) => call<{ rows: OutboxRow[] }>('GET', `/outbox?afterId=${afterId}&limit=${limit}`),
     ackOutbox: (upToId: number) => call<{ acknowledged: number }>('POST', '/outbox/ack', { upToId }),

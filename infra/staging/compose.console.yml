@@ -10,7 +10,8 @@
 # console scope). Published on 127.0.0.1; Caddy serves it as 12id.naziharitsolution.com.
 name: console
 
-x-image: &image 12id/console:phase4
+# phase6: biometric settings, face-check policies and the biometric log in the exchanges list.
+x-image: &image 12id/console:phase6
 
 x-console-env: &console-env
   NODE_ENV: production

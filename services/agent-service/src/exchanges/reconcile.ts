@@ -16,8 +16,10 @@ import { outbox } from '../db/schema.ts'
 import { getCorrelationId } from '../events/correlation.ts'
 
 /** Issuer/verifier states that wait on the holder. */
-const WAITING_CREDENTIAL_STATES = [DidCommCredentialState.OfferSent, DidCommCredentialState.CredentialIssued]
-const WAITING_PROOF_STATES = [DidCommProofState.RequestSent]
+// RequestReceived and PresentationReceived are where biometric-gated exchanges park (Phase 6 B2);
+// the platform's gate TTL is shorter, so it normally abandons them first.
+const WAITING_CREDENTIAL_STATES = [DidCommCredentialState.OfferSent, DidCommCredentialState.CredentialIssued, DidCommCredentialState.RequestReceived]
+const WAITING_PROOF_STATES = [DidCommProofState.RequestSent, DidCommProofState.PresentationReceived]
 
 export interface ReconcileOptions {
   /** Records older than this in a waiting state are abandoned. */

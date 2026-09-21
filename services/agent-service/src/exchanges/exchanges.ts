@@ -5,14 +5,20 @@
  * Every id that goes on the wire passes through the builders, which refuse qualified ids and
  * inject the expiry predicate.
  */
-import { DidCommOutOfBandRepository } from '@credo-ts/didcomm'
+import {
+  DidCommAutoAcceptCredential,
+  DidCommAutoAcceptProof,
+  DidCommCredentialState,
+  DidCommOutOfBandRepository,
+  DidCommProofState,
+} from '@credo-ts/didcomm'
 import { and, eq } from 'drizzle-orm'
 import type { Logger as PinoLogger } from 'pino'
 
 import type { RootAgent } from '../agent/root-agent.ts'
 import type { Database } from '../db/client.ts'
-import { ledgerObjects, tenants } from '../db/schema.ts'
-import { type PendingCorrelations, setCorrelationId } from '../events/correlation.ts'
+import { ledgerObjects, outbox, tenants } from '../db/schema.ts'
+import { type PendingCorrelations, getCorrelationId, setCorrelationId } from '../events/correlation.ts'
 import { type ProofGroupInput, buildOfferAttributes, buildProofRequest } from './builders.ts'
 
 export interface ExchangeDeps {
@@ -96,7 +102,7 @@ export async function getConnection(deps: ExchangeDeps, tenantId: string, id: st
 export async function offerCredential(
   deps: ExchangeDeps,
   tenantId: string,
-  input: { connectionId: string; credentialDefinitionObjectId: string; values: Record<string, string>; correlationId?: string }
+  input: { connectionId: string; credentialDefinitionObjectId: string; values: Record<string, string>; correlationId?: string; hold?: boolean }
 ) {
   await assertTenantReady(deps, tenantId)
   const [credDef] = await deps.db
@@ -123,6 +129,8 @@ export async function offerCredential(
         connectionId: input.connectionId,
         protocolVersion: 'v1' as never,
         credentialFormats: { indy: { credentialDefinitionId, attributes } },
+        // Biometric gate (Phase 6): park at request-received until the platform calls issueCredential.
+        ...(input.hold ? { autoAcceptCredential: DidCommAutoAcceptCredential.Never } : {}),
       })
     } catch (error) {
       if (input.correlationId) deps.pendingCorrelations.cancel(tenantId, 'credential', input.connectionId, input.correlationId)
@@ -136,7 +144,7 @@ export async function offerCredential(
 export async function requestProof(
   deps: ExchangeDeps,
   tenantId: string,
-  input: { connectionId: string; name: string; groups: ProofGroupInput[]; correlationId?: string }
+  input: { connectionId: string; name: string; groups: ProofGroupInput[]; correlationId?: string; hold?: boolean }
 ) {
   await assertTenantReady(deps, tenantId)
   const proofRequest = buildProofRequest(input.name, input.groups, Math.floor(Date.now() / 1000))
@@ -148,6 +156,8 @@ export async function requestProof(
         connectionId: input.connectionId,
         protocolVersion: 'v1' as never,
         proofFormats: { indy: proofRequest },
+        // Biometric gate (Phase 6): park at presentation-received until the platform calls acceptPresentation.
+        ...(input.hold ? { autoAcceptProof: DidCommAutoAcceptProof.Never } : {}),
       })
     } catch (error) {
       if (input.correlationId) deps.pendingCorrelations.cancel(tenantId, 'proof', input.connectionId, input.correlationId)
@@ -198,5 +208,71 @@ export async function getProofExchange(deps: ExchangeDeps, tenantId: string, id:
       errorMessage: record.errorMessage ?? null,
       disclosed,
     }
+  })
+}
+
+// --- Biometric gate hold points (Phase 6, 16-phase-6-biometric.md B2) -------------------
+// Exchanges created with `hold: true` park at request-received / presentation-received. The
+// platform releases them once its gate passes, or abandons them when the gate fails or expires.
+
+const FINAL_CREDENTIAL_STATES: string[] = [DidCommCredentialState.Done, DidCommCredentialState.Abandoned, DidCommCredentialState.Declined]
+const FINAL_PROOF_STATES: string[] = [DidCommProofState.Done, DidCommProofState.Abandoned, DidCommProofState.Declined]
+
+/** Issues a held credential. 409 unless the holder's request has arrived. */
+export async function issueCredential(deps: ExchangeDeps, tenantId: string, id: string) {
+  return withTenant(deps, tenantId, async (t) => {
+    const record = await t.modules.didcomm.credentials.findById(id)
+    if (!record) throw new ExchangeError(404, `credential exchange ${id} not found`)
+    if (record.state !== DidCommCredentialState.RequestReceived) throw new ExchangeError(409, `credential exchange is ${record.state}, not request-received`)
+    const issued = await t.modules.didcomm.credentials.acceptRequest({ credentialExchangeRecordId: id })
+    deps.logger.info({ tenantId, credentialExchangeId: id, threadId: issued.threadId }, 'held credential issued')
+    return { id: issued.id, state: issued.state }
+  })
+}
+
+/** Accepts a held presentation (sends the ack). 409 unless the presentation has arrived. */
+export async function acceptPresentation(deps: ExchangeDeps, tenantId: string, id: string) {
+  return withTenant(deps, tenantId, async (t) => {
+    const record = await t.modules.didcomm.proofs.findById(id)
+    if (!record) throw new ExchangeError(404, `proof exchange ${id} not found`)
+    if (record.state !== DidCommProofState.PresentationReceived) throw new ExchangeError(409, `proof exchange is ${record.state}, not presentation-received`)
+    const accepted = await t.modules.didcomm.proofs.acceptPresentation({ proofExchangeRecordId: id })
+    deps.logger.info({ tenantId, proofExchangeId: id, threadId: accepted.threadId }, 'held presentation accepted')
+    return { id: accepted.id, state: accepted.state }
+  })
+}
+
+/**
+ * Abandons a held (or still waiting) exchange: a best-effort problem report to the holder, then
+ * the record is marked abandoned locally with an outbox row, the same way reconciliation does,
+ * because the holder may be unreachable. Idempotent on final states.
+ */
+export async function abandonExchange(deps: ExchangeDeps, tenantId: string, kind: 'credential' | 'proof', id: string, reason: string) {
+  return withTenant(deps, tenantId, async (t) => {
+    const api = kind === 'credential' ? t.modules.didcomm.credentials : t.modules.didcomm.proofs
+    const record = await api.findById(id)
+    if (!record) throw new ExchangeError(404, `${kind} exchange ${id} not found`)
+    const finals = kind === 'credential' ? FINAL_CREDENTIAL_STATES : FINAL_PROOF_STATES
+    if (finals.includes(record.state)) return { id: record.id, state: record.state }
+
+    try {
+      if (kind === 'credential') await t.modules.didcomm.credentials.sendProblemReport({ credentialExchangeRecordId: id, description: reason })
+      else await t.modules.didcomm.proofs.sendProblemReport({ proofExchangeRecordId: id, description: reason })
+    } catch (error) {
+      deps.logger.warn({ err: error, tenantId, kind, id }, 'problem report to holder failed; abandoning locally')
+    }
+
+    const fresh = (await api.findById(id))!
+    const previousState = fresh.state
+    if (!finals.includes(fresh.state)) {
+      fresh.state = (kind === 'credential' ? DidCommCredentialState.Abandoned : DidCommProofState.Abandoned) as never
+      fresh.errorMessage = reason
+      if (kind === 'credential') await t.modules.didcomm.credentials.update(fresh as never)
+      else await t.modules.didcomm.proofs.update(fresh as never)
+      // api.update() emits no state event, so the outbox row is written here (as in reconcile.ts).
+      await deps.db.insert(outbox).values({ tenantId, recordType: kind, recordId: fresh.id, threadId: fresh.threadId, state: fresh.state, previousState, correlationId: getCorrelationId(fresh), payload: { reason, connectionId: fresh.connectionId ?? null } })
+    }
+    deps.logger.info({ tenantId, kind, id, previousState, reason }, 'held exchange abandoned')
+    return { id: fresh.id, state: fresh.state }
   })
 }

@@ -10,7 +10,8 @@
 # agent.<domain>; 3410 (agent internal API) is for operator tooling over SSH only.
 name: agent
 
-x-image: &image 12id/services:phase3
+# phase6: agent-service gained the biometric hold points (per-record auto-accept, issue/accept/abandon).
+x-image: &image 12id/services:phase6
 
 x-ledger-env: &ledger-env
   INDY_NAMESPACE: twelveid:staging
