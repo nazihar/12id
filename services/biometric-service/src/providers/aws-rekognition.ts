@@ -1,5 +1,5 @@
 /**
- * AWS Rekognition Face Liveness + CompareFaces (16-phase-6-biometric.md B1).
+ * AWS Rekognition Face Liveness + CompareFaces (15-phase-6-biometric.md B1).
  *
  * Bring your own account: the tenant creates a role that trusts 12id's principal with our
  * per-tenant external id. We assume it for every server call. The device gets separate

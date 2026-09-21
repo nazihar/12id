@@ -1,5 +1,5 @@
 /**
- * The vendor port (16-phase-6-biometric.md "Port"). Everything vendor-specific lives behind it;
+ * The vendor port (15-phase-6-biometric.md "Port"). Everything vendor-specific lives behind it;
  * a new vendor is one adapter here plus one device add-on per platform.
  *
  * Scores crossing the port are normalized to 0–100. Adapters never make the pass/fail decision:

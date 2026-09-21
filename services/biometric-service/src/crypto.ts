@@ -1,5 +1,5 @@
 /**
- * Envelope encryption (16-phase-6-biometric.md B1). The master key (SOPS) wraps one random data
+ * Envelope encryption (15-phase-6-biometric.md B1). The master key (SOPS) wraps one random data
  * key per tenant; data keys encrypt vendor configuration and reference images. AES-256-GCM
  * everywhere, with associated data that binds each ciphertext to its tenant and row, so a
  * ciphertext copied to another row or tenant fails to decrypt.

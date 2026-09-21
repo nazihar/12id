@@ -63,9 +63,9 @@ Phase 0 ran the stack end to end on Android. Content now falls into these tiers,
 - production (non-von-network) ledgers and the TAA;
 - a real FCM push (the smoke simulates it with a broadcast on the same code path).
 
-**Reviewed, not fixed (2026-09-16).** [`15-phase-7.md`](15-phase-7.md) audited every component above for security gaps and optimisation opportunities: 3 High (data retention/deletion, shared internal token + network reaching the endorser, Postgres superuser everywhere), 18 Medium, 12 Low. Its §10 is the **Phase 7** fix set (renumbered when the biometric gate became Phase 6); nothing in it has been built.
+**Reviewed, not fixed (2026-09-16).** [`17-phase-7.md`](17-phase-7.md) audited every component above for security gaps and optimisation opportunities: 3 High (data retention/deletion, shared internal token + network reaching the endorser, Postgres superuser everywhere), 18 Medium, 12 Low. Its §10 is the **Phase 7** fix set (renumbered when the biometric gate became Phase 6); nothing in it has been built.
 
-**Confirmed (Phase 6, run, 2026-09-21).** The optional biometric gate (§2.8, §4.9, §12.17), evidence in [`17-phase-6-biometric-findings.md`](17-phase-6-biometric-findings.md), with the `mock` provider:
+**Confirmed (Phase 6, run, 2026-09-21).** The optional biometric gate (§2.8, §4.9, §12.17), evidence in [`16-phase-6-biometric-findings.md`](16-phase-6-biometric-findings.md), with the `mock` provider:
 - **Gated issuance** held at `request-received` until a pass (both event orders).
 - **Lockout** after the last failed attempt abandons the exchange.
 - **Gated proofs:** `verified`/`disclosed` withheld until a pass.
@@ -496,7 +496,7 @@ If revocation is added later, the original flow applies (registry entries batche
 
 ### 4.9 Biometric gate — planned (Phase 6)
 
-Issuance is shown; a proof follows the same steps with `presentation-received` and accept. Plan and details: [`16-phase-6-biometric.md`](16-phase-6-biometric.md).
+Issuance is shown; a proof follows the same steps with `presentation-received` and accept. Plan and details: [`15-phase-6-biometric.md`](15-phase-6-biometric.md).
 
 1. The customer backend calls `POST /v1/credentials/offer` with `biometric.referenceImage`.
    - Platform API resolves the policy: the credential definition's policy, else the tenant default.
@@ -899,7 +899,7 @@ Plan: [`13-phase-5-android.md`](13-phase-5-android.md); evidence: [`14-phase-5-a
 
 ### Phase 6 — Biometric gate — **on staging (mock provider); AWS pending the tenant role**
 
-Plan: [`16-phase-6-biometric.md`](16-phase-6-biometric.md); evidence: [`17-phase-6-biometric-findings.md`](17-phase-6-biometric-findings.md). An optional, per-tenant liveness + face-match check that guards credential issuance and proof results (§2.8, §4.9, §12.17).
+Plan: [`15-phase-6-biometric.md`](15-phase-6-biometric.md); evidence: [`16-phase-6-biometric-findings.md`](16-phase-6-biometric-findings.md). An optional, per-tenant liveness + face-match check that guards credential issuance and proof results (§2.8, §4.9, §12.17).
 
 - [~] B0 spike: the server-side calls ran with the owner's keys (session without S3 output). The device capture, AssumeRole and `CompareFaces` thresholds wait for the tenant role. Amplify's detector takes an injected credentials provider (source read, compiled); size +8.3 MB release; the host app needs core library desugaring
 - [x] B1 `biometric-service`: envelope encryption, `mock` + `aws-rekognition` adapters, internal API, expiry job; `biometric` database on `agent-postgres`
@@ -913,7 +913,7 @@ Plan: [`16-phase-6-biometric.md`](16-phase-6-biometric.md); evidence: [`17-phase
 
 ### Phase 7 — Pre-production hardening (from the review; not started)
 
-Findings and the ordered fix set: [`15-phase-7.md`](15-phase-7.md) §10 (this was Phase 6 before the biometric gate was inserted). H1 and H3 now also cover the biometric tables and database. Highest first: per-hop internal tokens and an endorser-only network (H2); per-service Postgres roles and the endorser store off the mediator instance (H3); file-based secrets (M11); DIDComm body cap (M1); the trap 44 root cause is agent-service's `connectionTimeout`, not the platform client (M5); deletion routes and a retention job so §5.3 is true (H1).
+Findings and the ordered fix set: [`17-phase-7.md`](17-phase-7.md) §10 (this was Phase 6 before the biometric gate was inserted). H1 and H3 now also cover the biometric tables and database. Highest first: per-hop internal tokens and an endorser-only network (H2); per-service Postgres roles and the endorser store off the mediator instance (H3); file-based secrets (M11); DIDComm body cap (M1); the trap 44 root cause is agent-service's `connectionTimeout`, not the platform client (M5); deletion routes and a retention job so §5.3 is true (H1).
 
 ### Phase 8 — Hardening
 
@@ -1130,11 +1130,11 @@ Distribution is **source / local Maven only** (`sdk-android/build/m2`, consumed 
 
 ### 12.17 Biometric gate — decided: optional per tenant, own service, bring-your-own AWS first (new, Phase 6 planning)
 
-An optional liveness + face-match gate on issuance and proof results (§2.8, §4.9). Planned in [`16-phase-6-biometric.md`](16-phase-6-biometric.md). Decided:
+An optional liveness + face-match gate on issuance and proof results (§2.8, §4.9). Planned in [`15-phase-6-biometric.md`](15-phase-6-biometric.md). Decided:
 
 | Item | Decision |
 |---|---|
-| Phase placement | **Phase 6**, after the Android SDK and before the review fix set. The review becomes Phase 7 (`15-phase-7.md`) and Hardening becomes Phase 8 |
+| Phase placement | **Phase 6**, after the Android SDK and before the review fix set. The review becomes Phase 7 (`17-phase-7.md`) and Hardening becomes Phase 8 |
 | Vendor lock-in | Ports and adapters: a `BiometricProvider` port on the server, and a `BiometricCapture` port in the SDK with one native add-on per vendor and platform. A new vendor is one adapter plus one add-on per platform |
 | Server placement | New internal `biometric-service` (vendor code, vendor config, images, its own key). platform-api owns policies, the gate, the log and every public route |
 | Database | A `biometric` database on the shared `agent-postgres`, backed up like the others (images short-lived and encrypted). A scoped role comes with H3; a dedicated instance only if production needs instance-level backups or H3 cannot isolate it |

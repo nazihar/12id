@@ -1,7 +1,7 @@
 /**
  * Phase 6 biometric gate in the console. Local run: platform-api on 3510 with BIOMETRIC_SERVICE_URL,
  * and biometric-service on 3530 with BIOMETRIC_ENABLE_MOCK=true (so the only provider is `mock`).
- * Recipe in 17-phase-6-biometric-findings.md ("Console Playwright").
+ * Recipe in 16-phase-6-biometric-findings.md ("Console Playwright").
  *
  * An owner configures the provider, runs the connection test and switches the gate on; sets a
  * template's face-check policy; sees the Biometric column and the biometric log on a (seeded) gated

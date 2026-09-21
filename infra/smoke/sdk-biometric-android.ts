@@ -1,5 +1,5 @@
 /**
- * smoke:sdk-biometric-android (Phase 6, implement/16-phase-6-biometric.md T): the sample app (debug
+ * smoke:sdk-biometric-android (Phase 6, implement/15-phase-6-biometric.md T): the sample app (debug
  * build, SDK + biometric add-ons from build/m2) on a phone against staging, driven over adb as in
  * smoke:sdk-android. The tenant behind PLATFORM_API_KEY must have biometrics on
  * (infra/smoke/biometric-setup.sh on the VM).

@@ -1,5 +1,5 @@
 /**
- * smoke:biometric-credo (Phase 6, implement/16-phase-6-biometric.md T). The biometric gate end to
+ * smoke:biometric-credo (Phase 6, implement/15-phase-6-biometric.md T). The biometric gate end to
  * end on staging with the `mock` provider: a Credo holder with manual accept stands in for the SDK
  * and drives the wallet routes (requirements, session start, complete) with its wallet token.
  *

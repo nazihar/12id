@@ -1,5 +1,5 @@
 /**
- * biometric-service internal API (16-phase-6-biometric.md B1). Private network; platform-api is
+ * biometric-service internal API (15-phase-6-biometric.md B1). Private network; platform-api is
  * the only caller. Every route except /healthz requires the service's own token.
  */
 import {

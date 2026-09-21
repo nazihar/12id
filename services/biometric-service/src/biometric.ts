@@ -1,5 +1,5 @@
 /**
- * biometric-service core (16-phase-6-biometric.md B1): tenant provider configuration, checks,
+ * biometric-service core (15-phase-6-biometric.md B1): tenant provider configuration, checks,
  * sessions and the pass/fail decision. HTTP-agnostic; http/api.ts maps ServiceError to statuses.
  *
  * Invariants:

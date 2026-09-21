@@ -1,5 +1,5 @@
-// Phase 6 B0 spike (12id/implement/16-phase-6-biometric.md): AWS Rekognition Face Liveness from a non-AWS host.
-// Throwaway; results go to 12id/implement/17-phase-6-biometric-findings.md.
+// Phase 6 B0 spike (12id/implement/15-phase-6-biometric.md): AWS Rekognition Face Liveness from a non-AWS host.
+// Throwaway; results go to 12id/implement/16-phase-6-biometric-findings.md.
 //
 //   node --env-file=.aws-spike.env src/b0-aws-liveness.ts setup
 //   node --env-file=.aws-spike.env src/b0-aws-liveness.ts session

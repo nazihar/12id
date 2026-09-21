@@ -1,6 +1,6 @@
 # Phase 6 — Biometric gate: findings
 
-**Plan:** [16-phase-6-biometric.md](16-phase-6-biometric.md). **Status (2026-09-21): built and deployed on staging.** The gate is proven end to end with the `mock` provider:
+**Plan:** [15-phase-6-biometric.md](15-phase-6-biometric.md). **Status (2026-09-21): built and deployed on staging.** The gate is proven end to end with the `mock` provider:
 - `smoke:biometric-credo` **PASSED 18/18** (Credo holder over the public API);
 - `smoke:sdk-biometric-android` **PASSED 12/12** on the Xiaomi (SDK + mock add-on).
 

@@ -208,7 +208,7 @@ export const consoleAudit = pgTable('console_audit', {
   requestId: text('request_id').notNull(),
 }, (table) => [index('console_audit_at_idx').on(table.at), index('console_audit_tenant_idx').on(table.tenantId, table.at)])
 
-// --- Biometric gate (Phase 6, implement/16-phase-6-biometric.md B3) ------------------------
+// --- Biometric gate (Phase 6, implement/15-phase-6-biometric.md B3) ------------------------
 // Vendor configuration and images live in biometric-service; these tables hold policy, the gate
 // state per exchange and the biometric log. No image bytes anywhere here.
 

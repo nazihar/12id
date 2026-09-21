@@ -2,7 +2,7 @@
   "name": "@12id/biometric-service",
   "private": true,
   "type": "module",
-  "description": "Internal biometric gate service (implement/16-phase-6-biometric.md B1): vendor adapters behind a port, per-tenant encrypted vendor config and reference images, liveness + face-match decisions. Reached by platform-api only.",
+  "description": "Internal biometric gate service (implement/15-phase-6-biometric.md B1): vendor adapters behind a port, per-tenant encrypted vendor config and reference images, liveness + face-match decisions. Reached by platform-api only.",
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "node --test --test-concurrency=1 \"test/**/*.test.ts\""

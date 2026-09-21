@@ -1,4 +1,4 @@
-# Biometric stack (Phase 6 B6, implement/16-phase-6-biometric.md): biometric-provision (init job) +
+# Biometric stack (Phase 6 B6, implement/15-phase-6-biometric.md): biometric-provision (init job) +
 # biometric-service.
 #
 #   EXTRA_SECRETS="agent" infra/scripts/deploy.sh biometric
@@ -8,7 +8,7 @@
 # BIOMETRIC_AWS_SECRET_ACCESS_KEY (12id's own AWS principal, which assumes each tenant's role; see
 # runbooks/biometric-service.md). EXTRA_SECRETS adds AGENT_POSTGRES_PASSWORD.
 #
-# Database: `biometric` on the agent stack's Postgres (owner decision, 16-phase-6-biometric.md), as
+# Database: `biometric` on the agent stack's Postgres (owner decision, 15-phase-6-biometric.md), as
 # `postgres` until review H3 gives it its own role. Backed up with the other agent databases.
 #
 # Networks: `12id-agent` for agent-postgres, `12id-biometric` (created here) shared with platform-api

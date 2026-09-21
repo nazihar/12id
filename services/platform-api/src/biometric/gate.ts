@@ -1,5 +1,5 @@
 /**
- * Biometric gate engine (Phase 6 B3, 16-phase-6-biometric.md "Gate engine").
+ * Biometric gate engine (Phase 6 B3, 15-phase-6-biometric.md "Gate engine").
  *
  * A gated exchange has two independent halves that can arrive in either order:
  *   - the exchange parks at its hold state (credential request-received / proof presentation-received);

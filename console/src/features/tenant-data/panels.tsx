@@ -144,7 +144,7 @@ function BiometricLogDialog({ target, load, onClose }: { target: { kind: Exchang
   })
   return (
     <Dialog open={target !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-4xl">
+      <DialogContent className="max-h-[calc(100svh-2rem)] overflow-y-auto overscroll-contain grid-cols-[minmax(0,1fr)] sm:max-w-4xl">
         <DialogHeader>
           <DialogTitle>Biometric log</DialogTitle>
           <DialogDescription>
@@ -166,29 +166,29 @@ function BiometricLogDialog({ target, load, onClose }: { target: { kind: Exchang
                 </span>
               </p>
             )}
-            <div className="overflow-x-auto">
+            <div className="min-w-0 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="text-left text-muted-foreground">
                   <tr>
-                    <th className="py-1 pr-3 font-medium">Time</th>
-                    <th className="py-1 pr-3 font-medium">Step</th>
-                    <th className="py-1 pr-3 font-medium">Attempt</th>
-                    <th className="py-1 pr-3 font-medium">Liveness</th>
-                    <th className="py-1 pr-3 font-medium">Match</th>
-                    <th className="py-1 pr-3 font-medium">Decision</th>
-                    <th className="py-1 font-medium">Vendor session</th>
+                    <th className="py-1 pr-2 font-medium whitespace-nowrap">Time</th>
+                    <th className="py-1 pr-2 font-medium whitespace-nowrap">Step</th>
+                    <th className="py-1 pr-2 font-medium whitespace-nowrap">Attempt</th>
+                    <th className="py-1 pr-2 font-medium whitespace-nowrap">Liveness</th>
+                    <th className="py-1 pr-2 font-medium whitespace-nowrap">Match</th>
+                    <th className="py-1 pr-2 font-medium whitespace-nowrap">Decision</th>
+                    <th className="py-1 font-medium whitespace-nowrap">Vendor session</th>
                   </tr>
                 </thead>
                 <tbody>
                   {log.data.events.map((event: BiometricLogEvent) => (
                     <tr key={event.id} className="border-t">
-                      <td className="py-1 pr-3 whitespace-nowrap">{formatDateTime(event.at)}</td>
-                      <td className="py-1 pr-3">{EVENT_LABELS[event.type] ?? event.type}</td>
-                      <td className="py-1 pr-3">{event.attempt ?? ''}</td>
-                      <td className="py-1 pr-3 font-mono text-xs">{event.type === 'attempt_completed' ? score(event.livenessScore, event.thresholds?.minLivenessScore) : ''}</td>
-                      <td className="py-1 pr-3 font-mono text-xs">{event.type === 'attempt_completed' ? score(event.matchScore, event.thresholds?.minMatchScore) : ''}</td>
-                      <td className="py-1 pr-3">{event.decision ? <StateBadge state={event.decision} /> : null} {event.reason && event.reason !== 'passed' ? <span className="text-xs text-muted-foreground">{event.reason}</span> : null}</td>
-                      <td className="py-1">{event.vendorSessionId ? mono(event.vendorSessionId) : ''}</td>
+                      <td className="py-1 pr-2 whitespace-nowrap">{formatDateTime(event.at)}</td>
+                      <td className="py-1 pr-2 whitespace-nowrap">{EVENT_LABELS[event.type] ?? event.type}</td>
+                      <td className="py-1 pr-2 whitespace-nowrap">{event.attempt ?? ''}</td>
+                      <td className="py-1 pr-2 font-mono text-xs whitespace-nowrap">{event.type === 'attempt_completed' ? score(event.livenessScore, event.thresholds?.minLivenessScore) : ''}</td>
+                      <td className="py-1 pr-2 font-mono text-xs whitespace-nowrap">{event.type === 'attempt_completed' ? score(event.matchScore, event.thresholds?.minMatchScore) : ''}</td>
+                      <td className="py-1 pr-2">{event.decision ? <StateBadge state={event.decision} /> : null}{event.reason && event.reason !== 'passed' ? <span className="block text-xs whitespace-nowrap text-muted-foreground">{event.reason}</span> : null}</td>
+                      <td className="py-1 whitespace-nowrap">{event.vendorSessionId ? mono(event.vendorSessionId) : ''}</td>
                     </tr>
                   ))}
                 </tbody>

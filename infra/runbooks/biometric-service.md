@@ -1,6 +1,6 @@
 # Runbook: biometric-service (staging)
 
-Phase 6 biometric gate ([`16-phase-6-biometric.md`](../../implement/16-phase-6-biometric.md)). An internal service that holds each tenant's biometric vendor configuration and the reference images of pending face checks, both encrypted. It decides liveness + face match through the vendor adapters. platform-api is its only caller.
+Phase 6 biometric gate ([`15-phase-6-biometric.md`](../../implement/15-phase-6-biometric.md)). An internal service that holds each tenant's biometric vendor configuration and the reference images of pending face checks, both encrypted. It decides liveness + face match through the vendor adapters. platform-api is its only caller.
 
 ## What runs where
 

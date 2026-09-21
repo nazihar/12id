@@ -2,7 +2,7 @@ import { type DestinationStream, type Logger, destination as fileDestination, pi
 
 /**
  * pino with biometric redaction. Images, capture output, vendor configuration and credentials must
- * never reach a log line, whoever logs the object (16-phase-6-biometric.md B1 "Logging").
+ * never reach a log line, whoever logs the object (15-phase-6-biometric.md B1 "Logging").
  * No @credo-ts dependency: this service has no agent.
  */
 export const REDACTED_PATHS = [

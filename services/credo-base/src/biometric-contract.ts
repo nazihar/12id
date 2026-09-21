@@ -1,5 +1,5 @@
 /**
- * HTTP contract between platform-api (caller) and biometric-service (Phase 6, 16-phase-6-biometric.md B1).
+ * HTTP contract between platform-api (caller) and biometric-service (Phase 6, 15-phase-6-biometric.md B1).
  * Both sides validate with these schemas. biometric-service is on a private network and requires
  * its own token in INTERNAL_TOKEN_HEADER (not the agent token, review H2).
  *

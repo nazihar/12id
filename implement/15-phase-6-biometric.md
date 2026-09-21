@@ -1,11 +1,11 @@
 # Phase 6 — Biometric gate: liveness + face match (plan)
 
-**Status (2026-09-21):** built and on staging. `smoke:biometric-credo` (mock) 18/18 and `smoke:sdk-biometric-android` (mock, phone) 12/12 passed. The AWS half waits for the owner's tenant role. As-built differences and evidence are in [`17-phase-6-biometric-findings.md`](17-phase-6-biometric-findings.md).
+**Status (2026-09-21):** built and on staging. `smoke:biometric-credo` (mock) 18/18 and `smoke:sdk-biometric-android` (mock, phone) 12/12 passed. The AWS half waits for the owner's tenant role. As-built differences and evidence are in [`16-phase-6-biometric-findings.md`](16-phase-6-biometric-findings.md).
 
 ## Context
 Phases 0–5 (Android) are done and on staging (`12id/implement/1…14`):
 - ledger, patched mediator, agent-service + endorser-service, platform-api (API keys, wallet tokens, webhooks, wake path), console (operator + tenant portal, dashboards), and the Android holder SDK (`com.12id:holder-sdk-android`, `com.onetwoid.sdk.OneTwoId`).
-- The pre-production review is written (now [`15-phase-7.md`](15-phase-7.md), Phase 7); none of its fixes are built.
+- The pre-production review is written (now [`17-phase-7.md`](17-phase-7.md), Phase 7); none of its fixes are built.
 
 Phase 6 adds an **optional, per-tenant biometric gate**. The end user must pass **liveness** plus a **face match** against a reference image the tenant supplies before:
 - a credential is **issued**, or
@@ -22,7 +22,7 @@ It is a third-party integration the platform owns:
 ## Decisions (this session)
 | Item | Decision | Consequence |
 |---|---|---|
-| Phase placement | **Phase 6**, after the SDK and before the review fix set | The review becomes **Phase 7** (`15-phase-6.md` → `15-phase-7.md`), and the former Hardening becomes **Phase 8** |
+| Phase placement | **Phase 6**, after the SDK and before the review fix set | The review becomes **Phase 7** (`15-phase-6.md` → `17-phase-7.md`), and the former Hardening becomes **Phase 8** |
 | Server placement | New internal **`biometric-service`** with its own encryption key; platform-api owns policy, the gate and every public route | Vendor SDKs, vendor credentials and face images stay out of the customer-facing process |
 | Database | A `biometric` database on the **shared `agent-postgres`** instance, backed up like the other databases | Acceptable because images live about 30 minutes and are encrypted with a key that is not in the database. A scoped role comes with H3 (Phase 7). A dedicated instance only if production moves to instance-level backups or H3 cannot isolate it |
 | Vendor accounts | **Bring your own only** | Each tenant configures its own AWS account. We hold no vendor billing relationship |
@@ -50,7 +50,7 @@ It is a third-party integration the platform owns:
 ## Workstreams
 
 ### B0 — Spike (first; gate for B1 and B4)
-On the Xiaomi (Android 14, arm64) with the owner's AWS account. Record in `17-phase-6-biometric-findings.md`:
+On the Xiaomi (Android 14, arm64) with the owner's AWS account. Record in `16-phase-6-biometric-findings.md`:
 - **Amplify UI Face Liveness on Android.** Confirm and record:
   - that `FaceLivenessDetector` accepts an injected credentials provider (no Cognito, no `amplifyconfiguration.json`);
   - that it can be hosted in a plain `ComponentActivity` owned by the add-on, so the host app need not use Compose;
@@ -295,11 +295,11 @@ B0 spike → B1 (mock adapter first) → B2 → B3 → `smoke:biometric-credo` (
 - **`smoke:biometric-credo` PASSED** on staging (steps 1–6).
 - **`smoke:sdk-biometric-android` PASSED** on the Xiaomi with the AWS add-on.
 - The grep check finds no image outside biometric-service's encrypted, short-lived rows. The backup restore shows ciphertext or `NULL` only.
-- Findings recorded in `17-phase-6-biometric-findings.md` in the 4-init §0.1 tier vocabulary.
+- Findings recorded in `16-phase-6-biometric-findings.md` in the 4-init §0.1 tier vocabulary.
 
 ## Document updates
-- `16-phase-6-biometric.md` (this plan) and `17-phase-6-biometric-findings.md`.
-- `15-phase-6.md` → **`15-phase-7.md`**: title and §10 renamed to Phase 7, §11 notes the renumbering, and Appendix A runs after Phase 7. H1's fix must also cover `exchange_gates`, `exchange_gate_events` and biometric-service `checks`/`sessions`/`results`. H3 gains the `biometric` database.
+- `15-phase-6-biometric.md` (this plan) and `16-phase-6-biometric-findings.md`.
+- `15-phase-6.md` → **`17-phase-7.md`** (numbered after this plan and its findings, `16-phase-6-biometric-findings.md`): title and §10 renamed to Phase 7, §11 notes the renumbering, and Appendix A runs after Phase 7. H1's fix must also cover `exchange_gates`, `exchange_gate_events` and biometric-service `checks`/`sessions`/`results`. H3 gains the `biometric` database.
 - **4-init:**
   - header and §0.1;
   - §2.6, plus a new §2.8 Biometric service;

@@ -211,7 +211,7 @@ export async function getProofExchange(deps: ExchangeDeps, tenantId: string, id:
   })
 }
 
-// --- Biometric gate hold points (Phase 6, 16-phase-6-biometric.md B2) -------------------
+// --- Biometric gate hold points (Phase 6, 15-phase-6-biometric.md B2) -------------------
 // Exchanges created with `hold: true` park at request-received / presentation-received. The
 // platform releases them once its gate passes, or abandons them when the gate fails or expires.
 

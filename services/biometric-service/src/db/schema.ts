@@ -1,5 +1,5 @@
 /**
- * biometric-service tables (16-phase-6-biometric.md B1). Database `biometric` on agent-postgres.
+ * biometric-service tables (15-phase-6-biometric.md B1). Database `biometric` on agent-postgres.
  * Every ciphertext column is sealed with the tenant's data key (crypto.ts). Reference images are
  * nulled at the decision or at expiry; results keep scores, decisions and hashes only.
  */

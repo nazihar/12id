@@ -1,6 +1,6 @@
 # Pre-production review — security gaps and optimization opportunities
 
-**Phase:** this review's fix set is **Phase 7 — Pre-production hardening** (renumbered 2026-09-21 when the biometric gate became Phase 6, [`16-phase-6-biometric.md`](16-phase-6-biometric.md); this file was `15-phase-6.md`). The former Hardening is **Phase 8**.
+**Phase:** this review's fix set is **Phase 7 — Pre-production hardening** (renumbered 2026-09-21 when the biometric gate became Phase 6, [`15-phase-6-biometric.md`](15-phase-6-biometric.md); this file was `15-phase-6.md`, then `15-phase-7.md`, and is now numbered after the Phase 6 docs `15`–`16`). The former Hardening is **Phase 8**.
 **Status:** review only, 2026-09-16. Nothing was changed on staging or in the code. Every finding names its file and line; a finding marked *run* has its command and output in this file, *source read* was verified in the code, *reasoned* was not exercised.
 **Scope:** platform-api, agent-service, endorser-service, credo-base, console, Android SDK, staging infra. The bucket-B follow-ups from the former `15-next-step.md` (its Phase 5b recommendation is carried in Appendix A below; the file itself was removed) are re-confirmed and ranked here (marked **B**).
 **Baseline runs (all green):** platform-api 36/36 (against the local Phase 2 Postgres), agent-service 43/43, endorser-service 30/30, credo-base 10/10, console Vitest 11/11 + `tsc`, SDK JVM 30/30 + `apiCheck`; `tsc --noEmit` clean in all four services. `npm audit --omit=dev`: 10 / 4 / 9 moderate, all transitive (§7).
@@ -151,7 +151,7 @@ Hashed tokens with prefix lookup and length-checked `timingSafeEqual` (`auth/tok
 **Evidence:** *source read*. Only `platform_ro` (Phase 3 P9) is a scoped role.
 **Impact:** a SQL injection or RCE in any one service (the mediator is third-party code facing the internet) yields every database on that instance, including the encrypted endorser store and all tenant wallets — Askar-encrypted, but the store keys are one `docker inspect` away (M11).
 **Fix:** one role per service with `CONNECT` and ownership of its own database only (`agent_service`, `endorser_service`, `platform_api`, `console`, `mediator_drizzle`, `mediator_pickup`, `agent_askar`, `endorser_askar`); move the `endorser` Askar database to a Postgres the mediator cannot reach (the agent instance, or its own); Askar's `adminAccount` only for provisioning. The restore drills already exist — re-run them after the role change. Test: `psql` as each role against another database → permission denied.
-**Added by Phase 6:** the `biometric` database (biometric-service) also lives on `agent-postgres` and connects as `postgres`. It needs its own role like the others. Revisit a dedicated instance only if production moves to instance-level backups or the role split cannot isolate it (`16-phase-6-biometric.md`).
+**Added by Phase 6:** the `biometric` database (biometric-service) also lives on `agent-postgres` and connects as `postgres`. It needs its own role like the others. Revisit a dedicated instance only if production moves to instance-level backups or the role split cannot isolate it (`15-phase-6-biometric.md`).
 
 ### L9 · Low · Askar pool size
 `credo-base/src/askar-postgres.ts:24` sets only `connectTimeout`; `maxConnections` is Askar's default. With `TENANT_SESSION_LIMIT=100` and serial processing this is fine today; verify under the Phase 8 load profile before enabling concurrency.
@@ -405,7 +405,7 @@ Two cheap adjacent wins while in here: `GET /v1/ledger` returns static, env-deri
 - `4-init-post-phase-0.md` §0.1 and §10: pointer to this file; the review fix set is **Phase 6 — Pre-production hardening** and the former Phase 6 (load tests, failover, key rotation, DR) is now **Phase 7 — Hardening**.
 - `15-next-step.md` removed; this file takes its number. Its Phase 5b recommendation (Android SDK release) is preserved in Appendix A and follows Phase 6.
 
-**Renumbering (2026-09-21):** the biometric gate was inserted as **Phase 6** ([`16-phase-6-biometric.md`](16-phase-6-biometric.md)). This file was renamed from `15-phase-6.md` to `15-phase-7.md`, its fix set is now **Phase 7 — Pre-production hardening**, and Hardening is **Phase 8**. The references in the body were updated; the bullets above keep the numbering of their date. Appendix A (5b) now runs after Phase 7.
+**Renumbering (2026-09-21):** the biometric gate was inserted as **Phase 6** ([`15-phase-6-biometric.md`](15-phase-6-biometric.md)). This file was renamed from `15-phase-6.md` to `15-phase-7.md`, then to `17-phase-7.md` so the files run in phase order (Phase 6 plan `15`, findings `16`, Phase 7 review `17`); its fix set is now **Phase 7 — Pre-production hardening**, and Hardening is **Phase 8**. The references in the body were updated; the bullets above keep the numbering of their date. Appendix A (5b) now runs after Phase 7.
 
 ---
 

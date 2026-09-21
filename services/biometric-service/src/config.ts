@@ -9,7 +9,7 @@ const configSchema = z
   .object({
     LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent']).default('info'),
 
-    /** biometric-service's own database (`biometric` on agent-postgres, 16-phase-6-biometric.md). */
+    /** biometric-service's own database (`biometric` on agent-postgres, 15-phase-6-biometric.md). */
     DATABASE_URL: z.url().refine((url) => url.startsWith('postgres://') || url.startsWith('postgresql://'), 'must be a postgres URL'),
 
     /** 32 random bytes, base64. Wraps the per-tenant data keys. Losing it makes every stored config and image unreadable. */
