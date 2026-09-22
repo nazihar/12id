@@ -1,7 +1,16 @@
 # Pre-production review — security gaps and optimization opportunities
 
 **Phase:** this review's fix set is **Phase 7 — Pre-production hardening** (renumbered 2026-09-21 when the biometric gate became Phase 6, [`15-phase-6-biometric.md`](15-phase-6-biometric.md); this file was `15-phase-6.md`, then `15-phase-7.md`, and is now numbered after the Phase 6 docs `15`–`16`). The former Hardening is **Phase 8**.
-**Status:** review only, 2026-09-16. Nothing was changed on staging or in the code. Every finding names its file and line; a finding marked *run* has its command and output in this file, *source read* was verified in the code, *reasoned* was not exercised.
+**Status:**
+- The review ran 2026-09-16 and changed nothing itself.
+- **Fixed since: H2 and H3, on staging 2026-09-22** (§10 item 1, [`infra/runbooks/postgres-roles.md`](../infra/runbooks/postgres-roles.md)).
+- Everything else is open.
+
+Every finding names its file and line. The evidence marker on each finding says how it was checked:
+- *run*: its command and output are in this file
+- *source read*: verified in the code
+- *reasoned*: not exercised
+
 **Scope:** platform-api, agent-service, endorser-service, credo-base, console, Android SDK, staging infra. The bucket-B follow-ups from the former `15-next-step.md` (its Phase 5b recommendation is carried in Appendix A below; the file itself was removed) are re-confirmed and ranked here (marked **B**).
 **Baseline runs (all green):** platform-api 36/36 (against the local Phase 2 Postgres), agent-service 43/43, endorser-service 30/30, credo-base 10/10, console Vitest 11/11 + `tsc`, SDK JVM 30/30 + `apiCheck`; `tsc --noEmit` clean in all four services. `npm audit --omit=dev`: 10 / 4 / 9 moderate, all transitive (§7).
 
@@ -14,8 +23,8 @@ Severity is exploitability × impact against the **production** threat model (cu
 | ID | Sev | Component | Finding | Effort |
 |---|---|---|---|---|
 | H1 | High | platform-api, agent-service | Personal data is retained forever in five places and there is no deletion path; §5.3 promises one | 2–3 d |
-| H2 | High | infra | One shared internal token and a shared Docker network let platform-api call endorser-service directly (undoes §12.10) | 0.5 d |
-| H3 | High | infra | Every service is a Postgres superuser; the endorser store lives in the internet-facing mediator's Postgres with its password | 1 d |
+| H2 | High | infra | **Done 2026-09-22.** One shared internal token and a shared Docker network let platform-api call endorser-service directly (undoes §12.10) | 0.5 d |
+| H3 | High | infra | **Done 2026-09-22.** Every service is a Postgres superuser; the endorser store lives in the internet-facing mediator's Postgres with its password | 1 d |
 | M1 | Med | agent-service, edge | Public DIDComm endpoint accepts 5 MB junk, processed serially for all tenants → cheap cross-tenant DoS | 0.5 d |
 | M2 | Med | platform-api | Webhook dispatcher is sequential: one slow customer stalls every tenant's webhooks (up to 200 s per tick) | 0.5 d |
 | M3 | Med | platform-api, endorser | Any API key can publish unlimited immutable ledger objects; no quota, no approval | 1 d |
@@ -140,7 +149,7 @@ Hashed tokens with prefix lookup and length-checked `timingSafeEqual` (`auth/tok
 **Evidence:** *source read*; the file's own comment names the gap ("anything but a stalled insert").
 **Fix:** either insert outbox rows inside the same transaction as the state change so ids and commits are ordered, or hold the cursor below `txid_current_snapshot()`'s xmin (the "xmin horizon" pattern). Test: two concurrent inserts, the lower id committing later.
 
-### H2 · High · One internal token, one shared network → platform-api can reach the endorser
+### H2 · High · ✅ Done 2026-09-22 · One internal token, one shared network → platform-api can reach the endorser
 **Where:** `infra/staging/compose.agent.yml`: `INTERNAL_API_TOKEN`, `ENDORSER_SERVICE_TOKEN` and the endorser's `INTERNAL_TOKEN` are all `${AGENT_INTERNAL_TOKEN}`; `endorser-service` is on `[default, mediator]`; `compose.platform.yml`: `platform-api` is on `[agent, mediator]` and holds `AGENT_API_TOKEN = ${AGENT_INTERNAL_TOKEN}`.
 **Evidence:** *source read*. Both containers share `12id-mediator`; the endorser accepts the token platform-api already has.
 **Impact:** §12.10 keeps the endorser key out of the internet-facing process, but the internet-facing platform-api can `POST http://endorser-service:3420/endorse` with a valid token. The policy still limits what gets signed (registered tenant DIDs only), so this is not "sign anything", but the isolation the design claims is not there.
@@ -151,7 +160,7 @@ Hashed tokens with prefix lookup and length-checked `timingSafeEqual` (`auth/tok
 - endorser-service is only on `12id-endorser`, with agent-service and agent-postgres.
 - The platform stack no longer decrypts `agent.sops.env` at all.
 
-### H3 · High · Superuser everywhere; endorser store in the mediator's Postgres
+### H3 · High · ✅ Done 2026-09-22 · Superuser everywhere; endorser store in the mediator's Postgres
 **Where:** `compose.agent.yml` (`POSTGRES_USER: postgres` for agent-service and endorser-service; `DATABASE_URL=postgresql://postgres:…`), `compose.platform.yml` (same), `compose.console.yml` (same), `compose.mediator.yml` (the mediator as `postgres`); the endorser Askar store `endorser` is on the **mediator** instance (`POSTGRES_HOST: postgres:5432`, `init.sql`).
 **Evidence:** *source read*. Only `platform_ro` (Phase 3 P9) is a scoped role.
 **Impact:** a SQL injection or RCE in any one service (the mediator is third-party code facing the internet) yields every database on that instance, including the encrypted endorser store and all tenant wallets — Askar-encrypted, but the store keys are one `docker inspect` away (M11).
@@ -398,7 +407,11 @@ Two cheap adjacent wins while in here: `GET /v1/ledger` returns static, env-deri
 
 | # | Findings | Verification |
 |---|---|---|
-| 1 | H2 + H3: three tokens, endorser network, per-service DB roles, endorser store off the mediator instance | container-to-container probes fail; `psql` cross-database denied; restore drill re-run |
+| 1 | ✅ **Done 2026-09-22.** H2 + H3: per-hop tokens, endorser network, per-service DB roles, endorser store off the mediator instance (to agent-postgres, no new instance) | container-to-container probes fail; `psql` cross-database denied; restore drill re-run. **Passed on staging:**
+- probes: `ENOTFOUND` from every service except agent-service
+- cross-database access denied
+- restore drill passed
+- smokes: biometric 18/18, platform-credo, console 3/3 |
 | 2 | M11: file-based secrets | `docker inspect` clean |
 | 3 | M1: DIDComm body cap + per-IP tightening | staging probe 413 |
 | 4 | M5: internal-API timeout fix (+ async cred-def) | 15 s handler test; `smoke:platform-credo` |
