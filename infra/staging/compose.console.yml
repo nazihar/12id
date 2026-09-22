@@ -1,10 +1,10 @@
 # Console stack (Phase 4 C5): console-migrate (init job) + console (TanStack Start + Better Auth).
 #
-#   EXTRA_SECRETS="agent" infra/scripts/deploy.sh console up -d --build
+#   infra/scripts/deploy.sh console up -d --build
 #
 # secrets/console.sops.env: BETTER_AUTH_SECRET, CONSOLE_TOKEN (must equal platform.sops.env's
-# CONSOLE_TOKEN), SMTP_URL (required: email OTP, invitations, password links), optional MAIL_FROM.
-# EXTRA_SECRETS adds AGENT_POSTGRES_PASSWORD: the `console` database lives on agent-postgres.
+# CONSOLE_TOKEN), SMTP_URL (required: email OTP, invitations, password links), optional MAIL_FROM,
+# CONSOLE_DB_PASSWORD (the `console` role on agent-postgres, infra/scripts/pg-roles.sh; Phase 7 H3).
 #
 # Network: `12id-agent` only, for agent-postgres and platform-api (http://platform-api:3500, the
 # console scope). Published on 127.0.0.1; Caddy serves it as 12id.naziharitsolution.com.
@@ -15,7 +15,7 @@ x-image: &image 12id/console:phase6
 
 x-console-env: &console-env
   NODE_ENV: production
-  DATABASE_URL: postgresql://postgres:${AGENT_POSTGRES_PASSWORD:?run with EXTRA_SECRETS="agent"}@agent-postgres:5432/console
+  DATABASE_URL: postgresql://console:${CONSOLE_DB_PASSWORD:?decrypt secrets via deploy.sh}@agent-postgres:5432/console
   BETTER_AUTH_URL: https://12id.naziharitsolution.com
   BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?decrypt secrets via deploy.sh}
   PLATFORM_API_URL: http://platform-api:3500
@@ -57,7 +57,7 @@ services:
         condition: service_completed_successfully
 
   # Operator bootstrap and other Better Auth CLI work (profile `tools`, never started by `up`):
-  #   EXTRA_SECRETS=agent deploy.sh console run --rm console-tools \
+  #   deploy.sh console run --rm console-tools \
   #     npx auth create-admin --config src/server/auth.server.ts --email you@12id.example \
   #     --password '<temporary>' --name 'Your Name' --role operator --yes
   console-tools:

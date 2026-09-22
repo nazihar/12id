@@ -7,7 +7,7 @@ Phase 6 biometric gate ([`15-phase-6-biometric.md`](../../implement/15-phase-6-b
 | Piece | Where | Notes |
 |---|---|---|
 | `biometric-service` | `compose.biometric.yml`, networks `12id-agent` + `12id-biometric` | Not published on the host. Outbound HTTPS to AWS |
-| `biometric` database | `agent-postgres` | Created and migrated by `biometric-provision`; backed up nightly with the agent databases |
+| `biometric` database | `agent-postgres` | Owned by the `biometric` role (`BIOMETRIC_DB_PASSWORD`, created by `infra/scripts/pg-roles.sh`; Phase 7 H3); migrated by `biometric-provision`; backed up nightly with the agent databases |
 | platform-api | joins `12id-biometric` | `BIOMETRIC_SERVICE_URL=http://biometric-service:3430`, `BIOMETRIC_SERVICE_TOKEN` |
 
 ## Secrets (`secrets/biometric.sops.env`)
@@ -30,9 +30,9 @@ Then commit the encrypted file from the VM, or copy it back, before the next tre
 ## Deploy
 
 ```sh
-EXTRA_SECRETS="agent" infra/scripts/deploy.sh biometric up -d --build
-EXTRA_SECRETS="ledger mediator" infra/scripts/deploy.sh agent up -d          # phase6 image: hold points
-EXTRA_SECRETS="agent mediator biometric console" infra/scripts/deploy.sh platform up -d
+infra/scripts/deploy.sh biometric up -d --build
+EXTRA_SECRETS=ledger infra/scripts/deploy.sh agent up -d                     # phase6 image: hold points
+EXTRA_SECRETS="biometric console" infra/scripts/deploy.sh platform up -d
 ```
 
 `console` stays in the platform line until the VM's `platform.sops.env` has `CONSOLE_TOKEN` again (see the Phase 4 note in `console.md`).
@@ -40,7 +40,7 @@ EXTRA_SECRETS="agent mediator biometric console" infra/scripts/deploy.sh platfor
 Check:
 
 ```sh
-EXTRA_SECRETS="agent" infra/scripts/deploy.sh biometric ps
+infra/scripts/deploy.sh biometric ps
 docker exec platform-platform-api-1 node -e 'fetch("http://biometric-service:3430/healthz").then(r=>r.text()).then(console.log)'
 curl -s https://api.<domain>/readyz   # checks.biometric = true
 ```

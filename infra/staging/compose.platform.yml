@@ -1,15 +1,15 @@
 # Platform stack (Phase 3 P9): platform-provision (init job) + platform-api.
 #
-#   EXTRA_SECRETS="agent mediator biometric" infra/scripts/deploy.sh platform
+#   EXTRA_SECRETS=biometric infra/scripts/deploy.sh platform
 #
-# secrets/platform.sops.env: PLATFORM_ADMIN_TOKEN, MEDIATOR_WEBHOOK_SECRET, MEDIATOR_ADMIN_TOKEN,
-# PLATFORM_RO_PASSWORD (read-only role on the mediator's drizzle database, runbooks/platform-api.md),
-# CONSOLE_TOKEN (Phase 4 console scope, runbooks/console.md).
+# secrets/platform.sops.env: PLATFORM_ADMIN_TOKEN, MEDIATOR_WEBHOOK_SECRET, MEDIATOR_ADMIN_TOKEN
+# (same value as mediator.sops.env), PLATFORM_RO_PASSWORD (read-only role on the mediator's drizzle
+# database), CONSOLE_TOKEN (Phase 4 console scope, runbooks/console.md), PLATFORM_DB_PASSWORD (the
+# platform_api role, infra/scripts/pg-roles.sh), PLATFORM_AGENT_TOKEN (same value as agent.sops.env).
 # Phase 6: EXTRA_SECRETS "biometric" adds BIOMETRIC_INTERNAL_TOKEN; deploy the biometric stack first
 # (platform-api joins its 12id-biometric network).
-# EXTRA_SECRETS adds AGENT_POSTGRES_PASSWORD + AGENT_INTERNAL_TOKEN (agent stack) and nothing
-# from the mediator file is needed beyond consistency (MEDIATOR_ADMIN_TOKEN must equal the
-# mediator stack's ADMIN_API_TOKEN; keep both files in step).
+# Phase 7 H2/H3: the agent stack's file is no longer decrypted here. platform-api holds neither the
+# agent-postgres superuser password nor the agent→endorser token, and cannot resolve endorser-service.
 #
 # Networks: `12id-agent` for agent-service and agent-postgres (platform_api database lives on that
 # instance), `12id-mediator` so the mediator can reach the webhook receiver as `platform-api` and
@@ -17,17 +17,17 @@
 # 3500 as api.<domain> and blocks /internal/* and /admin/*.
 name: platform
 
-x-image: &image 12id/services:phase6
+x-image: &image 12id/services:phase7
 
 x-platform-env: &platform-env
   LOG_LEVEL: ${PLATFORM_LOG_LEVEL:-info}
   HOST: 0.0.0.0
   PORT: "3500"
   PUBLIC_URL: https://api.12id.naziharitsolution.com
-  DATABASE_URL: postgresql://postgres:${AGENT_POSTGRES_PASSWORD:?run with EXTRA_SECRETS="agent mediator"}@agent-postgres:5432/platform_api
+  DATABASE_URL: postgresql://platform_api:${PLATFORM_DB_PASSWORD:?decrypt secrets via deploy.sh}@agent-postgres:5432/platform_api
 
   AGENT_API_URL: http://agent-service:3410
-  AGENT_API_TOKEN: ${AGENT_INTERNAL_TOKEN:?run with EXTRA_SECRETS="agent mediator"}
+  AGENT_API_TOKEN: ${PLATFORM_AGENT_TOKEN:?decrypt secrets via deploy.sh}
 
   # mediator-1 is enough for minting invitations (both replicas share one store).
   MEDIATOR_ADMIN_URL: http://mediator-1:3000
@@ -49,7 +49,7 @@ x-platform-env: &platform-env
 
   # Phase 6 biometric gate (compose.biometric.yml).
   BIOMETRIC_SERVICE_URL: http://biometric-service:3430
-  BIOMETRIC_SERVICE_TOKEN: ${BIOMETRIC_INTERNAL_TOKEN:?run with EXTRA_SECRETS="agent mediator biometric"}
+  BIOMETRIC_SERVICE_TOKEN: ${BIOMETRIC_INTERNAL_TOKEN:?run with EXTRA_SECRETS=biometric}
 
   DRAIN_DEADLINE_MS: "15000"
 

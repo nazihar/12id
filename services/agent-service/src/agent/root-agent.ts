@@ -58,6 +58,8 @@ function tenantModules(config: AgentServiceConfig, genesisTransactions: string, 
         host: config.POSTGRES_HOST,
         user: config.POSTGRES_USER,
         password: config.POSTGRES_PASSWORD,
+        adminUser: config.POSTGRES_ADMIN_USER,
+        adminPassword: config.POSTGRES_ADMIN_PASSWORD,
       }),
     }),
     indyVdr: new IndyVdrModule({

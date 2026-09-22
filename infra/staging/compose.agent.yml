@@ -1,17 +1,24 @@
 # Agent stack (Phase 2 A10): agent-postgres, provision jobs, endorser-service, agent-service.
 #
-#   EXTRA_SECRETS="ledger mediator" infra/scripts/deploy.sh agent
+#   EXTRA_SECRETS=ledger infra/scripts/deploy.sh agent
 #
-# secrets/agent.sops.env: AGENT_POSTGRES_PASSWORD, AGENT_ASKAR_STORE_KEY, AGENT_INTERNAL_TOKEN.
-# EXTRA_SECRETS adds ENDORSER_ASKAR_STORE_KEY (ledger) and POSTGRES_PASSWORD (mediator stack's
-# Postgres, which holds the endorser store created in Phase 1 W3).
+# secrets/agent.sops.env: AGENT_POSTGRES_PASSWORD (superuser: the Postgres container and the
+# provision job's admin account only), AGENT_ASKAR_STORE_KEY, AGENT_SERVICE_DB_PASSWORD,
+# ENDORSER_DB_PASSWORD, PLATFORM_AGENT_TOKEN (same value as platform.sops.env), AGENT_ENDORSER_TOKEN
+# (this file only). EXTRA_SECRETS=ledger adds ENDORSER_ASKAR_STORE_KEY.
+#
+# Phase 7 H2/H3: one token per hop; the endorser on its own network, shared only with
+# agent-service and agent-postgres; one non-superuser role per service (infra/scripts/pg-roles.sh
+# agent, before the first deploy and after any restore). The endorser Askar store moved here from
+# the mediator's Postgres (runbooks/postgres-roles.md).
 #
 # Publishing: only 127.0.0.1 (Docker-published ports bypass ufw). Caddy proxies 3400 as
 # agent.<domain>; 3410 (agent internal API) is for operator tooling over SSH only.
 name: agent
 
 # phase6: agent-service gained the biometric hold points (per-record auto-accept, issue/accept/abandon).
-x-image: &image 12id/services:phase6
+# phase7: POSTGRES_ADMIN_USER for the provision job (H3); same source otherwise.
+x-image: &image 12id/services:phase7
 
 x-ledger-env: &ledger-env
   INDY_NAMESPACE: twelveid:staging
@@ -28,28 +35,29 @@ x-agent-env: &agent-env
   INTERNAL_API_HOST: 0.0.0.0
   INTERNAL_API_PORT: "3410"
   # Phase 3: the platform API presents this token on every internal call (health routes stay open).
-  INTERNAL_API_TOKEN: ${AGENT_INTERNAL_TOKEN:?decrypt secrets via deploy.sh}
+  INTERNAL_API_TOKEN: ${PLATFORM_AGENT_TOKEN:?decrypt secrets via deploy.sh}
   ASKAR_STORE_ID: agent_root
   ASKAR_STORE_KEY: ${AGENT_ASKAR_STORE_KEY:?decrypt secrets via deploy.sh}
   POSTGRES_HOST: agent-postgres:5432
-  POSTGRES_USER: postgres
-  POSTGRES_PASSWORD: ${AGENT_POSTGRES_PASSWORD:?decrypt secrets via deploy.sh}
-  DATABASE_URL: postgresql://postgres:${AGENT_POSTGRES_PASSWORD}@agent-postgres:5432/agent_service
+  POSTGRES_USER: agent_service
+  POSTGRES_PASSWORD: ${AGENT_SERVICE_DB_PASSWORD:?decrypt secrets via deploy.sh}
+  DATABASE_URL: postgresql://agent_service:${AGENT_SERVICE_DB_PASSWORD}@agent-postgres:5432/agent_service
   ENDORSER_SERVICE_URL: http://endorser-service:3420
-  ENDORSER_SERVICE_TOKEN: ${AGENT_INTERNAL_TOKEN:?decrypt secrets via deploy.sh}
+  ENDORSER_SERVICE_TOKEN: ${AGENT_ENDORSER_TOKEN:?decrypt secrets via deploy.sh}
   DRAIN_DEADLINE_MS: "15000"
 
 x-endorser-env: &endorser-env
   <<: *ledger-env
-  # The existing endorser store lives in the mediator stack's Postgres (init.sql created it).
+  # The endorser Askar store, moved from the mediator's Postgres in Phase 7 (H3). Opened, never created.
   ASKAR_STORE_ID: endorser
-  ASKAR_STORE_KEY: ${ENDORSER_ASKAR_STORE_KEY:?run with EXTRA_SECRETS="ledger mediator"}
-  POSTGRES_HOST: postgres:5432
-  POSTGRES_USER: postgres
-  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run with EXTRA_SECRETS="ledger mediator"}
-  # Its own tables go to the agent stack's Postgres, under a separate database.
-  DATABASE_URL: postgresql://postgres:${AGENT_POSTGRES_PASSWORD}@agent-postgres:5432/endorser_service
-  INTERNAL_TOKEN: ${AGENT_INTERNAL_TOKEN}
+  ASKAR_STORE_KEY: ${ENDORSER_ASKAR_STORE_KEY:?run with EXTRA_SECRETS=ledger}
+  POSTGRES_HOST: agent-postgres:5432
+  POSTGRES_USER: endorser_service
+  POSTGRES_PASSWORD: ${ENDORSER_DB_PASSWORD:?decrypt secrets via deploy.sh}
+  # Its own tables: a separate database, same instance and role.
+  DATABASE_URL: postgresql://endorser_service:${ENDORSER_DB_PASSWORD}@agent-postgres:5432/endorser_service
+  # Only agent-service holds this token (H2); platform-api never sees it.
+  INTERNAL_TOKEN: ${AGENT_ENDORSER_TOKEN:?decrypt secrets via deploy.sh}
   HOST: 0.0.0.0
   PORT: "3420"
 
@@ -63,6 +71,8 @@ services:
       POSTGRES_PASSWORD: ${AGENT_POSTGRES_PASSWORD:?decrypt secrets via deploy.sh}
     volumes:
       - agent-pgdata:/var/lib/postgresql/data
+    # endorser: so endorser-service reaches its databases without joining 12id-agent.
+    networks: [default, endorser]
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U postgres']
       interval: 5s
@@ -75,7 +85,12 @@ services:
     build: ../../services
     image: *image
     command: ['agent-service/src/provision.ts']
-    environment: *agent-env
+    environment:
+      <<: *agent-env
+      # Only used if the root store's database is missing (Askar CREATE DATABASE); pg-roles.sh
+      # creates it first. The long-running agent-service never holds the superuser.
+      POSTGRES_ADMIN_USER: postgres
+      POSTGRES_ADMIN_PASSWORD: ${AGENT_POSTGRES_PASSWORD:?decrypt secrets via deploy.sh}
     mem_limit: 512m
     depends_on:
       agent-postgres:
@@ -87,7 +102,7 @@ services:
     command: ['endorser-service/src/provision.ts']
     environment: *endorser-env
     mem_limit: 256m
-    networks: [default, mediator]
+    networks: [endorser]
     depends_on:
       agent-postgres:
         condition: service_healthy
@@ -98,9 +113,9 @@ services:
     restart: unless-stopped
     mem_limit: 384m
     environment: *endorser-env
-    # Not published anywhere: reachable only on the agent network (and it also joins the
-    # mediator network to reach the endorser store's Postgres).
-    networks: [default, mediator]
+    # Not published anywhere. Only on 12id-endorser, shared with agent-service and agent-postgres:
+    # platform-api, the console and the mediator cannot resolve it (Phase 7 H2).
+    networks: [endorser]
     healthcheck:
       test: ['CMD-SHELL', 'node -e "fetch(\"http://127.0.0.1:3420/healthz\").then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"']
       interval: 10s
@@ -119,6 +134,7 @@ services:
     # Must exceed DRAIN_DEADLINE_MS plus shutdown time (T3b).
     stop_grace_period: 30s
     environment: *agent-env
+    networks: [default, endorser]
     ports:
       - '127.0.0.1:3400:3400'
       - '127.0.0.1:3410:3410'
@@ -137,9 +153,9 @@ services:
 networks:
   default:
     name: 12id-agent
-  mediator:
-    external: true
-    name: 12id-mediator
+  # Not `internal: true`: endorser-service still fetches the genesis and reaches the ledger.
+  endorser:
+    name: 12id-endorser
 
 volumes:
   agent-pgdata:

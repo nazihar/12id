@@ -2,6 +2,11 @@
 #
 #   infra/scripts/deploy.sh mediator          # decrypts secrets/mediator.sops.env
 #
+# Phase 7 H3: the mediator connects as its own non-superuser role `mediator` (MEDIATOR_DB_PASSWORD),
+# owner of drizzle, message_pickup and mediator only; run infra/scripts/pg-roles.sh mediator first.
+# POSTGRES_PASSWORD (superuser) stays with the postgres container and the backup script. The
+# endorser store no longer lives here (moved to agent-postgres).
+#
 # Every mediator setting below was load-bearing in Phase 0 (4-init §2.3, §7.3); most fail
 # silently when wrong. Do not "tidy" them.
 #
@@ -28,25 +33,26 @@ x-mediator-env: &mediator-env
 
   STORAGE__TYPE: drizzle
   STORAGE__DIALECT: postgres
-  STORAGE__DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?decrypt secrets via deploy.sh}@postgres:5432/drizzle
+  STORAGE__DATABASE_URL: postgresql://mediator:${MEDIATOR_DB_PASSWORD:?decrypt secrets via deploy.sh}@postgres:5432/drizzle
 
   # Askar is still required for KMS when storage is drizzle. HOST takes host:port here.
   ASKAR__STORE_ID: mediator
   ASKAR__STORE_KEY: ${MEDIATOR_ASKAR_STORE_KEY:?decrypt secrets via deploy.sh}
   ASKAR__DATABASE__TYPE: postgres
   ASKAR__DATABASE__HOST: postgres:5432
-  ASKAR__DATABASE__USER: postgres
-  ASKAR__DATABASE__PASSWORD: ${POSTGRES_PASSWORD}
-  ASKAR__DATABASE__ADMIN_USER: postgres
-  ASKAR__DATABASE__ADMIN_PASSWORD: ${POSTGRES_PASSWORD}
+  ASKAR__DATABASE__USER: mediator
+  ASKAR__DATABASE__PASSWORD: ${MEDIATOR_DB_PASSWORD}
+  # The store exists (pg-roles.sh creates the database), so the admin account is the same role.
+  ASKAR__DATABASE__ADMIN_USER: mediator
+  ASKAR__DATABASE__ADMIN_PASSWORD: ${MEDIATOR_DB_PASSWORD}
 
   # Default is DirectDelivery, which loses every message sent while the wallet is closed.
   MESSAGE_PICKUP__FORWARDING_STRATEGY: QueueAndLiveModeDelivery
   MESSAGE_PICKUP__STORAGE__TYPE: postgres
   # Bare hostname: no port allowed, and no port key exists.
   MESSAGE_PICKUP__STORAGE__HOST: postgres
-  MESSAGE_PICKUP__STORAGE__USER: postgres
-  MESSAGE_PICKUP__STORAGE__PASSWORD: ${POSTGRES_PASSWORD}
+  MESSAGE_PICKUP__STORAGE__USER: mediator
+  MESSAGE_PICKUP__STORAGE__PASSWORD: ${MEDIATOR_DB_PASSWORD}
   MESSAGE_PICKUP__STORAGE__DATABASE: message_pickup
   # none, NOT redis, with the Postgres pickup queue. The Postgres queue already delivers
   # across instances (verified W5 M2), and `redis` silently disables every push
@@ -82,7 +88,8 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?decrypt secrets via deploy.sh}
     volumes:
-      # Creates message_pickup, drizzle, mediator (= ASKAR__STORE_ID) and endorser (W3).
+      # Creates message_pickup, drizzle and mediator (= ASKAR__STORE_ID) on a fresh volume; pg-roles.sh
+      # gives them to the `mediator` role. The endorser store moved to agent-postgres (Phase 7 H3).
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
       - pgdata:/var/lib/postgresql/data
     healthcheck:

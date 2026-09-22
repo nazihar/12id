@@ -34,6 +34,12 @@ const configSchema = z.object({
   POSTGRES_HOST: z.string().regex(/^[^:]+:\d+$/, 'POSTGRES_HOST must be host:port'),
   POSTGRES_USER: z.string().min(1),
   POSTGRES_PASSWORD: z.string().min(1),
+  /**
+   * Account Askar uses only if the root store's database is missing (CREATE DATABASE). Set on the
+   * provision job alone; the service runs with its own non-superuser role (Phase 7 H3).
+   */
+  POSTGRES_ADMIN_USER: z.string().min(1).optional(),
+  POSTGRES_ADMIN_PASSWORD: z.string().min(1).optional(),
 
   // agent-service's own tables (tenants, catalogue, outbox). A database separate from the Askar store.
   DATABASE_URL: z.url().refine((url) => url.startsWith('postgres://') || url.startsWith('postgresql://'), 'must be a postgres URL'),

@@ -8,8 +8,9 @@
 | `drizzle` | Mediator DIDComm storage: connections, mediation records | Every holder must re-register for mediation |
 | `message_pickup` | Queued, still-encrypted messages for holders | Undelivered messages are lost |
 | `mediator` | Mediator Askar KMS store | Mediator keys lost: routing keys in every holder's DID documents stop working |
-| `endorser` | Platform endorser Askar store | The endorser DID becomes unusable; a new endorser NYM is needed |
-| globals | Postgres roles | Recreated by the image; kept for completeness |
+| globals | Postgres roles (`mediator`, `platform_ro`, `monitoring_ro` since Phase 7) | Re-created by `infra/scripts/pg-roles.sh mediator`; kept for completeness |
+
+The endorser store (`endorser`) was on this instance until Phase 7 H3; it is now backed up with the agent databases below.
 
 Phase 2 adds the agent stack's own Postgres (`agent-postgres`), dumped to `agent-<db>.dump.age` when that stack is running:
 
@@ -17,14 +18,18 @@ Phase 2 adds the agent stack's own Postgres (`agent-postgres`), dumped to `agent
 |---|---|---|
 | `agent_root` | agent-service root Askar store: every tenant's keys, DIDs, connections, cred def private keys, exchange records | Tenants cannot issue against their published cred defs (private keys gone); all holder connections dead |
 | `agent_service` | tenants, catalogue (both id forms), outbox | Platform loses the mapping from catalogue ids to ledger objects |
+| `endorser` (moved here in Phase 7) | Platform endorser Askar store: the endorser DID key | The endorser DID becomes unusable; a new endorser NYM is needed |
 | `endorser_service` | tenant→DID bindings, endorsement audit | The endorser refuses every tenant until bindings are restored; audit trail lost |
 | `biometric` (Phase 6) | tenants' biometric vendor config and reference images, both AES-GCM with per-tenant keys wrapped by `BIOMETRIC_MASTER_KEY`; sessions, scores, decisions | Tenants re-enter their provider; pending face checks fail and their exchanges are re-offered. Scores stay in platform-api's biometric log |
+| `agent-globals.sql.age` | Postgres roles on agent-postgres (Phase 7) | Re-created by `infra/scripts/pg-roles.sh agent` |
 
 Restore of `agent_root` needs `AGENT_ASKAR_STORE_KEY` from `secrets/agent.sops.env`. Reading anything encrypted in `biometric` needs `BIOMETRIC_MASTER_KEY` from `secrets/biometric.sops.env`, which is not in the dump: a restored dump alone exposes no face image. Reference images live only about 30 minutes (until the decision or the check's expiry), so most dumps hold none.
 
 Each dump is `pg_dump --format=custom`, piped straight into `age` with the VM's age recipient, so no plaintext dump touches disk. Output goes to `/opt/12id/backups/<UTC timestamp>/` with a `SHA256SUMS` file. Directories older than 7 days are deleted.
 
 **The Askar stores are encrypted twice:** by Askar with their store keys (in `infra/staging/secrets/*.sops.env`), and by age. A restore needs the age key and the matching sops secrets.
+
+**Roles after a restore (Phase 7 H3):** after restoring into a running stack, run `infra/scripts/pg-roles.sh <agent|mediator>` so each database and its objects belong to the service role again (`postgres-roles.md`).
 
 **Scope decision (2026-09-13):** backups are VM-local. Losing the VM loses the backups and the age key that decrypts them. Accepted for staging; production needs an offsite copy and a separately held key.
 
@@ -53,7 +58,7 @@ Run on the VM as `ubuntu`. This is the drill required by the Phase 1 plan (W9).
    ```
 3. **Decrypt each dump into the scratch container and restore it:**
    ```sh
-   for db in drizzle message_pickup mediator endorser; do
+   for db in drizzle message_pickup mediator; do
      age -d -i /opt/12id/secrets/age.key "$B/$db.dump.age" \
        | docker exec -i restore-pg pg_restore -U postgres --create --dbname=postgres
    done
@@ -64,17 +69,24 @@ Run on the VM as `ubuntu`. This is the drill required by the Phase 1 plan (W9).
    docker exec restore-pg psql -U postgres -d drizzle -tAc 'select count(*) from "StorageVersion"'
    docker exec restore-pg psql -U postgres -d message_pickup -tAc "select state, count(*) from queued_message group by 1"
    ```
-5. **Prove the restored stores open with the real keys.** Give the scratch database a name on the network the tools already use, then run the endorser bootstrap against it. It must report `result: existing` with the known DID `did:indy:twelveid:staging:9WnSruRkr6b3V7XX9zPjka`:
+5. **Prove the restored endorser store opens with the real key.**
+   - Since Phase 7 the store comes from the agent dump (`agent-endorser.dump.age`). Backups taken before the move hold it as `endorser.dump.age`.
+   - Restore it into the same scratch Postgres, and give the scratch database a name on the endorser network.
+   - Run the endorser bootstrap against it **as a role named `endorser_service`**. It must report `result: existing` with the known DID `did:indy:twelveid:staging:9WnSruRkr6b3V7XX9zPjka`.
+   - Why that role name: Askar keeps its tables in a schema named after its user and finds them through `search_path` (`"$user"`). Since Phase 7 the schema is `endorser_service`, so a restore opened as `postgres` looks empty. The same applies to `agent_root` (schema `agent_service`) and the mediator's store (schema `mediator`). The scratch role may be a superuser; it only has to carry the name.
    ```sh
-   docker network connect --alias restore-pg 12id-mediator restore-pg
+   docker exec restore-pg psql -U postgres -c "CREATE ROLE endorser_service LOGIN SUPERUSER PASSWORD 'drill'"
+   age -d -i /opt/12id/secrets/age.key "$B/agent-endorser.dump.age" \
+     | docker exec -i restore-pg pg_restore -U postgres --create --no-owner --dbname=postgres
+   docker network connect --alias restore-pg 12id-endorser restore-pg
    cd /opt/12id/infra/staging
-   EXTRA_SECRETS=mediator ../scripts/deploy.sh ledger run --rm \
-     -e POSTGRES_HOST=restore-pg:5432 -e POSTGRES_PASSWORD=drill \
+   EXTRA_SECRETS=agent ../scripts/deploy.sh ledger run --rm \
+     -e POSTGRES_HOST=restore-pg:5432 -e POSTGRES_USER=endorser_service -e POSTGRES_PASSWORD=drill \
      bootstrap-endorser
    ```
 6. **Clean up:**
    ```sh
-   docker network disconnect 12id-mediator restore-pg
+   docker network disconnect 12id-endorser restore-pg
    docker rm -f restore-pg && docker network rm 12id-restore-drill
    ```
 7. **Record the drill** (date, backup used, results) in the Phase 1 findings.
@@ -109,4 +121,5 @@ to decrypt: keep the secret with the backups' key material.
 ## Real restore (replacing the running databases)
 1. Stop the consumers: `deploy.sh mediator stop mediator-1 mediator-2`.
 2. Drop and recreate the affected databases in `mediator-postgres-1`, then `pg_restore` as in the drill, into the stack's own Postgres.
-3. Start the replicas and run `check-mediator-tables.sh --after-start`, then `smoke:credo`.
+3. Run `infra/scripts/pg-roles.sh mediator` (or `agent`) so the restored objects belong to the service role again.
+4. Start the replicas and run `check-mediator-tables.sh --after-start`, then `smoke:credo`.

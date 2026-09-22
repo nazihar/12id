@@ -63,7 +63,7 @@ Phase 0 ran the stack end to end on Android. Content now falls into these tiers,
 - production (non-von-network) ledgers and the TAA;
 - a real FCM push (the smoke simulates it with a broadcast on the same code path).
 
-**Reviewed, not fixed (2026-09-16).** [`17-phase-7.md`](17-phase-7.md) audited every component above for security gaps and optimisation opportunities: 3 High (data retention/deletion, shared internal token + network reaching the endorser, Postgres superuser everywhere), 18 Medium, 12 Low. Its §10 is the **Phase 7** fix set (renumbered when the biometric gate became Phase 6); nothing in it has been built.
+**Reviewed 2026-09-16; H2 + H3 fixed 2026-09-22.** [`17-phase-7.md`](17-phase-7.md) audited every component above for security gaps and optimisation opportunities: 3 High (data retention/deletion, shared internal token + network reaching the endorser, Postgres superuser everywhere), 18 Medium, 12 Low. Its §10 is the **Phase 7** fix set (renumbered when the biometric gate became Phase 6). **H2 + H3 are done and on staging (2026-09-22)** ([`infra/runbooks/postgres-roles.md`](../infra/runbooks/postgres-roles.md)); the rest is not started.
 
 **Confirmed (Phase 6, run, 2026-09-21).** The optional biometric gate (§2.8, §4.9, §12.17), evidence in [`16-phase-6-biometric-findings.md`](16-phase-6-biometric-findings.md), with the `mock` provider:
 - **Gated issuance** held at `request-received` until a pass (both event orders).
@@ -520,6 +520,7 @@ Every step writes a row to the biometric log (`exchange_gate_events`), which the
 | Store | Contents | Encryption |
 |---|---|---|
 | Agent Askar wallet (Postgres) | DIDs, keys, connections, credential records, protocol state | Askar encrypts at rest with the store key |
+| Endorser Askar store (Postgres `endorser`, on `agent-postgres` since Phase 7 H3; on the mediator's instance before) | The platform endorser DID key | Askar store key; only the `endorser_service` role may connect |
 | Platform database (Postgres) | Tenants, API keys, schema catalogue with **qualified + unqualified identifiers**, proof templates, webhook config, **device push tokens keyed by mediator connection**, denormalised protocol state for querying | Standard DB encryption |
 | Mediator database (Postgres) | Connections, mediation records (Drizzle); queued encrypted messages (pickup queue database); Askar KMS store | Askar / Drizzle |
 | Redis | Mediator cache, multi-instance delivery streams, platform job queue | — |
@@ -569,7 +570,7 @@ Write this up once as a customer-facing document — every enterprise customer's
 - **Biometric data is special-category personal data** (GDPR Art. 9, BIPA; planned, Phase 6):
   - Reference images are encrypted per tenant, kept only for the check window, and wiped at the decision. They are never logged, never in webhooks, never in the console.
   - The biometric log keeps scores, decisions and AWS session ids with no automatic deletion until Phase 7 H1.
-  - The `biometric` database shares `agent-postgres` and its superuser access until H3.
+  - The `biometric` database shares `agent-postgres` but is owned by its own non-superuser role (Phase 7 H3); no other service can connect to it.
   - The pass/fail result is always fetched from the vendor server-side; the device is never trusted to report it.
   - Tenants are the controllers and must collect the end user's consent. Say so in the customer-facing documents.
 - **Wallet files must be excluded from Android Auto Backup** (Phase 5). The key stays in the Keystore; restored wallet files are unreadable and the SDK reports `WalletKeyLost`. The integration guide gives the `dataExtractionRules`.
@@ -911,9 +912,27 @@ Plan: [`15-phase-6-biometric.md`](15-phase-6-biometric.md); evidence: [`16-phase
 - [x] `smoke:biometric-credo` (mock) **PASSED 18/18**; `smoke:sdk-biometric-android` (mock, phone) **PASSED 12/12**; grep check clean
 - [x] `smoke:sdk-biometric-android PROVIDER=aws` on the phone with the owner's AWS account: real liveness 99+, same face match 99.9 → issued, different face 2.7 → refused (findings "AWS run"). A printed or on-screen photo was refused (liveness 0.13, match 99.99), and the AWS capture passed in an R8-shrunk build (`-PminifyDebug`)
 
-### Phase 7 — Pre-production hardening (from the review; not started)
+### Phase 7 — Pre-production hardening (from the review; H2 + H3 done on staging)
 
 Findings and the ordered fix set: [`17-phase-7.md`](17-phase-7.md) §10 (this was Phase 6 before the biometric gate was inserted). H1 and H3 now also cover the biometric tables and database. Highest first: per-hop internal tokens and an endorser-only network (H2); per-service Postgres roles and the endorser store off the mediator instance (H3); file-based secrets (M11); DIDComm body cap (M1); the trap 44 root cause is agent-service's `connectionTimeout`, not the platform client (M5); deletion routes and a retention job so §5.3 is true (H1).
+
+- [x] **H2 + H3: on staging (2026-09-22).**
+  - Per-hop tokens: `PLATFORM_AGENT_TOKEN`, and `AGENT_ENDORSER_TOKEN` held by the agent stack only.
+  - endorser-service only on `12id-endorser`, with agent-service and agent-postgres.
+  - One non-superuser role per service, including `monitoring_ro` for the exporters, applied by `infra/scripts/pg-roles.sh`. Tested against scratch Postgres 15: cross-database connections refused, owners can migrate, idempotent.
+  - The endorser store moves to `agent-postgres` (owner decision: no dedicated instance).
+  - Staging rollout, verification and the restore drill: [`infra/runbooks/postgres-roles.md`](../infra/runbooks/postgres-roles.md).
+  - Staging evidence:
+    - platform-api, the console, biometric-service and the mediator all get `ENOTFOUND` for `endorser-service`.
+    - The endorser refuses the platform token (401).
+    - Every role reaches only its own databases; no service role is a superuser.
+    - The exporters run as `monitoring_ro` with scrape error 0.
+    - `smoke:biometric-credo` 18/18, `smoke:platform-credo` PASSED (new tenant onboarded and its catalogue published through the moved endorser), console `e2e:staging` 3/3.
+    - The endorser restore drill from the new backup passed.
+  - Found during the rollout: trap 49 (Askar schema per user).
+  - Left:
+    - drop the old `endorser` database on the mediator instance after 2026-09-29;
+    - remove the unused `AGENT_INTERNAL_TOKEN` from `agent.sops.env`.
 
 ### Phase 8 — Hardening
 
@@ -1024,6 +1043,8 @@ Findings and the ordered fix set: [`17-phase-7.md`](17-phase-7.md) §10 (this wa
 
 48. **Biometric add-ons change the host app's build** (Phase 6, F3). Amplify needs core library desugaring and leaves the empty `listenablefuture` stub on the compile classpath, which hides CameraX's `ListenableFuture` from app code. Both fixes are in the integration guide.
 
+49. **Askar on Postgres keeps its tables in a schema named after the user that created the store** (Phase 7 H3). It creates schema `"$user"` and reads through the default `search_path` (`"$user", public`). Our three stores (`agent_root`, `endorser`, `mediator`) were created as `postgres`, so they sat in schema `postgres`. Under a new login role they would look empty: Askar would fail to open the store, or provision a fresh empty one. The cutover renames the schema to the role (`pg-roles.sh askar-schema-agent|askar-schema-mediator`), with the store's consumers stopped. A restore drill must connect as a role with the schema's name. Changing a store's user without this is silent data "loss".
+
 ---
 
 ## 12. Decisions
@@ -1095,6 +1116,12 @@ Re-run the §4.6 probe as soon as a corporate network is available; build the fo
 
 The endorser key is the most valuable secret in the system (§6). Phase 2 keeps it out of the process that accepts internet DIDComm traffic:
 - `endorser-service` opens the Phase 1 endorser Askar store and refuses to start unless it holds `ENDORSER_DID`. It is on a private Docker network only, behind a shared token.
+- **Phase 7 (H2 + H3, 2026-09-22):** the Phase 2 setup did not actually isolate the endorser.
+  - The token was shared with platform-api, and endorser-service sat on two networks platform-api also joins.
+  - The store lived on the mediator's Postgres, reachable as superuser.
+  - Now endorser-service is only on `12id-endorser` (with agent-service and agent-postgres), and only agent-service holds `AGENT_ENDORSER_TOKEN`.
+  - The store is on `agent-postgres`, owned by the `endorser_service` role, and no other role may connect to it.
+  - A dedicated Postgres instance was considered and deferred. Role isolation plus Askar's encryption are the two layers; revisit with an HSM or production instance-level isolation.
 - It **signs and never submits**: role-less NYMs authored in its own name for DIDs the agent-service bound to a tenant (first binding wins, never rebound), and SCHEMA / CLAIM_DEF transactions authored by that tenant DID. Everything else is refused. Credo itself would sign any transaction whose endorser field matches, so this policy is entirely ours.
 - Every decision, signed or refused, is audited with the sha256 of the request; a signature is not released if the audit write fails.
 

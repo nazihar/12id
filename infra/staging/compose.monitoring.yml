@@ -1,10 +1,10 @@
 # Monitoring stack (W7): Prometheus, Alertmanager, Grafana and exporters.
 #
-#   EXTRA_SECRETS="mediator agent" infra/scripts/deploy.sh monitoring
+#   infra/scripts/deploy.sh monitoring
 #
-# secrets/monitoring.sops.env: GRAFANA_ADMIN_PASSWORD, GMAIL_APP_PASSWORD (added by the owner).
-# EXTRA_SECRETS: POSTGRES_PASSWORD (mediator) for the mediator exporters, AGENT_POSTGRES_PASSWORD (agent)
-# for the Phase 6 biometric exporter.
+# secrets/monitoring.sops.env: GRAFANA_ADMIN_PASSWORD, GMAIL_APP_PASSWORD (added by the owner),
+# MONITORING_DB_PASSWORD: the three Postgres exporters connect as `monitoring_ro` (pg_monitor + SELECT on
+# the tables their queries read; infra/scripts/pg-roles.sh), never as the superuser (Phase 7 H3).
 #
 # Everything listens on 127.0.0.1: Docker-published ports bypass ufw. Only Grafana is
 # exposed, through Caddy with its own login. Reach Prometheus (:9090) and Alertmanager
@@ -123,7 +123,7 @@ services:
     restart: unless-stopped
     mem_limit: 64m
     environment:
-      DATA_SOURCE_NAME: postgresql://postgres:${POSTGRES_PASSWORD:?run with EXTRA_SECRETS=mediator}@postgres:5432/message_pickup?sslmode=disable
+      DATA_SOURCE_NAME: postgresql://monitoring_ro:${MONITORING_DB_PASSWORD:?decrypt secrets via deploy.sh}@postgres:5432/message_pickup?sslmode=disable
       PG_EXPORTER_EXTEND_QUERY_PATH: /etc/postgres-exporter/queries.yml
     volumes:
       - ./monitoring/postgres-exporter-queries.yml:/etc/postgres-exporter/queries.yml:ro
@@ -138,7 +138,7 @@ services:
     restart: unless-stopped
     mem_limit: 64m
     environment:
-      DATA_SOURCE_NAME: postgresql://postgres:${POSTGRES_PASSWORD:?run with EXTRA_SECRETS=mediator}@postgres:5432/drizzle?sslmode=disable
+      DATA_SOURCE_NAME: postgresql://monitoring_ro:${MONITORING_DB_PASSWORD:?decrypt secrets via deploy.sh}@postgres:5432/drizzle?sslmode=disable
       PG_EXPORTER_EXTEND_QUERY_PATH: /etc/postgres-exporter/queries.yml
     volumes:
       - ./monitoring/postgres-exporter-drizzle-queries.yml:/etc/postgres-exporter/queries.yml:ro
@@ -153,7 +153,7 @@ services:
     restart: unless-stopped
     mem_limit: 64m
     environment:
-      DATA_SOURCE_NAME: postgresql://postgres:${AGENT_POSTGRES_PASSWORD:?run with EXTRA_SECRETS="mediator agent"}@agent-postgres:5432/platform_api?sslmode=disable
+      DATA_SOURCE_NAME: postgresql://monitoring_ro:${MONITORING_DB_PASSWORD:?decrypt secrets via deploy.sh}@agent-postgres:5432/platform_api?sslmode=disable
       PG_EXPORTER_EXTEND_QUERY_PATH: /etc/postgres-exporter/queries.yml
       # Only the custom biometric series; the mediator exporters already report Postgres itself.
       PG_EXPORTER_DISABLE_DEFAULT_METRICS: 'true'

@@ -3,7 +3,9 @@
 ## Prerequisites on the VM (once)
 
 1. **Read-only role on the mediator's Drizzle database.** The platform maps mediator webhooks to
-   wallets by reading `DidcommConnection.out_of_band_id`; nothing else is granted.
+   wallets by reading `DidcommConnection.out_of_band_id`; nothing else is granted. **Since Phase 7 H3
+   `infra/scripts/pg-roles.sh mediator` creates and grants it** (with the other roles, `postgres-roles.md`);
+   the block below is the original one-off.
 
    ```bash
    pw=$(openssl rand -base64 33 | tr -d '/+=' | cut -c1-40)
@@ -26,11 +28,15 @@
    | `platform.sops.env` | `PLATFORM_RO_PASSWORD` | from step 1 |
    | `mediator.sops.env` | `MEDIATOR_ADMIN_TOKEN` | enables the patched `POST /admin/invitations` |
    | `mediator.sops.env` | `MEDIATOR_WEBHOOK_URL` | `http://platform-api:3500/internal/mediator/<MEDIATOR_WEBHOOK_SECRET>` |
-   | `agent.sops.env` | `AGENT_INTERNAL_TOKEN` | already exists; now also gates agent-service's internal API |
+   | `agent.sops.env` + `platform.sops.env` | `PLATFORM_AGENT_TOKEN` | same value in both; gates agent-service's internal API. Replaced the shared `AGENT_INTERNAL_TOKEN` in Phase 7 H2 |
+   | `platform.sops.env` | `PLATFORM_DB_PASSWORD` | the `platform_api` role (Phase 7 H3, `postgres-roles.md`) |
 
    Edit with `SOPS_AGE_KEY_FILE=/opt/12id/secrets/age.key sops infra/staging/secrets/<file>`.
 
 ## Deploy order
+
+Original Phase 3 rollout. Current commands: `EXTRA_SECRETS=ledger deploy.sh agent`, `EXTRA_SECRETS=biometric
+deploy.sh platform` (Phase 7, `postgres-roles.md`).
 
 ```bash
 cd /opt/12id

@@ -1,10 +1,11 @@
 # Ledger tooling (W3). von-network itself is run by its own `manage` script (see
 # ledger/von-network.env); this file only holds one-off tools that act on it.
 #
-#   EXTRA_SECRETS=mediator infra/scripts/deploy.sh ledger run --rm --build bootstrap-endorser
+#   EXTRA_SECRETS=agent infra/scripts/deploy.sh ledger run --rm --build bootstrap-endorser
 #
-# secrets/ledger.sops.env gives ENDORSER_ASKAR_STORE_KEY; EXTRA_SECRETS=mediator adds the
-# POSTGRES_PASSWORD owned by the mediator stack's postgres.
+# secrets/ledger.sops.env gives ENDORSER_ASKAR_STORE_KEY; EXTRA_SECRETS=agent adds ENDORSER_DB_PASSWORD.
+# Since Phase 7 H3 the endorser store is on agent-postgres, owned by `endorser_service`: run
+# infra/scripts/pg-roles.sh agent first so the (empty) `endorser` database exists for Askar.
 name: ledger
 
 services:
@@ -21,22 +22,22 @@ services:
       # did:indy namespace: must match [a-z][_a-z0-9-]*(:[a-z][_a-z0-9-]*)?, so "12id" is invalid.
       INDY_NAMESPACE: twelveid:staging
       ENDORSER_ALIAS: 12id-staging-endorser
-      # Askar on Postgres: the store id is also the database name (created by init.sql).
+      # Askar on Postgres: the store id is also the database name (created by pg-roles.sh).
       ASKAR_STORE_ID: endorser
       ASKAR_STORE_KEY: ${ENDORSER_ASKAR_STORE_KEY:?decrypt secrets via deploy.sh}
-      POSTGRES_HOST: postgres:5432
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run with EXTRA_SECRETS=mediator}
+      POSTGRES_HOST: agent-postgres:5432
+      POSTGRES_USER: endorser_service
+      POSTGRES_PASSWORD: ${ENDORSER_DB_PASSWORD:?run with EXTRA_SECRETS=agent}
       LOG_LEVEL: info
     networks:
       - von
-      - mediator
+      - endorser
 
   # W8 smoke:credo (and W5 M1): issuer + Credo holder in one process. The holder has no
   # inbound transport and reaches the mediator through the public wss:// URL, so the whole
   # TLS edge is exercised.
   #
-  #   MEDIATOR_INVITATION_URL=<from mediator logs> EXTRA_SECRETS=mediator \
+  #   MEDIATOR_INVITATION_URL=<from mediator logs> EXTRA_SECRETS=agent \
   #     infra/scripts/deploy.sh ledger run --rm smoke-credo
   #
   # (EXTRA_SECRETS is only needed because this file's other service interpolates secrets.)
@@ -69,6 +70,6 @@ networks:
   von:
     external: true
     name: von_von
-  mediator:
+  endorser:
     external: true
-    name: 12id-mediator
+    name: 12id-endorser

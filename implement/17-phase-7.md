@@ -145,6 +145,11 @@ Hashed tokens with prefix lookup and length-checked `timingSafeEqual` (`auth/tok
 **Evidence:** *source read*. Both containers share `12id-mediator`; the endorser accepts the token platform-api already has.
 **Impact:** §12.10 keeps the endorser key out of the internet-facing process, but the internet-facing platform-api can `POST http://endorser-service:3420/endorse` with a valid token. The policy still limits what gets signed (registered tenant DIDs only), so this is not "sign anything", but the isolation the design claims is not there.
 **Fix:** three distinct tokens (`PLATFORM_TO_AGENT`, `AGENT_TO_ENDORSER`, `MEDIATOR_ADMIN`); a dedicated `12id-endorser` network shared only with agent-service (the endorser needs the mediator network today only for Postgres — see H3). Test: `docker compose exec platform-api node -e 'fetch("http://endorser-service:3420/healthz")'` → ENOTFOUND.
+**Status (2026-09-22): done on staging** ([`infra/runbooks/postgres-roles.md`](../infra/runbooks/postgres-roles.md); evidence in `4-init-post-phase-0.md` §10 Phase 7; the rollout found trap 49, the Askar schema per user).
+- **Two** networks were shared, not one: endorser-service was also on `12id-agent`, which platform-api joins.
+- Tokens: `PLATFORM_AGENT_TOKEN` (platform → agent) and `AGENT_ENDORSER_TOKEN` (agent → endorser, `agent.sops.env` only). The mediator admin and biometric tokens were already separate.
+- endorser-service is only on `12id-endorser`, with agent-service and agent-postgres.
+- The platform stack no longer decrypts `agent.sops.env` at all.
 
 ### H3 · High · Superuser everywhere; endorser store in the mediator's Postgres
 **Where:** `compose.agent.yml` (`POSTGRES_USER: postgres` for agent-service and endorser-service; `DATABASE_URL=postgresql://postgres:…`), `compose.platform.yml` (same), `compose.console.yml` (same), `compose.mediator.yml` (the mediator as `postgres`); the endorser Askar store `endorser` is on the **mediator** instance (`POSTGRES_HOST: postgres:5432`, `init.sql`).
@@ -152,6 +157,18 @@ Hashed tokens with prefix lookup and length-checked `timingSafeEqual` (`auth/tok
 **Impact:** a SQL injection or RCE in any one service (the mediator is third-party code facing the internet) yields every database on that instance, including the encrypted endorser store and all tenant wallets — Askar-encrypted, but the store keys are one `docker inspect` away (M11).
 **Fix:** one role per service with `CONNECT` and ownership of its own database only (`agent_service`, `endorser_service`, `platform_api`, `console`, `mediator_drizzle`, `mediator_pickup`, `agent_askar`, `endorser_askar`); move the `endorser` Askar database to a Postgres the mediator cannot reach (the agent instance, or its own); Askar's `adminAccount` only for provisioning. The restore drills already exist — re-run them after the role change. Test: `psql` as each role against another database → permission denied.
 **Added by Phase 6:** the `biometric` database (biometric-service) also lives on `agent-postgres` and connects as `postgres`. It needs its own role like the others. Revisit a dedicated instance only if production moves to instance-level backups or the role split cannot isolate it (`15-phase-6-biometric.md`).
+**Status (2026-09-22): done on staging** ([`infra/runbooks/postgres-roles.md`](../infra/runbooks/postgres-roles.md); evidence in `4-init-post-phase-0.md` §10 Phase 7; the rollout found trap 49, the Askar schema per user).
+- **Owner decision: no dedicated instance.** The endorser store moves to `agent-postgres`, owned by `endorser_service`.
+- Roles, each owning only its own databases: `agent_service`, `endorser_service`, `platform_api`, `console`, `biometric` on agent-postgres; `mediator` on the mediator instance. `platform_ro` is unchanged.
+- The exporters use `monitoring_ro`. They also connected as `postgres`, which the review missed.
+- `infra/scripts/pg-roles.sh` does all of this idempotently. It revokes `PUBLIC` connect and transfers every schema, table, sequence, type and function.
+- The Askar root store's admin account appears only on `agent-provision`.
+- Tested on scratch Postgres 15:
+  - Every cross-database connection was refused.
+  - Owners could migrate.
+  - `platform_ro` was limited to its three columns, and `monitoring_ro` could read only.
+  - The endorser dump-and-restore move worked.
+  - A second run changed nothing.
 
 ### L9 · Low · Askar pool size
 `credo-base/src/askar-postgres.ts:24` sets only `connectTimeout`; `maxConnections` is Askar's default. With `TENANT_SESSION_LIMIT=100` and serial processing this is fine today; verify under the Phase 8 load profile before enabling concurrency.

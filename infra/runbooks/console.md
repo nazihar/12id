@@ -25,6 +25,10 @@ the browser only ever holds a Better Auth session cookie. Plan: `implement/11-ph
 
 ## Deploy order
 
+**Since Phase 7 (H2/H3, `postgres-roles.md`)** the console connects as its own role (`CONSOLE_DB_PASSWORD` in
+`console.sops.env`) and needs no `EXTRA_SECRETS`; the platform stack needs only `EXTRA_SECRETS=biometric`.
+The commands below are the original Phase 4 rollout.
+
 ```bash
 cd /opt/12id
 # 1. platform-api with the console scope (image tag phase4; provision applies migration 0001_console_audit).
@@ -50,7 +54,7 @@ Checks from outside: `https://12id.naziharitsolution.com/api/health` 200; `/` re
 
 ```bash
 cd /opt/12id
-EXTRA_SECRETS=agent infra/scripts/deploy.sh console run --rm console-tools \
+infra/scripts/deploy.sh console run --rm console-tools \
   npx auth create-admin --config src/server/auth.server.ts \
   --email you@example.com --password "$(openssl rand -base64 18)" --name 'Your Name' --role operator --yes
 ```
