@@ -8,7 +8,8 @@
 #   infra/smoke/biometric-setup.sh <tenant-uuid> external-id      # print the tenant's external id only
 #
 # Leaves the tenant with the provider tested and biometrics switched on, required only where a
-# credential definition or proof template says so (the smoke sets those with its API key).
+# credential definition or proof template says so (the smoke sets those through its console client,
+# platform-common.ts consoleClient, since review K1 made policies console only).
 set -euo pipefail
 
 TENANT="${1:?tenant uuid}"

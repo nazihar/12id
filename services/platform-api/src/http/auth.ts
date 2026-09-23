@@ -35,6 +35,8 @@ export interface TenantContext {
   agentTenantId: string
   name: string
   status: string
+  /** Operator override of the per-API-key limit (review M4); null = the configured default. */
+  rateLimitPerMin?: number | null
   principal: Principal
 }
 
@@ -94,13 +96,13 @@ export function requireApiKey(db: Database) {
     if (!token) return unauthorized(reply, 'missing or malformed API key')
     const hash = hashSecret(token)
     const [row] = await db
-      .select({ id: apiKeys.id, keyHash: apiKeys.keyHash, tenantId: tenants.id, agentTenantId: tenants.agentTenantId, name: tenants.name, status: tenants.status })
+      .select({ id: apiKeys.id, keyHash: apiKeys.keyHash, tenantId: tenants.id, agentTenantId: tenants.agentTenantId, name: tenants.name, status: tenants.status, rateLimitPerMin: tenants.rateLimitPerMin })
       .from(apiKeys)
       .innerJoin(tenants, eq(tenants.id, apiKeys.tenantId))
       .where(and(eq(apiKeys.prefix, lookupPrefix(token)), eq(apiKeys.keyHash, hash), isNull(apiKeys.revokedAt)))
       .limit(1)
     if (!row) return unauthorized(reply, 'unknown or revoked API key')
-    request.tenant = { id: row.tenantId, agentTenantId: row.agentTenantId, name: row.name, status: row.status, principal: { kind: 'apiKey', apiKeyId: row.id } }
+    request.tenant = { id: row.tenantId, agentTenantId: row.agentTenantId, name: row.name, status: row.status, rateLimitPerMin: row.rateLimitPerMin, principal: { kind: 'apiKey', apiKeyId: row.id } }
     // Fire-and-forget; a slow update must not delay the request.
     void db.update(apiKeys).set({ lastUsedAt: new Date() }).where(eq(apiKeys.id, row.id)).catch(() => undefined)
   }
@@ -149,6 +151,16 @@ export function requireOperator(adminToken: string, consoleToken: string | undef
     if (!tokenMatches(request.headers['x-admin-token'], adminToken)) return unauthorized(reply, 'missing or invalid admin token')
     request.operator = { via: 'admin_token', actor: 'admin-token' }
   }
+}
+
+/**
+ * Setup and administration routes are the console's alone (review K1): an API key runs the
+ * integration (exchanges, wallets, reads) but cannot publish to the ledger, repoint webhooks, or
+ * change templates and policies, so a leaked key cannot do any of that.
+ */
+export function requireConsolePrincipal(tenant: TenantContext, reason: string): TenantContext {
+  if (tenant.principal.kind !== 'console') throw new PlatformError(403, 'forbidden', reason)
+  return tenant
 }
 
 /** Tenants that are still provisioning (or failed) cannot run ledger or DIDComm commands. */

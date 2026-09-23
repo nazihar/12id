@@ -10,7 +10,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 
-import { expect, test } from '@playwright/test'
+import { expect, test } from './csp'
 import { generateSync } from 'otplib'
 
 import { submitSignIn } from './staging-signin'

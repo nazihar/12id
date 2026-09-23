@@ -34,7 +34,8 @@ export async function handleMediatorWebhook(deps: WakeDeps, connectionId: string
     if (!oobId) return 'unknown_connection'
     ;[wallet] = await deps.db.select().from(wallets).where(and(eq(wallets.mediatorOobId, oobId), isNull(wallets.revokedAt)))
     if (!wallet) return 'unknown_connection'
-    await deps.db.update(wallets).set({ mediatorConnectionId: connectionId }).where(eq(wallets.id, wallet.id))
+    // The first webhook for a connection also proves the wallet connected (review M10).
+    await deps.db.update(wallets).set({ mediatorConnectionId: connectionId, connectedAt: wallet.connectedAt ?? now }).where(eq(wallets.id, wallet.id))
   }
   if (wallet.lastSyncRequestedAt && now.getTime() - wallet.lastSyncRequestedAt.getTime() < deps.debounceMs) return 'debounced'
 

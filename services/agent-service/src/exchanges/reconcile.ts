@@ -12,8 +12,8 @@ import type { Logger as PinoLogger } from 'pino'
 
 import type { RootAgent } from '../agent/root-agent.ts'
 import type { Database } from '../db/client.ts'
-import { outbox } from '../db/schema.ts'
 import { getCorrelationId } from '../events/correlation.ts'
+import { insertOutboxRow } from '../events/outbox-writer.ts'
 
 /** Issuer/verifier states that wait on the holder. */
 // RequestReceived and PresentationReceived are where biometric-gated exchanges park (Phase 6 B2);
@@ -45,7 +45,7 @@ export async function reconcileOnce(agent: RootAgent, db: Database, options: { t
           record.state = DidCommCredentialState.Abandoned
           record.errorMessage = reason(previousState)
           await t.modules.didcomm.credentials.update(record)
-          await db.insert(outbox).values({ tenantId: tenant.id, recordType: 'credential', recordId: record.id, threadId: record.threadId, state: record.state, previousState, correlationId: getCorrelationId(record), payload: { reason: record.errorMessage, connectionId: record.connectionId ?? null } })
+          await insertOutboxRow(db, { tenantId: tenant.id, recordType: 'credential', recordId: record.id, threadId: record.threadId, state: record.state, previousState, correlationId: getCorrelationId(record), payload: { reason: record.errorMessage, connectionId: record.connectionId ?? null } })
           abandoned++
         }
         const proofs = await t.modules.didcomm.proofs.findAllByQuery({ $or: WAITING_PROOF_STATES.map((state) => ({ state })) })
@@ -54,7 +54,7 @@ export async function reconcileOnce(agent: RootAgent, db: Database, options: { t
           record.state = DidCommProofState.Abandoned
           record.errorMessage = reason(previousState)
           await t.modules.didcomm.proofs.update(record)
-          await db.insert(outbox).values({ tenantId: tenant.id, recordType: 'proof', recordId: record.id, threadId: record.threadId, state: record.state, previousState, correlationId: getCorrelationId(record), payload: { reason: record.errorMessage, connectionId: record.connectionId ?? null } })
+          await insertOutboxRow(db, { tenantId: tenant.id, recordType: 'proof', recordId: record.id, threadId: record.threadId, state: record.state, previousState, correlationId: getCorrelationId(record), payload: { reason: record.errorMessage, connectionId: record.connectionId ?? null } })
           abandoned++
         }
       })

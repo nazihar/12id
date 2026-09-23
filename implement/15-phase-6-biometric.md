@@ -24,7 +24,7 @@ It is a third-party integration the platform owns:
 |---|---|---|
 | Phase placement | **Phase 6**, after the SDK and before the review fix set | The review becomes **Phase 7** (`15-phase-6.md` → `17-phase-7.md`), and the former Hardening becomes **Phase 8** |
 | Server placement | New internal **`biometric-service`** with its own encryption key; platform-api owns policy, the gate and every public route | Vendor SDKs, vendor credentials and face images stay out of the customer-facing process |
-| Database | A `biometric` database on the **shared `agent-postgres`** instance, backed up like the other databases | Acceptable because images live about 30 minutes and are encrypted with a key that is not in the database. A scoped role comes with H3 (Phase 7). A dedicated instance only if production moves to instance-level backups or H3 cannot isolate it |
+| Database | A `biometric` database on the **shared `agent-postgres`** instance, backed up like the other databases | Acceptable because images live about 30 minutes and are encrypted with a key that is not in the database. A scoped role comes with H3 (Phase 7). A dedicated instance only if production moves to instance-level backups or H3 cannot isolate it. *Phase 7 update (2026-09-22): the scoped role `biometric` is in place (H3)* |
 | Vendor accounts | **Bring your own only** | Each tenant configures its own AWS account. We hold no vendor billing relationship |
 | Vendors this phase | **AWS Rekognition Face Liveness**, tested with the owner's existing AWS account, plus a `mock` provider | FaceTec and an in-house provider are later phases; the ports are designed for them now |
 | Reference image | **Per request** (sent with the offer or proof request), deleted at decision time | Nothing biometric persists on our side beyond scores and decisions |
@@ -70,6 +70,7 @@ Same conventions as `endorser-service`: Fastify + zod, drizzle, plain `node`, pi
 
 - **Network and auth:** private network shared only with platform-api, its own `BIOMETRIC_INTERNAL_TOKEN` (not the agent token; H2 lesson), and outbound HTTPS to AWS.
 - **Database:** `biometric` on `agent-postgres` (`DATABASE_URL=…@agent-postgres:5432/biometric`, as `postgres` until H3). It is created and migrated by a one-shot provision step, like `agent-provision`. Migrations are `drizzle/0000_init.sql`.
+  > **Phase 7 update (2026-09-22, review H3):** done. biometric-service connects as its own role `biometric`, which owns only the `biometric` database. No other service role can connect to it. `smoke:biometric-credo` passed 18/18 after the change. There is no dedicated instance (owner decision). See [`17-phase-7.md`](17-phase-7.md) H3.
 - **Encryption:** envelope encryption. `BIOMETRIC_MASTER_KEY` (SOPS) wraps one random per-tenant data key. AES-256-GCM, with the tenant id plus the row id as AAD, encrypts:
   - provider config (role ARN and external id, or, as a fallback, access keys);
   - reference images.
@@ -315,6 +316,6 @@ B0 spike → B1 (mock adapter first) → B2 → B3 → `smoke:biometric-credo` (
 ## Out of scope
 - FaceTec and in-house providers (ports ready); iOS add-on (Phase 5-iOS); enrolled/stored reference images;
 - 12id-managed vendor accounts; hosted web capture;
-- retention/deletion of the biometric log (Phase 7, H1); a scoped DB role or dedicated instance (H3);
+- retention/deletion of the biometric log (Phase 7, H1); a scoped DB role or dedicated instance (H3). *The scoped role was done by H3 on 2026-09-22; the dedicated instance was declined by the owner;*
 - the stronger wallet ↔ connection binding through mediator routing keys;
 - credential-embedded photos.

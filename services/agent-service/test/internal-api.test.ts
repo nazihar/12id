@@ -104,6 +104,30 @@ describe('internal API token (Phase 3 P0)', () => {
   })
 })
 
+describe('long handlers over a real socket (trap 44, review M5)', () => {
+  it('answers a handler that stays silent longer than the old 10 s idle timeout', { timeout: 30_000 }, async () => {
+    const api = buildInternalApi({
+      logger: silentLogger,
+      readiness: async () => ({ ready: true, draining: false, checks: {} }),
+      commands: async (app) => {
+        // Stands in for a credential-definition publication: nothing is written until the ledger answers.
+        app.post('/slow', async () => {
+          await new Promise((resolve) => setTimeout(resolve, 11_000))
+          return { published: true }
+        })
+      },
+    })
+    const address = await api.listen({ host: '127.0.0.1', port: 0 })
+    try {
+      const response = await fetch(`${address}/slow`, { method: 'POST', signal: AbortSignal.timeout(25_000) })
+      assert.equal(response.status, 200)
+      assert.deepEqual(await response.json(), { published: true })
+    } finally {
+      await api.close()
+    }
+  })
+})
+
 describe('command routes (Phase 3 P0)', () => {
   it('register the outbox feed and the tenant/connection detail routes', async () => {
     const { commandRoutes } = await import('../src/http/command-routes.ts')

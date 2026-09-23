@@ -48,8 +48,31 @@ const configSchema = z.object({
   WEBHOOK_POLL_MS: z.coerce.number().int().positive().default(1_000),
   WEBHOOK_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
   WEBHOOK_MAX_ATTEMPTS: z.coerce.number().int().min(1).default(12),
+  /** Deliveries in flight at once, shared fairly between tenants (review M2). */
+  WEBHOOK_CONCURRENCY: z.coerce.number().int().min(1).max(64).default(8),
+  /** Slots one tenant may hold while other tenants have deliveries waiting; alone, it may use them all. */
+  WEBHOOK_PER_TENANT: z.coerce.number().int().min(1).max(64).default(2),
   /** At most one wallet.sync_requested per wallet per window (the mediator webhooks per message). */
   WAKE_DEBOUNCE_MS: z.coerce.number().int().positive().default(30_000),
+
+  // Per-principal request limits (review M4), in-process fixed windows; 0 turns a limit off.
+  /** Requests per minute per API key; a tenant's `rate_limit_per_min` overrides it. */
+  RATE_LIMIT_API_KEY_PER_MIN: z.coerce.number().int().min(0).default(300),
+  /** Requests per minute per wallet token (the SDK). */
+  RATE_LIMIT_WALLET_PER_MIN: z.coerce.number().int().min(0).default(60),
+  /** Mediator invitations per wallet per 10 minutes; each one creates a mediator record. */
+  RATE_LIMIT_INVITATION_PER_10MIN: z.coerce.number().int().min(0).default(3),
+
+  // Wallet and mediator housekeeping (review M10, M4); SWEEP_INTERVAL_MS 0 turns the sweep off.
+  SWEEP_INTERVAL_MS: z.coerce.number().int().min(0).default(60 * 60 * 1000),
+  /** A wallet with no mediator connection this many days after creation is revoked. */
+  WALLET_UNCONNECTED_REVOKE_DAYS: z.coerce.number().int().min(1).default(7),
+  /** A revoked wallet's mediator connection, mediation and queue are removed this many days later. */
+  WALLET_REVOKED_GRACE_DAYS: z.coerce.number().int().min(0).default(30),
+  /** Unused per-wallet mediator invitations are deleted after this many hours. */
+  MEDIATOR_INVITATION_TTL_HOURS: z.coerce.number().int().min(1).default(24),
+  /** Messages queued at the mediator longer than this many days are deleted (their holder is gone). */
+  MEDIATOR_QUEUE_TTL_DAYS: z.coerce.number().int().min(1).default(30),
   IDEMPOTENCY_TTL_MS: z.coerce.number().int().positive().default(24 * 3600 * 1000),
   /** Graceful shutdown: stop taking work, finish in-flight deliveries, then close (< stop_grace_period). */
   DRAIN_DEADLINE_MS: z.coerce.number().int().positive().default(15_000),

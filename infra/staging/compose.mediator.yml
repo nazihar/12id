@@ -15,9 +15,12 @@
 name: mediator
 
 # Pinned upstream image plus two patched files (mediator/Dockerfile.patched): the Postgres pickup
-# queue never deleted messages handed to pickup-v1 holders (Phase 2 findings, A11), and the
-# POST /admin/invitations route the platform API uses for per-wallet invitations (Phase 3 P1).
-x-mediator-image: &mediator-image 12id/mediator:375518d-p2
+# queue never deleted messages handed to pickup-v1 holders (Phase 2 findings, A11), the
+# POST /admin/invitations route the platform API uses for per-wallet invitations (Phase 3 P1),
+# a 512 KiB WebSocket message cap (-p3, Phase 7 review M1), and indexable containment queries in
+# drizzle-storage (-p4, Phase 7 review M18; the indexes come from the mediator-indexes job below),
+# and admin housekeeping routes for the platform sweep (-p5, Phase 7 review M4, M10).
+x-mediator-image: &mediator-image 12id/mediator:375518d-p5
 
 x-mediator-env: &mediator-env
   LOG_LEVEL: ${MEDIATOR_LOG_LEVEL:-info}
@@ -169,6 +172,25 @@ services:
       # Staggered start: two replicas provisioning the Askar store at the same moment race
       # on CREATE SCHEMA (`duplicate key value violates unique constraint
       # 'pg_namespace_nspname_index'`). The loser only logs it today; do not rely on that.
+      mediator-1:
+        condition: service_healthy
+
+  # Phase 7 review M18: the secondary indexes drizzle-storage never creates (mediator/indexes.sql).
+  # One-shot, idempotent and online (CREATE INDEX CONCURRENTLY IF NOT EXISTS), as the owning
+  # `mediator` role. It waits for mediator-1 because message_pickup's table is created by the
+  # mediator on its first start. The directory is mounted, not the file: a single-file bind mount
+  # keeps a stale inode after a tree sync (4-init trap 50).
+  mediator-indexes:
+    image: postgres:15-alpine
+    restart: 'no'
+    environment:
+      PGHOST: postgres
+      PGUSER: mediator
+      PGPASSWORD: ${MEDIATOR_DB_PASSWORD}
+    volumes:
+      - ./mediator:/sql:ro
+    command: ['psql', '-v', 'ON_ERROR_STOP=1', '-d', 'drizzle', '-f', '/sql/indexes.sql']
+    depends_on:
       mediator-1:
         condition: service_healthy
 

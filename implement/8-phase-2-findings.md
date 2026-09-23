@@ -241,6 +241,8 @@ The drain loses nothing and closes the store cleanly. The naive shutdown lost th
 
 ## Mediator bug: pickup-v1 messages are never removed from the Postgres queue (confirmed, run + source)
 
+> **Phase 7 update (2026-09-22, review M18):** the patched take query `(connection_id = $1 OR $2 = ANY(recipient_dids)) AND state = 'pending'` now has a GIN index on `recipient_dids` and a partial `(connection_id, created_at) WHERE state = 'pending'` index. The `OR` branch had defeated the `connection_id` index. See [`17-phase-7.md`](17-phase-7.md) M18.
+
 **Symptom (first Android run).** The proof reached `done` on the first presentation, then agent-service logged `Proof record is in invalid state done. Valid states are: request-sent` **every ~10 s for over three minutes**: the phone kept sending the same presentation. The mediator queue still held that connection's messages as `pending` after delivery; Phase 1 W7 had already seen "pending messages that never drain" and attributed it to shut-down holders.
 
 **Cause (both ends read in the running images).**
@@ -260,7 +262,13 @@ The drain loses nothing and closes the store cleanly. The naive shutdown lost th
 
 ## A10 — Staging deployment notes
 - **Edge checks from outside:** `GET https://agent.12id…/readyz` → 200, TLS verify 0; `POST /` with a wrong content type → 415 from Credo (so DIDComm reaches the agent); `/healthz`, `/tenants` → 404 (internal API not proxied); ports 3400/3410/3420 closed from the internet.
+  > **Phase 7 update (2026-09-22, review M1):** `POST /` now carries a 512 KB body cap at the edge; Credo's own limit is 5 MB. A 700 KB body answers 413. See [`17-phase-7.md`](17-phase-7.md) M1 and 4-init trap 50 (the edge had not been loading Caddyfile edits).
 - **Ports on the VM:** 3400 (DIDComm) and 3410 (internal API) are published on `127.0.0.1` only. Operator tooling reaches the internal API over `ssh -L 13410:127.0.0.1:3410`; that is how the smoke onboarded its tenant. The endorser-service (3420) is not published at all; it sits on the `12id-agent` network and joins `12id-mediator` only to reach the Phase 1 endorser store.
+  > **Phase 7 update (2026-09-22, review H2 + H3):** superseded.
+  > - platform-api joins both `12id-agent` and `12id-mediator` and held the same token, so it could reach the endorser.
+  > - endorser-service is now only on `12id-endorser` (with agent-service and agent-postgres). Its store is on `agent-postgres` under the `endorser_service` role, and it accepts only `AGENT_ENDORSER_TOKEN`.
+  > - Probes: platform-api, the console, biometric-service and the mediator all get `ENOTFOUND` for `endorser-service`.
+  > - See [`17-phase-7.md`](17-phase-7.md) H2, H3.
 - **The endorser-service refuses to start unless its store holds `ENDORSER_DID`**, so a wrong `ASKAR_STORE_ID` or key cannot silently create a new, unregistered endorser. Its provision step migrates only its own database and never provisions an Askar store.
 - **Memory:** agent-service 1 GB limit, endorser-service 384 MB, agent-postgres 1 GB (fits the Phase 1 budget on 16 GB).
 - **Restore drill (agent databases): done.** Backup `20260913T112814Z` restored into a scratch `postgres:15-alpine`: `agent_service` 1 tenant / 2 ledger objects / 10 outbox rows, `endorser_service` 1 binding / 3 audit rows, and the restored `agent_root` store **opened with the real store key** via the provision job (`store: existing`, `tenants: 1`). Scratch resources removed.

@@ -11,13 +11,28 @@ Base URL (staging): `https://api.12id.naziharitsolution.com`. Machine-readable s
 
 Never ship an API key in an app. The wallet token is per installation and can be revoked with `DELETE /v1/wallets/{id}`.
 
+**What an API key can do.** An API key runs your integration: connections, credential offers, proof requests and wallets, plus reading everything (catalogue, templates, webhook endpoint and deliveries). **Setup is done in the 12id console, not with an API key:**
+- publishing schemas and credential definitions, and deprecating schemas;
+- creating, editing and deleting proof templates;
+- setting biometric policies;
+- setting or removing the webhook endpoint, rotating its secret, and retrying deliveries.
+
+With an API key, those routes answer `403 forbidden`. A leaked key therefore cannot write to the ledger or redirect your webhooks.
+
 ## The asynchronous model
 
 Every command returns immediately (`202`) with the exchange record. The holder answers minutes or hours later, so progress arrives by webhook (recommended) or by polling `GET` routes. Pass `externalId` on commands to get your own reference back on every event. Send an `Idempotency-Key` header on POSTs you may retry; a replay with the same key and body returns the original response (`Idempotent-Replayed: true`), the same key with a different body answers 422, and a retry that arrives while the first request is still running answers 409 `idempotency_in_progress` (retry after `Retry-After` seconds). A request that failed with a 5xx can be retried with the same key and runs again. Keys are kept for 24 hours.
 
+**Rate limits.** Each API key may make 300 requests per minute, unless 12id raised the limit for your organisation. Each wallet token (the SDK) may make 60 requests per minute, and 3 mediator invitations per 10 minutes. Above a limit the API answers `429 rate_limited` with a `Retry-After` header (seconds). Wait that long, then retry.
+
+**Wallet lifecycle.**
+- `DELETE /v1/wallets/{id}` revokes the wallet token at once: the app gets 401. Thirty days later 12id also removes the wallet's mediator connection, so the installation can no longer receive messages. The app must call the SDK's `reset()`, and you issue its credentials again.
+- A wallet that never connected to the mediator within 7 days of creation is revoked by 12id. For example, the app never started, or was uninstalled during onboarding. `GET /v1/wallets/{id}` then shows `revokedReason: "never_connected"`. Nothing had reached it, so nothing is lost.
+- If that app starts later, your backend's `POST /v1/wallets` retry with the same installation id answers **409 `wallet_revoked`** during the first 24 hours after the original call. Create a new wallet with a new `Idempotency-Key` (for example the installation id plus a suffix). After 24 hours the same call simply creates a new wallet.
+- `connectedAt` shows when 12id first saw the wallet's mediator connection.
+
 Responses that carry a secret are never stored for replays:
 - `POST /v1/wallets`: use your app's **installation id** (a UUID the app creates once and keeps) as the key. A retry returns the same wallet with a **new** `walletToken`; earlier tokens for that wallet stop working, so hand the app the most recent one. Each device or reinstall has its own installation id, so a user can have several wallets (share your user id through `externalId`).
-- `POST /v1/webhook/rotate-secret` ignores the header: a retry rotates again and returns the newest secret.
 
 | Exchange | States you will see |
 |---|---|
@@ -27,12 +42,12 @@ Responses that carry a secret are never stored for replays:
 
 ## Typical flow
 
-1. `POST /v1/schemas` → `POST /v1/credential-definitions` (once per credential type/version).
+1. In the console: publish the schema and its credential definition (once per credential type/version), set the webhook endpoint, and create proof templates. Your backend reads the result with `GET /v1/credential-definitions` and `GET /v1/proof-templates`.
 2. `POST /v1/wallets` for each app installation; hand `walletToken` to the app.
 3. App/SDK: `GET /v1/ledger` (genesis URL + sha256 + signature), `GET /v1/wallet/mediator-invitation` (once, at first launch). The Android SDK does both itself; see `sdk-android/docs/integration.md`.
 4. `POST /v1/connections/invitations` → show `invitationUrl` as a link or QR code → `connection.state_changed: completed`.
 5. `POST /v1/credentials/offer` → `credential.state_changed`.
-6. `POST /v1/proof-templates` once; `POST /v1/proofs/request` → `proof.state_changed: done` with `verified` and `disclosed`.
+6. `POST /v1/proofs/request` with a template id → `proof.state_changed: done` with `verified` and `disclosed`.
 
 ## Attribute rules
 
@@ -43,21 +58,23 @@ Responses that carry a secret are never stored for replays:
 
 ## Webhooks
 
-`PUT /v1/webhook { url, events? }` (https only) returns `secret` once. Each event is POSTed as:
+Set the endpoint in the console (https only). The signing secret is shown once, when the endpoint is created or the secret is rotated. `GET /v1/webhook` returns the current URL and event filter. Each event is POSTed as:
 
 ```json
 { "id": "…", "type": "proof.state_changed", "createdAt": "…", "tenantId": "…", "data": { "id": "…", "state": "done", "previousState": "presentation-received", "externalId": "…", "verified": true, "disclosed": { "employee": { "name": "…" } } } }
 ```
 
-Verify `X-12id-Signature: t=<unix>,v1=<hex>` where `v1 = HMAC-SHA256(secret, "<t>.<raw body>")`, and reject old timestamps:
+Verify `X-12id-Signature: t=<unix>,v1=<hex>[,v1=<hex>]` where each `v1 = HMAC-SHA256(secret, "<t>.<raw body>")`, and reject old timestamps. **Accept the event if any `v1` matches.** For 24 hours after a secret rotation, every delivery carries two signatures, the new secret's first and the previous secret's second. That way your receiver keeps working while you switch it to the new secret.
 
 ```js
-const [t, v1] = header.split(',').map((p) => p.split('=')[1])
-const expected = crypto.createHmac('sha256', secret).update(`${t}.${rawBody}`).digest('hex')
-const ok = crypto.timingSafeEqual(Buffer.from(v1), Buffer.from(expected)) && Math.abs(Date.now() / 1000 - Number(t)) < 300
+const parts = header.split(',').map((p) => p.split('='))
+const t = parts.find(([k]) => k === 't')?.[1]
+const expected = Buffer.from(crypto.createHmac('sha256', secret).update(`${t}.${rawBody}`).digest('hex'))
+const ok = Math.abs(Date.now() / 1000 - Number(t)) < 300 &&
+  parts.some(([k, v]) => k === 'v1' && v.length === expected.length && crypto.timingSafeEqual(Buffer.from(v), expected))
 ```
 
-Answer 2xx within 10 s. Failures are retried with exponential backoff (5 s doubling, capped at 1 h, 12 attempts) and then dead-lettered; see `GET /v1/webhook/deliveries?status=dead` and retry with `POST /v1/webhook/deliveries/{id}/retry`. Delivery order is not guaranteed — use `state` and `updatedAt`.
+Answer 2xx within 10 s. Failures are retried with exponential backoff (5 s doubling, capped at 1 h) for 12 attempts, **about 2.5 hours in total**, and then dead-lettered. See `GET /v1/webhook/deliveries?status=dead`, and retry dead deliveries from the console. Every attempt, retries included, goes to the endpoint URL set at that moment. Deliveries for different organisations are sent in parallel, so a slow receiver only delays its own events. Delivery order is not guaranteed: use `state` and `updatedAt`.
 
 ### `wallet.sync_requested`
 
@@ -68,8 +85,8 @@ Sent when the mediator is holding messages for one of your wallets (`data.wallet
 Optional per tenant: before a credential is issued or a proof result is released, the holder passes a face **liveness** check and a **face match** against a reference image you provide. You configure your own vendor account (AWS Rekognition Face Liveness) in the console, switch the gate on, and choose where it applies:
 
 - **Default** for the organisation (console → Biometrics).
-- **Per credential definition:** `PUT /v1/credential-definitions/{id}/biometric-policy` with `{ "mode": "inherit" | "off" | "required", "minMatchScore", "minLivenessScore", "maxAttempts" }`. Scores are 0–100.
-- **Per proof template:** `biometricPolicy` in the template body, or `PUT /v1/proof-templates/{id}/biometric-policy`.
+- **Per credential definition** (console): `inherit`, `off` or `required`, with `minMatchScore`, `minLivenessScore` and `maxAttempts`. Scores are 0–100. Read it with `GET /v1/credential-definitions/{id}/biometric-policy`.
+- **Per proof template** (console). Read it with `GET /v1/proof-templates/{id}/biometric-policy`.
 
 When a policy applies, send the reference image with the command:
 

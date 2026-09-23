@@ -21,3 +21,5 @@ const key = await fetch(`${adminApi}/admin/tenants/${tenantJson.id}/api-keys`, {
 const keyJson = (await key.json()) as { apiKey: string }
 if (!key.ok) throw new Error(`api key -> ${key.status} ${JSON.stringify(keyJson)}`)
 console.log(`PLATFORM_API_KEY=${keyJson.apiKey}`)
+// Setup routes are console only (review K1); the smokes' console client needs the tenant id.
+console.log(`PLATFORM_TENANT_ID=${tenantJson.id}`)

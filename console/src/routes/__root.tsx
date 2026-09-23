@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import type { QueryClient } from '@tanstack/react-query'
-import { HeadContent, Outlet, Scripts, createRootRouteWithContext } from '@tanstack/react-router'
+import { HeadContent, Outlet, Scripts, createRootRouteWithContext, useRouter } from '@tanstack/react-router'
 import { ThemeProvider } from 'next-themes'
 import type { ReactNode } from 'react'
 
@@ -32,6 +32,9 @@ function RootComponent() {
 }
 
 function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
+  // The request's CSP nonce (start.ts, router.tsx): next-themes' inline script needs it to run.
+  // Undefined in the browser, where the script has already run.
+  const nonce = useRouter().options.ssr?.nonce
   return (
     // next-themes sets the `dark` class on <html> before paint from an inline script; the
     // server cannot know the choice, hence the hydration warning is suppressed on this element only.
@@ -40,7 +43,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
         <HeadContent />
       </head>
       <body>
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange nonce={nonce}>
           <TooltipProvider>{children}</TooltipProvider>
           <Toaster />
         </ThemeProvider>

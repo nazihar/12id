@@ -126,6 +126,8 @@ Based on `phase0/mediator/docker-compose.yml`; every §2.3 setting carries over.
 - `webhook-sink`: a tiny container that logs every POST with a timestamp.
 - `PUSH_NOTIFICATIONS__WEBHOOK_URL` points at it over the internal Docker network only.
 
+> **Phase 7 update (2026-09-22, review H3):** the mediator no longer connects as `postgres`. Its own non-superuser role `mediator` owns `drizzle`, `message_pickup` and `mediator` only. The `endorser` store no longer lives on this instance: it moved to `agent-postgres`. Evidence: [`infra/runbooks/postgres-roles.md`](../infra/runbooks/postgres-roles.md). See [`17-phase-7.md`](17-phase-7.md) H3.
+
 ### W5 — Mediator verification matrix (the Phase 1 evidence)
 Record results in `5-phase-1-findings.md`.
 
@@ -173,6 +175,13 @@ Pin the resulting mode: expected **multi-instance redis**, since it gives both H
 - **What goes in SOPS:** Postgres passwords, Askar store keys (mediator, endorser store), Grafana admin, minisign secret key.
 - **Endorser private key** stays inside Askar and is never exported; only its store key is a secret.
 - **Backups:** nightly encrypted `pg_dump` of all databases to object storage. `runbooks/backup-restore.md` includes one restore drill.
+
+> **Phase 7 update (2026-09-22, review H2 + H3):**
+> - The Postgres passwords above now include one per service role: `agent_service`, `endorser_service`, `platform_api`, `console`, `biometric`, `mediator`, `monitoring_ro`. `infra/scripts/pg-roles.sh` creates them.
+> - The shared internal token was split into `PLATFORM_AGENT_TOKEN` and `AGENT_ENDORSER_TOKEN`.
+> - The endorser store key now belongs to the agent stack.
+> - Evidence: [`infra/runbooks/postgres-roles.md`](../infra/runbooks/postgres-roles.md). See [`17-phase-7.md`](17-phase-7.md) H2, H3.
+> - Backups are still VM-local, not object storage (review M13, kept open).
 
 ### W10 — `indy-vdr-proxy` hedge (§4.6, §12.9)
 - **Deploy** `indy-vdr-proxy` built from a pinned `hyperledger/indy-vdr` tag, fed our genesis, at `https://vdr.<domain>`. Verify schema and cred-def reads with curl.

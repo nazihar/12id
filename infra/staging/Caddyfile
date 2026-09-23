@@ -9,6 +9,12 @@
 	# rate_limit comes from caddy-ratelimit (infra/staging/caddy/Dockerfile). This file does
 	# not load on the stock caddy image.
 	order rate_limit before reverse_proxy
+
+	# Phase 7 review M16: per-server request metrics (status codes, durations) on the admin
+	# endpoint's /metrics, which listens on 127.0.0.1:2019 and is scraped by Prometheus.
+	servers {
+		metrics
+	}
 }
 
 # Per-IP request limits (W6). Hairpinned traffic from agents on this VM arrives from the
@@ -111,6 +117,12 @@ agent.12id.naziharitsolution.com {
 	}
 	handle @didcomm {
 		import per_ip_limit agent_per_ip 300
+		# Phase 7 review M1: Credo's HTTP transport accepts 5 MB and every tenant shares one serial
+		# message queue, so junk is refused here. A 125-attribute offer or presentation with ordinary
+		# values is tens of KB once encrypted; 512 KB leaves a wide margin.
+		request_body {
+			max_size 512KB
+		}
 		reverse_proxy 127.0.0.1:3400
 	}
 	handle @ready {
@@ -145,7 +157,8 @@ api.12id.naziharitsolution.com {
 # limiter keys on.
 12id.naziharitsolution.com {
 	import hardening
-	header Content-Security-Policy "frame-ancestors 'none'"
+	# The console sends its own per-request CSP (Phase 7 review M12, console/src/start.ts), including
+	# frame-ancestors 'none'. Do not set one here: Caddy's header directive would replace it.
 
 	# Hashed, immutable build assets (a page load fetches ~40 chunks) stay outside the per-IP
 	# limit, which protects sign-in and server functions. Without this, a handful of page loads
@@ -176,6 +189,12 @@ mediator.12id.naziharitsolution.com {
 	respond @admin "Not Found" 404
 
 	import per_ip_limit mediator_per_ip 300
+
+	# Phase 7 review M1: the same 512 KB cap as the agent for HTTP bodies (forwarded messages,
+	# pickup requests). WebSocket frames are capped inside the mediator (-p3 patch).
+	request_body {
+		max_size 512KB
+	}
 
 	reverse_proxy 127.0.0.1:3001 127.0.0.1:3002 {
 		lb_policy round_robin

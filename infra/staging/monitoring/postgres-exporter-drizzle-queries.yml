@@ -21,3 +21,19 @@ mediator_mediations:
     - created_last_hour:
         usage: GAUGE
         description: Mediation records created in the last hour
+
+# mediator_records{table}: growth of the records a wallet creates (Phase 7 review M4, M10, M16).
+# Unused invitations are swept after 24 h and revoked wallets' mediations after their grace period,
+# so steady growth here means the sweep stopped or something is minting invitations.
+mediator_records:
+  query: |
+    SELECT 'DidcommOutOfBand' AS "table", count(*) AS records FROM "DidcommOutOfBand"
+    UNION ALL SELECT 'DidcommMediation', count(*) FROM "DidcommMediation"
+    UNION ALL SELECT 'DidcommConnection', count(*) FROM "DidcommConnection"
+  metrics:
+    - table:
+        usage: LABEL
+        description: Mediator storage table
+    - records:
+        usage: GAUGE
+        description: Rows in this table

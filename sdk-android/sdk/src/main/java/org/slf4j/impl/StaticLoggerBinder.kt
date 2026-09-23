@@ -22,6 +22,9 @@ import java.util.concurrent.ConcurrentHashMap
  * (4-init trap 16). These classes are public because slf4j loads them by name; they are not part of
  * the SDK's API. An app that ships its own slf4j binding wins or loses the classpath race with this
  * one; slf4j prints which it picked.
+ *
+ * Lines below `OneTwoIdConfig.minLogLevel` are dropped here and in [SdkLog] (review M14): the
+ * framework's debug lines carry proof-request contents and connection records.
  */
 public class StaticLoggerBinder private constructor() : LoggerFactoryBinder {
     private val factory = SinkLoggerFactory()
@@ -99,28 +102,28 @@ internal class SinkLogger(private val loggerName: String) : MarkerIgnoringBase()
     override fun trace(format: String?, vararg arguments: Any?) = Unit
     override fun trace(msg: String?, t: Throwable?) = Unit
 
-    override fun isDebugEnabled(): Boolean = SdkLog.sink != null
+    override fun isDebugEnabled(): Boolean = SdkLog.enabled(LogLevel.Debug)
     override fun debug(msg: String?) = emit(LogLevel.Debug, msg, null)
     override fun debug(format: String?, arg: Any?) = emit(LogLevel.Debug, format, arg)
     override fun debug(format: String?, arg1: Any?, arg2: Any?) = emit(LogLevel.Debug, format, arg1, arg2)
     override fun debug(format: String?, vararg arguments: Any?) = emit(LogLevel.Debug, format, *arguments)
     override fun debug(msg: String?, t: Throwable?) = emit(LogLevel.Debug, msg, t)
 
-    override fun isInfoEnabled(): Boolean = SdkLog.sink != null
+    override fun isInfoEnabled(): Boolean = SdkLog.enabled(LogLevel.Info)
     override fun info(msg: String?) = emit(LogLevel.Info, msg, null)
     override fun info(format: String?, arg: Any?) = emit(LogLevel.Info, format, arg)
     override fun info(format: String?, arg1: Any?, arg2: Any?) = emit(LogLevel.Info, format, arg1, arg2)
     override fun info(format: String?, vararg arguments: Any?) = emit(LogLevel.Info, format, *arguments)
     override fun info(msg: String?, t: Throwable?) = emit(LogLevel.Info, msg, t)
 
-    override fun isWarnEnabled(): Boolean = SdkLog.sink != null
+    override fun isWarnEnabled(): Boolean = SdkLog.enabled(LogLevel.Warn)
     override fun warn(msg: String?) = emit(LogLevel.Warn, msg, null)
     override fun warn(format: String?, arg: Any?) = emit(LogLevel.Warn, format, arg)
     override fun warn(format: String?, vararg arguments: Any?) = emit(LogLevel.Warn, format, *arguments)
     override fun warn(format: String?, arg1: Any?, arg2: Any?) = emit(LogLevel.Warn, format, arg1, arg2)
     override fun warn(msg: String?, t: Throwable?) = emit(LogLevel.Warn, msg, t)
 
-    override fun isErrorEnabled(): Boolean = SdkLog.sink != null
+    override fun isErrorEnabled(): Boolean = SdkLog.enabled(LogLevel.Error)
     override fun error(msg: String?) = emit(LogLevel.Error, msg, null)
     override fun error(format: String?, arg: Any?) = emit(LogLevel.Error, format, arg)
     override fun error(format: String?, arg1: Any?, arg2: Any?) = emit(LogLevel.Error, format, arg1, arg2)

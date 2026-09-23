@@ -57,6 +57,12 @@ deliveries pending : 0
 - **Per-wallet mediator invitations work.** The mediator's patched route minted a single-use invitation; a holder obtained mediation through it (Credo holder over HTTP, Phase 1 W8 constraint). The mediator's connection record carries the `out_of_band_id`, and the platform mapped the mediator's first webhook for it to the wallet **before the holder had even connected to the issuer** (06:56:40: the queued mediation-grant/keylist replies triggered it).
 - **The wake path end to end:** mediator `Notification sent successfully to <connectionId>` (5 across the two replicas in this window) → platform `/internal/mediator/<secret>` → one `wallet.sync_requested` (the remaining four fell inside the 30 s debounce window).
 - **Webhooks:** 11 deliveries, all `delivered` on the first attempt, all signatures valid against the secret returned once by `PUT /v1/webhook`; `externalId` echoed on every event.
+  > **Phase 7 update (2026-09-22, review M2, M6, M8, M9):**
+  > - Deliveries now run in a fair-share pool, go to the endpoint's current URL, and carry two `v1` signatures for 24 h after a rotation. The smoke's receiver accepts any `v1`.
+  > - Outbox events have derived ids, so a replay cannot duplicate them.
+  > - `smoke:platform-credo` PASSED again on the new build with all signatures valid, and `smoke:biometric-credo` 18/18.
+  > - Since review K1, the smoke sets the endpoint through the console client, not with the API key.
+  > - See [`17-phase-7.md`](17-phase-7.md) M2, M6, M8, M9.
 - **Idempotency:** the second `POST /v1/credentials/offer` with the same `Idempotency-Key` returned the stored 202 with `idempotent-replayed: true` and made no second agent call.
 - **Templates:** `{ schemaName: "smoke-badge" }` expanded to the unqualified cred def id at request time; the automatic `expiresAt >=` predicate and a caller predicate (`employeeNumber > 1000`) verified together.
 - **Latency through the platform:** offer → holder `done` 10 s; proof request → `done` 1.1 s; a webhook arrives 1–4 s after the Credo transition (outbox settle 2 s + 1 s polls).
@@ -146,6 +152,10 @@ The route is added to the built `apps/mediator/build/agent.js` after the `/invit
 - **Drain:** `docker stop platform-platform-api-1` → `drain started` … `drain complete` in 3 ms with `inFlight: 0`; healthy again 20 s after `up -d`.
 - **Backup + restore drill:** `backup-postgres.sh` now dumps `platform_api` (29.6 kB encrypted); restored into a scratch `postgres:15-alpine` with `pg_restore --create`: 1 tenant, 2 wallets, 11 deliveries, `outbox_cursor.last_id = 48`.
 - **Read-only role:** `platform_ro` has `SELECT (id, out_of_band_id, thread_id)` on `DidcommConnection` only (`information_schema.column_privileges`).
+  > **Phase 7 update (2026-09-22, review H3):**
+  > - `platform_ro` is unchanged and was re-verified to be limited to its three columns.
+  > - platform-api itself no longer connects as `postgres`: the `platform_api` role owns only its database.
+  > - See [`17-phase-7.md`](17-phase-7.md) H3 and [`infra/runbooks/postgres-roles.md`](../infra/runbooks/postgres-roles.md).
 - **Monitoring:** `https://api.<domain>/v1/health` added to the blackbox targets; after a Prometheus restart `probe_success=1`, so `EndpointDown` covers it.
 
 ---

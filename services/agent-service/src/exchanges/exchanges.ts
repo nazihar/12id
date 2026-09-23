@@ -17,8 +17,9 @@ import type { Logger as PinoLogger } from 'pino'
 
 import type { RootAgent } from '../agent/root-agent.ts'
 import type { Database } from '../db/client.ts'
-import { ledgerObjects, outbox, tenants } from '../db/schema.ts'
+import { ledgerObjects, tenants } from '../db/schema.ts'
 import { type PendingCorrelations, getCorrelationId, setCorrelationId } from '../events/correlation.ts'
+import { insertOutboxRow } from '../events/outbox-writer.ts'
 import { type ProofGroupInput, buildOfferAttributes, buildProofRequest } from './builders.ts'
 
 export interface ExchangeDeps {
@@ -270,7 +271,7 @@ export async function abandonExchange(deps: ExchangeDeps, tenantId: string, kind
       if (kind === 'credential') await t.modules.didcomm.credentials.update(fresh as never)
       else await t.modules.didcomm.proofs.update(fresh as never)
       // api.update() emits no state event, so the outbox row is written here (as in reconcile.ts).
-      await deps.db.insert(outbox).values({ tenantId, recordType: kind, recordId: fresh.id, threadId: fresh.threadId, state: fresh.state, previousState, correlationId: getCorrelationId(fresh), payload: { reason, connectionId: fresh.connectionId ?? null } })
+      await insertOutboxRow(deps.db, { tenantId, recordType: kind, recordId: fresh.id, threadId: fresh.threadId, state: fresh.state, previousState, correlationId: getCorrelationId(fresh), payload: { reason, connectionId: fresh.connectionId ?? null } })
     }
     deps.logger.info({ tenantId, kind, id, previousState, reason }, 'held exchange abandoned')
     return { id: fresh.id, state: fresh.state }

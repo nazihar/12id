@@ -41,10 +41,12 @@ mediator ──POST /internal/mediator/<secret>──▶ │──read-only SQL�
 
 ### P0 — agent-service additions (small, keep the D2 boundary)
 Files: `services/agent-service/src/http/command-routes.ts`, `exchanges/exchanges.ts`, new `src/http/outbox-routes.ts`.
-- `GET /outbox?afterId=<bigint>&limit=<n≤500>` → rows `id > afterId` ordered by id, **only rows with `created_at < now() - 2s`** (the listener inserts asynchronously, so a lower id can commit after a higher one was read). `POST /outbox/ack { upToId }` sets `delivered_at` (observability only; the consumer keeps its own cursor).
+- `GET /outbox?afterId=<bigint>&limit=<n≤500>` → rows `id > afterId` ordered by id, **only rows with `created_at < now() - 2s`** (the listener inserts asynchronously, so a lower id can commit after a higher one was read).
+  > **Phase 7 update (2026-09-22, review M7):** the 2 s window did not close the gap for a commit stalled longer than that. Every outbox insert now takes one transaction-scoped advisory lock (`insertOutboxRow`), so ids commit in order. The window stays as a margin. See [`17-phase-7.md`](17-phase-7.md) M7. `POST /outbox/ack { upToId }` sets `delivered_at` (observability only; the consumer keeps its own cursor).
 - `GET /tenants/:tenantId` (status, did) — onboarding today is `202` + background, with no read route.
 - `GET /tenants/:tenantId/connections/:id`; `GET /tenants/:tenantId/credentials/:id` additionally returns `credentialDefinitionId` (unqualified) and the offered `attributes` from the record.
 - Internal token on the agent internal API, reusing `INTERNAL_TOKEN_HEADER` + `tokenMatches` from `endorser-service/src/http/endorser-api.ts` (move `tokenMatches` into `credo-base/src/internal-token.ts`). `/healthz`, `/readyz` stay open. Config: `INTERNAL_TOKEN` (reuse `AGENT_INTERNAL_TOKEN` in compose).
+  > **Phase 7 update (2026-09-22, review H2):** reusing `AGENT_INTERNAL_TOKEN` also handed platform-api the endorser's token. The agent internal API now takes `PLATFORM_AGENT_TOKEN`, and only agent-service holds `AGENT_ENDORSER_TOKEN`. See [`17-phase-7.md`](17-phase-7.md) H2.
 
 ### P1 — mediator patch `-p2`: `POST /admin/invitations`
 Files: `infra/staging/mediator/Dockerfile.patched`, new `patch/agent.js` (built file from the image, `/app/apps/mediator/build/agent.js`, after the `/invite` route at line ~80).
@@ -89,17 +91,47 @@ All ids exposed to customers are the agent/Credo record ids (uuid), scoped by te
 - **Proofs**: `POST /v1/proofs/request {connectionId, templateId | request, externalId?}` → 202; `GET /v1/proofs/:id` → `{ state, verified, disclosed, errorMessage }`; `GET /v1/proofs?connectionId=`.
 - **Webhook config**: `PUT /v1/webhook {url (https only), events?}` → `{ secret }` returned once (regenerate via `POST /v1/webhook/rotate-secret`); `GET /v1/webhook`; `GET /v1/webhook/deliveries?status=failed|dead`, `POST /v1/webhook/deliveries/:id/retry`.
 
+> **Phase 7 update (2026-09-22, review K1):** the setup half of this section is now **console only**. An API key gets 403 on:
+> - catalogue publishing and deprecation;
+> - proof-template create, update and delete;
+> - biometric policy writes;
+> - `PUT`/`DELETE /v1/webhook`, `rotate-secret` and delivery retry.
+>
+> API keys keep exchanges, wallets and every GET. The customer `openapi.json` no longer lists the moved routes. Evidence: staging probe 403/200, `e2e:staging` 3/3, `smoke:platform-credo` PASSED with setup through the console. See [`17-phase-7.md`](17-phase-7.md) K1.
+
 ### P5 — wallet endpoints (SDK-facing)
 - Customer: `POST /v1/wallets {externalId?}` → `{ walletId, walletToken }`; `GET /v1/wallets/:id`; `DELETE /v1/wallets/:id` (revokes token; mediator record untouched).
 - Wallet token: `GET /v1/wallet/mediator-invitation` → mints via P1, stores `mediator_oob_id` on the wallet (one active per wallet; a second call replaces it), returns `{ invitationUrl }`. `GET /v1/wallet` → wallet status.
+
+> **Phase 7 update (2026-09-22, review M4, M10):**
+> - **Limits:** 3 invitations per wallet per 10 minutes, 60 requests per minute per wallet, and 300 per minute per API key (a per-tenant override exists). Above them the API answers 429.
+> - **Hourly sweep:**
+>   - it marks `connected_at` from the mediator's connections;
+>   - it revokes wallets never connected after 7 days (`revoked_reason = 'never_connected'`);
+>   - 30 days after a revocation it removes the wallet's mediator connection, mediation and queue. The "mediator record untouched" above no longer holds after that grace period;
+>   - it deletes unused invitations after 24 hours.
+> - [`17-phase-7.md`](17-phase-7.md) M4, M10.
 - Public: `GET /v1/ledger` → `{ indyNamespace, genesis: { url, sha256, signatureUrl, signingPublicKey }, vdrProxyUrl }` from config (the file itself stays on `genesis.<domain>/v1/…`, already versioned, immutable and minisign-signed — that closes the §10 "`GET /ledger/genesis`" item without a second copy).
 
 ### P6 — outbox consumer and mirror
 `src/outbox-consumer.ts`, single worker, 1 s poll (configurable), cursor in `outbox_cursor` (one row). Per row: map `tenant_id` (agent) → platform tenant; upsert `connections` / `credentials` / `proofs` by `(tenant_id, record_id)` with `state`, `thread_id`, `correlation_id`, payload fields; ignore rows whose state is older than the stored state; on `proof` reaching `done`/`abandoned` call agent `GET /proofs/:id` once and store `verified` + `disclosed`; then insert a `webhook_deliveries` row. Processing is idempotent (at-least-once); cursor advances after the batch commits. Reuse the mapping test style of `agent-service/test/outbox-listener.test.ts`.
 
+> **Phase 7 update (2026-09-22, review M6):** as built, the upsert, enqueue and cursor were separate steps. With the "older or equal" guard, any error after the upsert lost that row's webhook for good, and a gated exchange also lost its `hold_reached`. The fix:
+> - the guard is now `<=`, so the same row applies again;
+> - the webhook event id is derived from the outbox row id, with a unique index, so a second enqueue is dropped;
+> - the cursor still advances per row.
+>
+> See [`17-phase-7.md`](17-phase-7.md) M6.
+
 ### P7 — webhook dispatcher and the wake path
 - **Envelope**: `{ id, type, createdAt, tenantId, data }`; types `connection.state_changed`, `credential.state_changed`, `proof.state_changed`, `wallet.sync_requested`. Headers `X-12id-Event`, `X-12id-Delivery`, `X-12id-Signature: t=<unix>,v1=<hmac-sha256(secret, "<t>.<body>")>`; 10 s timeout; 2xx = delivered.
 - **Worker**: `SELECT … FOR UPDATE SKIP LOCKED WHERE next_attempt_at <= now()`; backoff `min(2^n × 5 s, 1 h)` with jitter; 12 attempts → `dead` (customer sees it in `GET /v1/webhook/deliveries`, can retry). Per-tenant ordering is *not* guaranteed (document; consumers should use `state` + `updatedAt`).
+  > **Phase 7 update (2026-09-22, review M2, M8, M9):**
+  > - **M2:** the worker sent its batch one delivery at a time, so one hanging endpoint stalled every tenant. It is now a pool of `WEBHOOK_CONCURRENCY` (8) slots, claimed round-robin across tenants. A tenant is held to `WEBHOOK_PER_TENANT` (2) while others wait, and may use every slot when alone.
+  > - **M8:** each attempt posts to the endpoint's *current* URL, not a snapshot taken at enqueue.
+  > - **M9:** after `rotate-secret`, deliveries carry `v1=<new>,v1=<previous>` for 24 h.
+  > - 12 attempts take about 2.5 h, not a day.
+  > - See [`17-phase-7.md`](17-phase-7.md) M2, M8, M9.
 - **Mediator receiver**: `POST /internal/mediator/:secret` (`MEDIATOR_WEBHOOK_SECRET`, path constant-time compared; edge returns 404 for `/internal/*`). Body `{ connectionId }` (no `fcmToken` — Phase 1 finding). Lookup `SELECT out_of_band_id FROM "DidcommConnection" WHERE id = $1` on the drizzle DB with a **read-only role** → `wallets.mediator_oob_id` → tenant. Cache `connection_id → wallet_id` on the wallet row (`mediator_connection_id`) after first hit. **Debounce**: at most one `wallet.sync_requested` per wallet per `WAKE_DEBOUNCE_MS` (default 30 s, since the mediator fires one webhook per queued message even while the app is polling). Unknown connection → 204 + counter (pre-Phase-3 wallets, smoke leftovers). Always answer 2xx fast; the mediator logs failures but never retries.
 - Mediator compose: `PUSH_NOTIFICATIONS__WEBHOOK_URL=http://platform-api:3500/internal/mediator/${MEDIATOR_WEBHOOK_SECRET}`; keep `webhook-sink` only as an optional debugging override.
 
@@ -109,6 +141,13 @@ All ids exposed to customers are the agent/Credo record ids (uuid), scoped by te
 ### P9 — staging deploy
 - `infra/staging/compose.platform.yml`: `platform-provision` (init job) + `platform-api` (`127.0.0.1:3500`, networks `default`=`12id-platform`, `agent` external `12id-agent`, `mediator` external `12id-mediator`; `mem_limit 512m`; `stop_grace_period 30s`); `secrets/platform.sops.env` (`PLATFORM_ADMIN_TOKEN`, `MEDIATOR_WEBHOOK_SECRET`, drizzle read-only password; `AGENT_INTERNAL_TOKEN` and `MEDIATOR_ADMIN_TOKEN` via `EXTRA_SECRETS="agent mediator"`).
 - One-time SQL (runbook `infra/runbooks/platform-api.md`): `CREATE ROLE platform_ro … GRANT SELECT ON "DidcommConnection"` in the mediator's `drizzle` DB.
+
+  > **Phase 7 update (2026-09-22, review H2 + H3):**
+  > - platform-api connects as its own role `platform_api`, which owns only the `platform_api` database.
+  > - It holds `PLATFORM_AGENT_TOKEN` (in `platform.sops.env`), so the platform stack no longer decrypts `agent.sops.env`.
+  > - It stays on `12id-agent` and `12id-mediator`, but can no longer resolve `endorser-service`.
+  > - `platform_ro` is unchanged.
+  > - See [`17-phase-7.md`](17-phase-7.md) H2, H3.
 - `services/Dockerfile`: add `platform-api` manifest/src/drizzle copies. Image tag `12id/services:phase3` for all three services.
 - Caddy `api.12id.naziharitsolution.com`: `hardening`, `per_ip_limit api_per_ip 600`, 404 for `/internal/*` and `/admin/*`, `reverse_proxy 127.0.0.1:3500`. Mediator site: add the `/admin/*` 404.
 - `backup-postgres.sh`: add `platform_api`; run one restore drill. Monitoring: blackbox probe `https://api…/v1/ledger`; alert on `webhook_deliveries` dead-letter growth (postgres-exporter query) and on the outbox cursor lag.

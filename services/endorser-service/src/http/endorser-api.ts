@@ -41,7 +41,18 @@ export interface EndorserApiOptions {
   bindings: TenantBindings
   /** Signs an already-approved ledger request (IndyVdrApi.endorseTransaction in production). */
   sign(request: string): Promise<string>
-  audit: { record(entry: AuditEntry): Promise<void> }
+  audit: {
+    record(entry: AuditEntry): Promise<void>
+    /** Allowed schema + cred def endorsements for the tenant since `since`. */
+    ledgerWritesSince?(tenantId: string, since: Date): Promise<number>
+  }
+  /**
+   * Most schemas + credential definitions one tenant may have endorsed in any 24 h (review M3):
+   * a backstop against a hijacked console account or a bug, since ledger objects are immutable.
+   * 0 or unset: no ceiling.
+   */
+  dailyLedgerWriteCeiling?: number
+  now?: () => Date
 }
 
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex')
@@ -92,10 +103,18 @@ export function buildEndorserApi(options: EndorserApiOptions) {
       const requestSha256 = sha256(body.request)
       const decision = await checkEndorsement(body, options.endorserNym, options.bindings)
 
-      if (!decision.allowed) {
-        await options.audit.record({ tenantId: body.tenantId, kind: body.kind, allowed: false, reason: decision.reason, requestSha256 })
-        request.log.warn({ tenantId: body.tenantId, kind: body.kind, reason: decision.reason, requestSha256 }, 'endorsement refused')
-        return reply.code(403).send({ error: 'refused', reason: decision.reason })
+      const refuse = async (reason: string) => {
+        await options.audit.record({ tenantId: body.tenantId, kind: body.kind, allowed: false, reason, requestSha256 })
+        request.log.warn({ tenantId: body.tenantId, kind: body.kind, reason, requestSha256 }, 'endorsement refused')
+        return reply.code(403).send({ error: 'refused', reason })
+      }
+      if (!decision.allowed) return refuse(decision.reason)
+
+      const ceiling = options.dailyLedgerWriteCeiling ?? 0
+      if (ceiling > 0 && decision.kind !== 'nym' && options.audit.ledgerWritesSince) {
+        const since = new Date((options.now?.() ?? new Date()).getTime() - 24 * 60 * 60 * 1000)
+        const written = await options.audit.ledgerWritesSince(body.tenantId, since)
+        if (written >= ceiling) return refuse(`daily ledger-write ceiling reached: ${written} schemas and credential definitions in the last 24 hours (limit ${ceiling})`)
       }
 
       const endorsedRequest = await options.sign(body.request)

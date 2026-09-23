@@ -36,8 +36,13 @@ export interface InternalApiOptions {
 export function buildInternalApi(options: InternalApiOptions) {
   const app = Fastify({
     loggerInstance: options.logger.child({ component: 'internal-api' }),
-    // Internal callers only; a slow client must not hold a drain open.
-    connectionTimeout: 10_000,
+    // No socket idle timeout: it is Node's `server.timeout`, which destroyed the socket while a
+    // handler was still waiting on the ledger (onboarding, catalogue publishing) and surfaced as
+    // 502 agent_unreachable in platform-api (trap 44, review M5). The caller bounds each call
+    // instead. `requestTimeout` still bounds receiving a request, and idle keep-alive sockets are
+    // closed on shutdown (Fastify's forceCloseConnections: 'idle'), so a drain is not held open.
+    connectionTimeout: 0,
+    requestTimeout: 30_000,
   }).withTypeProvider<ZodTypeProvider>()
 
   app.setValidatorCompiler(validatorCompiler)

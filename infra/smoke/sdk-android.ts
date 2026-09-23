@@ -14,16 +14,18 @@
  * sync collects → accept → done; 5 template proof → respond → verified, second request declined;
  * 6 restart keeps the mediator connection and credentials; 7 wiped wallet + spent invitation recovers.
  *
- * Env: PLATFORM_API, PLATFORM_API_KEY, WEBHOOK_URL, RECEIVER_PORT, CRED_DEF_ID (optional).
+ * Env: PLATFORM_API, PLATFORM_API_KEY, PLATFORM_TENANT_ID (console setup over SSH, K1), WEBHOOK_URL, RECEIVER_PORT, CRED_DEF_ID (optional).
  */
 import { execFileSync } from 'node:child_process'
 import { writeFileSync } from 'node:fs'
 
-import { env, now, offerAttributes, platformClient, publishCatalogue, sleep, startReceiver } from './platform-common.ts'
+import { consoleClient, env, now, offerAttributes, platformClient, publishCatalogue, sleep, startReceiver } from './platform-common.ts'
 
 const APP = 'com.onetwoid.sample'
 const baseUrl = env('PLATFORM_API', 'https://api.12id.naziharitsolution.com')
 const api = platformClient(baseUrl, env('PLATFORM_API_KEY'))
+// Setup routes are console only (review K1): publishing, templates, policies, the webhook endpoint.
+const setup = consoleClient()
 const webhookUrl = env('WEBHOOK_URL', 'https://smoke-issuer.12id.naziharitsolution.com/webhook')
 const externalId = `sdk-${Date.now()}`
 // ADB_SERIAL picks the device (e.g. emulator-5554 for the min-SDK check); STEPS=3 stops after step 3.
@@ -106,9 +108,9 @@ try {
   await receiver.listening
   console.log(`device: ${adb('shell', 'getprop', 'ro.product.model')}, Android ${adb('shell', 'getprop', 'ro.build.version.release')}`)
   adb('logcat', '-c')
-  const endpoint = await api.must<{ secret?: string }>('PUT', '/v1/webhook', { url: webhookUrl })
-  secret = endpoint.secret ?? (await api.must<{ secret: string }>('POST', '/v1/webhook/rotate-secret')).secret
-  const credDefId = process.env.CRED_DEF_ID ?? (await publishCatalogue(api, 'smoke-badge')).credentialDefinitionLedgerId
+  const endpoint = await setup.must<{ secret?: string }>('PUT', '/v1/webhook', { url: webhookUrl })
+  secret = endpoint.secret ?? (await setup.must<{ secret: string }>('POST', '/v1/webhook/rotate-secret')).secret
+  const credDefId = process.env.CRED_DEF_ID ?? (await publishCatalogue(setup, 'smoke-badge')).credentialDefinitionLedgerId
 
   // --- 1: fresh install onboards with nothing compiled in ------------------------------------
   console.log('\n=== 1 ONBOARDING (fresh install) ===')
@@ -205,7 +207,7 @@ try {
   // opens the app to answer a proof request, which resumes polling.
   launch()
   await waitReady(60_000)
-  const template = await api.must<{ id: string }>('POST', '/v1/proof-templates', { name: 'smoke-sdk-android', groups: [{ key: 'employee', attributes: ['name', 'department'], credentials: [{ credentialDefinitionId: credDefId }] }] })
+  const template = await setup.must<{ id: string }>('POST', '/v1/proof-templates', { name: 'smoke-sdk-android', groups: [{ key: 'employee', attributes: ['name', 'department'], credentials: [{ credentialDefinitionId: credDefId }] }] })
   const proof = await api.must<{ id: string }>('POST', '/v1/proofs/request', { connectionId, templateId: template.id, externalId })
   await waitState('proof.state_changed', proof.id, ['request-sent'], 60_000, 'proof request')
   for (let i = 0; i < 30; i++) {

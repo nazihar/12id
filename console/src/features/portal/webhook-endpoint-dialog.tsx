@@ -32,7 +32,7 @@ export function WebhookEndpointDialog({ organizationId, orgSlug, endpoint, onSec
         )
       }
       title={endpoint ? 'Edit the webhook endpoint' : 'Create the webhook endpoint'}
-      description="Events are POSTed as signed JSON (X-12id-Signature, HMAC-SHA256 with your secret). Answer 2xx within 10 seconds; failures are retried with backoff for about a day."
+      description="Events are POSTed as signed JSON (X-12id-Signature, HMAC-SHA256 with your secret). Answer 2xx within 10 seconds; failures are retried with backoff for about 2.5 hours, always to the URL set at that moment."
     >
       {({ close }) => <WebhookEndpointFormBody organizationId={organizationId} orgSlug={orgSlug} endpoint={endpoint} onDone={close} onSecret={onSecret} />}
     </FormDialog>

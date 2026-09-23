@@ -69,4 +69,41 @@ describe('outbox consumer', { skip: db ? false : 'no test database' }, () => {
     assert.equal(again.state, 'request-received')
     assert.equal((await db!.db.select().from(webhookDeliveries)).length, 4, 'no duplicate deliveries on replay')
   })
+
+  it('finishes a row whose enqueue failed after the mirror upsert, exactly once (review M6)', async () => {
+    const [tenant] = await db!.db.insert(tenants).values({ name: 'M6', agentTenantId: 'agent-tenant-m6', status: 'ready' }).returning()
+    await db!.db.insert(webhookEndpoints).values({ tenantId: tenant.id, url: 'https://customer.test/hook', secret: 's', events: null })
+    await db!.db.update(outboxCursor).set({ lastId: 9 })
+    const agent = fakeAgent()
+    agent.outbox.push(row(10, 'credential', 'cred-m6', 'offer-sent', null, { tenantId: 'agent-tenant-m6' }), row(11, 'credential', 'cred-m6', 'request-received', 'offer-sent', { tenantId: 'agent-tenant-m6' }))
+    const ours = () => db!.db.select().from(webhookDeliveries).where(eq(webhookDeliveries.tenantId, tenant.id)).orderBy(webhookDeliveries.id)
+    const lookup = endpointLookup(db!.db)
+    let failNext = true
+    const flaky = async (tenantId: string) => {
+      if (failNext) {
+        failNext = false
+        throw new Error('connection terminated unexpectedly')
+      }
+      return lookup(tenantId)
+    }
+    const gateCalls: string[] = []
+    const gates = { onExchangeState: async (_tenant: string, _kind: string, recordId: string, state: string) => void gateCalls.push(`${recordId}:${state}`) } as never
+    const consumer = createOutboxConsumer({ db: db!.db, agent: agent.client, logger: silentLogger, endpoints: flaky, batch: 10, gates })
+
+    await assert.rejects(consumer.runOnce(), /connection terminated/)
+    const [mirrored] = await db!.db.select().from(credentials).where(eq(credentials.recordId, 'cred-m6'))
+    assert.equal(mirrored.lastOutboxId, 10, 'the upsert landed before the failure')
+    assert.equal(await consumer.readCursor(), 9, 'the cursor stayed behind the failed row')
+    assert.equal((await ours()).length, 0)
+
+    assert.equal(await consumer.runOnce(), 2)
+    const deliveries = await ours()
+    assert.deepEqual(deliveries.map((d) => (JSON.parse(d.body) as { data: { state: string } }).data.state), ['offer-sent', 'request-received'], 'the failed row was finished, and each row enqueued once')
+    assert.deepEqual(gateCalls, ['cred-m6:offer-sent', 'cred-m6:offer-sent', 'cred-m6:request-received'], 'the gate saw the retried row again')
+
+    // A reset cursor replays both rows: the derived event ids drop the second enqueue.
+    await db!.db.update(outboxCursor).set({ lastId: 9 })
+    assert.equal(await consumer.runOnce(), 2)
+    assert.equal((await ours()).length, 2)
+  })
 })

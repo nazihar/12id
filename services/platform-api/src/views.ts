@@ -57,7 +57,11 @@ export const walletView = z.object({
   hasMediatorInvitation: z.boolean(),
   lastSyncRequestedAt: z.iso.datetime().nullable(),
   createdAt: z.iso.datetime(),
+  /** First time the platform saw the wallet's mediator connection; null = not (yet) connected. */
+  connectedAt: z.iso.datetime().nullable(),
   revokedAt: z.iso.datetime().nullable(),
+  /** null when revoked by the customer; `never_connected` when the platform revoked it after 7 days without a connection. */
+  revokedReason: z.string().nullable(),
 })
 
 const iso = (d: Date) => d.toISOString()
@@ -107,6 +111,8 @@ export function toWalletView(row: typeof wallets.$inferSelect): z.infer<typeof w
     hasMediatorInvitation: row.mediatorOobId !== null,
     lastSyncRequestedAt: row.lastSyncRequestedAt ? iso(row.lastSyncRequestedAt) : null,
     createdAt: iso(row.createdAt),
+    connectedAt: row.connectedAt ? iso(row.connectedAt) : null,
     revokedAt: row.revokedAt ? iso(row.revokedAt) : null,
+    revokedReason: row.revokedReason,
   }
 }

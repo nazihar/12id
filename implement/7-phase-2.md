@@ -39,6 +39,7 @@ Phase 2 builds the first real product service: a multi-tenant Credo 0.7 **agent-
 ## Decisions
 - **D1 §12.4 — one codebase, one deployment** (`AGENT_ROLES=issuer,verifier`, splittable later). Reason: connections live in the tenant wallet inside one agent.
 - **D2 — two services.** Agent-service is private (internal API + outbox). The Phase 3 platform API is a separate service. Only the DIDComm endpoint is public.
+  > **Phase 7 update (2026-09-22, review M5):** the internal API was built with `connectionTimeout: 10_000` to keep slow clients from holding a drain open. That is a socket idle timeout, and it destroyed the socket under long ledger handlers (trap 44). It is now `connectionTimeout: 0` with `requestTimeout: 30_000`. Idle keep-alive sockets still close on shutdown. See [`17-phase-7.md`](17-phase-7.md) M5.
 - **D3 — real author/endorser flow.** The tenant key is the author and the platform endorser signs. Tenant DIDs get no ledger role.
 - **D4 — Fastify** for our HTTP APIs, with `fastify-type-provider-zod` and pino (also backing the Credo `Logger`). Credo's stock Express `DidCommHttpInboundTransport` serves DIDComm on its own port.
 - **D5 — decided: separate internal endorser-service.** It holds the existing `endorser` Askar store and is never reachable from the internet. It checks policy and audit-logs every signature. The key stays out of the process that accepts internet DIDComm traffic (§6).
@@ -126,6 +127,8 @@ Run from the workstation against **staging** (public genesis + client ports), wi
 7. **A6 Events → outbox.**
    - Listen for connection, `DidCommCredentialStateChanged` and `DidCommProofStateChanged` events across tenants.
    - Write each transition transactionally into an `outbox` table: tenant, record id, thread id, state, correlation id.
+
+     > **Phase 7 update (2026-09-22, review M7):** as built, each row was a fire-and-forget autocommit. Concurrent inserts could commit out of id order, and the consumer then skipped the late one. All four writers now go through `events/outbox-writer.ts` `insertOutboxRow`, which takes an advisory lock and then inserts, in one transaction. See [`17-phase-7.md`](17-phase-7.md) M7.
    - The Phase 3 platform API consumes the outbox.
 8. **A7 Correlation + wire log.**
    - A correlation id is stored as record metadata at creation, and every log line carries it with `threadId` and `tenantId`.
@@ -142,6 +145,13 @@ Run from the workstation against **staging** (public genesis + client ports), wi
       - `POST /endorse`: SCHEMA/CLAIM_DEF transactions only, author DID must be a known tenant DID.
     - Every signature is audit-logged.
     - Internal network only; shared-secret header between the two services (SOPS).
+
+    > **Phase 7 update (2026-09-22, review M3):** the policy checks who, and now also how many. A tenant gets at most `ENDORSER_DAILY_CEILING` (default 50) schema and cred-def endorsements in any 24 hours, counted from the audit table. Refusals are audited too. NYMs are never counted. See [`17-phase-7.md`](17-phase-7.md) M3.
+
+    > **Phase 7 update (2026-09-22, review H2):** the shared secret was not private to these two services. Phase 3 reused it as platform-api's agent token, so platform-api could call `/endorse`. Now:
+    > - Only agent-service holds `AGENT_ENDORSER_TOKEN`, and the endorser refuses the platform token (401).
+    > - endorser-service is only on `12id-endorser`, together with agent-service and agent-postgres.
+    > - Evidence: [`infra/runbooks/postgres-roles.md`](../infra/runbooks/postgres-roles.md). See [`17-phase-7.md`](17-phase-7.md) H2.
 11. **A10 Staging deploy.**
     - `compose.agent.yml` services:
       - `agent-postgres` (its own instance, 1 GB, 127.0.0.1 / not published);
@@ -149,6 +159,12 @@ Run from the workstation against **staging** (public genesis + client ports), wi
       - `agent-service` (DIDComm on `127.0.0.1:3400`, internal API on network `12id-agent` only);
       - `endorser-service` (on `12id-mediator` for the endorser DB, plus `12id-agent`).
     - `secrets/agent.sops.env`: Postgres password, root store key, inter-service secret.
+
+    > **Phase 7 update (2026-09-22, review H2 + H3):**
+    > - endorser-service is on neither `12id-mediator` nor `12id-agent` any more, only on `12id-endorser`. Its store moved to `agent-postgres`.
+    > - Every service connects with its own non-superuser role (`agent_service`, `endorser_service`), created by `infra/scripts/pg-roles.sh`.
+    > - The inter-service secret became `PLATFORM_AGENT_TOKEN` and `AGENT_ENDORSER_TOKEN`.
+    > - See [`17-phase-7.md`](17-phase-7.md) H2, H3.
     - Caddy `agent.12id.naziharitsolution.com` → 3400, `per_ip_limit`, `/` POST only for DIDComm.
     - Add the agent databases to `backup-postgres.sh` and run one restore drill.
     - Monitoring: blackbox probe on `agent.` and a container restart alert.

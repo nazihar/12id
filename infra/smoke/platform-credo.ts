@@ -7,6 +7,7 @@
  * platform-common.ts) asserts every event arrived, signed, including the wake-up.
  *
  * Env: PLATFORM_API (default https://api.12id.naziharitsolution.com), PLATFORM_API_KEY,
+ *   PLATFORM_TENANT_ID (setup runs as the console over SSH, review K1; see consoleClient),
  * WEBHOOK_URL (default https://smoke-issuer.12id.naziharitsolution.com/webhook), RECEIVER_PORT (3201).
  */
 import './bindings.ts'
@@ -14,10 +15,12 @@ import './bindings.ts'
 import { DidCommCredentialState, DidCommProofState } from '@credo-ts/didcomm'
 
 import { createHolderAgent, withTimeout } from './common.ts'
-import { env, now, offerAttributes, platformClient, publishCatalogue, sleep, startReceiver } from './platform-common.ts'
+import { consoleClient, env, now, offerAttributes, platformClient, publishCatalogue, sleep, startReceiver } from './platform-common.ts'
 
 const baseUrl = env('PLATFORM_API', 'https://api.12id.naziharitsolution.com')
 const api = platformClient(baseUrl, env('PLATFORM_API_KEY'))
+// Setup routes are console only (review K1): publishing, templates, policies, the webhook endpoint.
+const setup = consoleClient()
 const webhookUrl = env('WEBHOOK_URL', 'https://smoke-issuer.12id.naziharitsolution.com/webhook')
 const externalId = `credo-${Date.now()}`
 
@@ -30,13 +33,13 @@ try {
   await receiver.listening
 
   // --- customer backend setup ------------------------------------------------------------
-  const endpoint = await api.must<{ secret?: string }>('PUT', '/v1/webhook', { url: webhookUrl })
+  const endpoint = await setup.must<{ secret?: string }>('PUT', '/v1/webhook', { url: webhookUrl })
   if (!endpoint.secret) {
     // Existing endpoint from an earlier run: rotate so this receiver can verify signatures.
-    secret = (await api.must<{ secret: string }>('POST', '/v1/webhook/rotate-secret')).secret
+    secret = (await setup.must<{ secret: string }>('POST', '/v1/webhook/rotate-secret')).secret
   } else secret = endpoint.secret
   console.log(`  [${now()}] webhook endpoint set`)
-  const catalogue = await publishCatalogue(api, 'smoke-badge')
+  const catalogue = await publishCatalogue(setup, 'smoke-badge')
 
   // --- wallet (what the customer backend does for its app user) --------------------------
   const wallet = await api.must<{ id: string; walletToken: string }>('POST', '/v1/wallets', { externalId: `user-${externalId}` })
@@ -68,8 +71,11 @@ try {
     'holder credential done'
   )
   const idempotencyKey = `offer-${externalId}`
-  const offer = await api.must<{ id: string; state: string }>('POST', '/v1/credentials/offer', { connectionId, credentialDefinitionId: catalogue.credentialDefinitionLedgerId, attributes: offerAttributes('platform'), externalId }, { 'idempotency-key': idempotencyKey })
-  const replay = await api.call<{ id: string }>('POST', '/v1/credentials/offer', { connectionId, credentialDefinitionId: catalogue.credentialDefinitionLedgerId, attributes: offerAttributes('platform'), externalId }, { 'idempotency-key': idempotencyKey })
+  // One body for both calls: offerAttributes derives expiresAt from the clock, and a retry whose body
+  // differs by a second is (correctly) refused with 422.
+  const offerBody = { connectionId, credentialDefinitionId: catalogue.credentialDefinitionLedgerId, attributes: offerAttributes('platform'), externalId }
+  const offer = await api.must<{ id: string; state: string }>('POST', '/v1/credentials/offer', offerBody, { 'idempotency-key': idempotencyKey })
+  const replay = await api.call<{ id: string }>('POST', '/v1/credentials/offer', offerBody, { 'idempotency-key': idempotencyKey })
   const replayed = replay.status === 202 && replay.json.id === offer.id
   console.log(`  [${now()}] offered ${offer.id} (${offer.state}); idempotent replay ${replayed ? 'ok' : `UNEXPECTED ${replay.status}`}`)
   await credentialDone
@@ -77,7 +83,7 @@ try {
   console.log(`  [${now()}] credential done via webhook (externalId ${credentialEvent.event.data.externalId})`)
 
   // --- proof from a template -------------------------------------------------------------
-  const template = await api.must<{ id: string }>('POST', '/v1/proof-templates', {
+  const template = await setup.must<{ id: string }>('POST', '/v1/proof-templates', {
     name: 'employment',
     groups: [{ key: 'employee', attributes: ['name', 'department'], credentials: [{ schemaName: 'smoke-badge' }], predicates: [{ name: 'employeeNumber', type: '>', value: 1000 }] }],
   })

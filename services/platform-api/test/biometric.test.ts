@@ -72,7 +72,7 @@ describe('biometric gate', { skip: db ? false : 'no test database' }, () => {
     key = (await app.inject({ method: 'POST', url: `/admin/tenants/${tenantId}/api-keys`, headers: admin, payload: { label: 'backend' } })).json().apiKey
     consoleHeaders = { 'x-console-token': testConfig.CONSOLE_TOKEN!, 'x-console-actor': 'owner@gate.test', 'x-console-role': 'owner', 'x-console-tenant': tenantId }
     walletToken = (await app.inject({ method: 'POST', url: '/v1/wallets', headers: api(), payload: {} })).json().walletToken
-    const hook = await app.inject({ method: 'PUT', url: '/v1/webhook', headers: api(), payload: { url: 'https://hooks.gate.test/12id' } })
+    const hook = await app.inject({ method: 'PUT', url: '/v1/webhook', headers: consoleHeaders, payload: { url: 'https://hooks.gate.test/12id' } })
     assert.equal(hook.statusCode < 300, true, hook.body)
   })
 
@@ -105,11 +105,14 @@ describe('biometric gate', { skip: db ? false : 'no test database' }, () => {
     assert.deepEqual([check.purpose, check.thresholds], ['issue', { minLivenessScore: 85, minMatchScore: 92 }])
   })
 
-  it('a credential definition override can switch the gate off', async () => {
-    const put = await app.inject({ method: 'PUT', url: '/v1/credential-definitions/cd-2/biometric-policy', headers: api(), payload: { mode: 'off' } })
+  it('a credential definition override can switch the gate off (set from the console only, K1)', async () => {
+    const byKey = await app.inject({ method: 'PUT', url: '/v1/credential-definitions/cd-2/biometric-policy', headers: api(), payload: { mode: 'off' } })
+    assert.equal(byKey.statusCode, 403, byKey.body)
+    assert.equal((await app.inject({ url: '/v1/credential-definitions/cd-2/biometric-policy', headers: api() })).statusCode, 200, 'an API key still reads it')
+    const put = await app.inject({ method: 'PUT', url: '/v1/credential-definitions/cd-2/biometric-policy', headers: consoleHeaders, payload: { mode: 'off' } })
     assert.equal(put.statusCode, 200, put.body)
     assert.equal((await offer()).json().biometric, null)
-    await app.inject({ method: 'PUT', url: '/v1/credential-definitions/cd-2/biometric-policy', headers: api(), payload: { mode: 'required', maxAttempts: 3 } })
+    await app.inject({ method: 'PUT', url: '/v1/credential-definitions/cd-2/biometric-policy', headers: consoleHeaders, payload: { mode: 'required', maxAttempts: 3 } })
     const gated = await offer({ biometric: { referenceImage } })
     assert.equal(gated.json().biometric.attemptsRemaining, 3)
   })
@@ -203,7 +206,7 @@ describe('biometric gate', { skip: db ? false : 'no test database' }, () => {
     const template = await app.inject({
       method: 'POST',
       url: '/v1/proof-templates',
-      headers: api(),
+      headers: consoleHeaders,
       payload: { name: 'badge check', groups: [{ key: 'badge', attributes: ['name'], credentials: [{ schemaName: 'employee-badge' }] }], biometricPolicy: { mode: 'required', minMatchScore: 95 } },
     })
     assert.equal(template.statusCode, 201, template.body)
@@ -211,9 +214,9 @@ describe('biometric gate', { skip: db ? false : 'no test database' }, () => {
     assert.equal(template.json().definition.biometricPolicy, undefined, 'the policy is stored outside the definition')
 
     // Editing the template without the field (the console builder) keeps the policy; the policy route changes it.
-    const edited = await app.inject({ method: 'PUT', url: `/v1/proof-templates/${template.json().id}`, headers: api(), payload: { name: 'badge check v2', groups: template.json().definition.groups } })
+    const edited = await app.inject({ method: 'PUT', url: `/v1/proof-templates/${template.json().id}`, headers: consoleHeaders, payload: { name: 'badge check v2', groups: template.json().definition.groups } })
     assert.deepEqual(edited.json().biometricPolicy, { mode: 'required', minMatchScore: 95 })
-    const viaRoute = await app.inject({ method: 'PUT', url: `/v1/proof-templates/${template.json().id}/biometric-policy`, headers: api(), payload: { mode: 'required', minMatchScore: 95 } })
+    const viaRoute = await app.inject({ method: 'PUT', url: `/v1/proof-templates/${template.json().id}/biometric-policy`, headers: consoleHeaders, payload: { mode: 'required', minMatchScore: 95 } })
     assert.equal(viaRoute.statusCode, 200, viaRoute.body)
     assert.deepEqual((await app.inject({ url: `/v1/proof-templates/${template.json().id}/biometric-policy`, headers: api() })).json().biometricPolicy, { mode: 'required', minMatchScore: 95 })
 

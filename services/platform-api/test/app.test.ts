@@ -1,7 +1,8 @@
 /**
  * HTTP surface against a real Postgres (skipped without one) with agent-service and the mediator
  * doubled. Covers: admin bootstrap, API-key and wallet-token auth, idempotency, the customer
- * command → mirror-row path, the wake receiver's secret, and the generic 500 body.
+ * command → mirror-row path, setup routes being console only (review K1), the wake receiver's
+ * secret, and the generic 500 body.
  */
 import assert from 'node:assert/strict'
 import { before, describe, it } from 'node:test'
@@ -9,7 +10,7 @@ import { before, describe, it } from 'node:test'
 import { eq } from 'drizzle-orm'
 
 import type { WakeOutcome } from '../src/wake.ts'
-import { idempotencyKeys } from '../src/db/schema.ts'
+import { idempotencyKeys, webhookEndpoints } from '../src/db/schema.ts'
 import { buildApp } from '../src/http/app.ts'
 import { fakeAgent, silentLogger, testConfig, testDatabase } from './helpers.ts'
 
@@ -39,6 +40,8 @@ describe('platform-api HTTP', { skip: db ? false : 'no test database' }, () => {
   const admin = { 'x-admin-token': testConfig.PLATFORM_ADMIN_TOKEN }
   let apiKey = ''
   let tenantId = ''
+  // The console acting for the tenant (Phase 4 C1): setup routes accept only this principal.
+  const consoleHeaders = () => ({ 'x-console-token': testConfig.CONSOLE_TOKEN!, 'x-console-actor': 'user-1', 'x-console-role': 'owner', 'x-console-tenant': tenantId })
 
   before(async () => {
     await app.ready()
@@ -184,9 +187,46 @@ describe('platform-api HTTP', { skip: db ? false : 'no test database' }, () => {
     assert.equal(afterRevoke.json().error, 'wallet_revoked')
   })
 
+  it('keeps setup routes to the console: an API key gets 403 on every write, and still reads (K1)', async () => {
+    const key = { authorization: `Bearer ${apiKey}` }
+    const template = { name: 'k1', groups: [{ key: 'employee', attributes: ['name'], credentials: [{ schemaName: 'employee-badge' }] }] }
+    const someId = '00000000-0000-4000-8000-000000000000'
+    const writes: Array<{ method: 'POST' | 'PUT' | 'DELETE'; url: string; payload?: object }> = [
+      { method: 'POST', url: '/v1/schemas', payload: { name: 'k1', version: '1.0', attributes: ['name', 'expiresAt'] } },
+      { method: 'POST', url: `/v1/schemas/${someId}/deprecation`, payload: { deprecated: true } },
+      { method: 'POST', url: '/v1/credential-definitions', payload: { schemaId: someId } },
+      { method: 'POST', url: '/v1/proof-templates', payload: template },
+      { method: 'PUT', url: `/v1/proof-templates/${someId}`, payload: template },
+      { method: 'PUT', url: `/v1/proof-templates/${someId}/biometric-policy`, payload: { mode: 'off' } },
+      { method: 'DELETE', url: `/v1/proof-templates/${someId}` },
+      { method: 'PUT', url: '/v1/webhook', payload: { url: 'https://attacker.test/hook' } },
+      { method: 'POST', url: '/v1/webhook/rotate-secret' },
+      { method: 'DELETE', url: '/v1/webhook' },
+      { method: 'POST', url: '/v1/webhook/deliveries/1/retry' },
+    ]
+    const publishes = agent.calls.filter((c) => c.method === 'publishSchema' || c.method === 'publishCredentialDefinition').length
+    for (const write of writes) {
+      const refused = await app.inject({ ...write, headers: key })
+      assert.equal(refused.statusCode, 403, `${write.method} ${write.url}: ${refused.body}`)
+      assert.equal(refused.json().error, 'forbidden')
+    }
+    assert.equal(agent.calls.filter((c) => c.method === 'publishSchema' || c.method === 'publishCredentialDefinition').length, publishes, 'nothing reached agent-service')
+
+    for (const url of ['/v1/schemas', '/v1/credential-definitions', '/v1/proof-templates', '/v1/webhook/deliveries']) {
+      assert.equal((await app.inject({ method: 'GET', url, headers: key })).statusCode, 200, url)
+    }
+    const published = await app.inject({ method: 'POST', url: '/v1/schemas', headers: consoleHeaders(), payload: { name: 'k1', version: '1.0', attributes: ['name', 'expiresAt'] } })
+    assert.equal(published.statusCode, 201, published.body)
+
+    const spec = (await app.inject({ method: 'GET', url: '/openapi.json' })).json() as { paths: Record<string, Record<string, unknown>> }
+    assert.equal(spec.paths['/v1/schemas']?.post, undefined, 'publishing is left out of the customer document')
+    assert.ok(spec.paths['/v1/schemas']?.get, 'reading stays in it')
+    assert.equal(spec.paths['/v1/webhook']?.put, undefined)
+  })
+
   it('requests a proof from a stored template, expanded against the catalogue', async () => {
     const headers = { authorization: `Bearer ${apiKey}` }
-    const template = await app.inject({ method: 'POST', url: '/v1/proof-templates', headers, payload: { name: 'badge', groups: [{ key: 'employee', attributes: ['name', 'department'], credentials: [{ schemaName: 'employee-badge' }], predicates: [{ name: 'employeeNumber', type: '>', value: 1000 }] }] } })
+    const template = await app.inject({ method: 'POST', url: '/v1/proof-templates', headers: consoleHeaders(), payload: { name: 'badge', groups: [{ key: 'employee', attributes: ['name', 'department'], credentials: [{ schemaName: 'employee-badge' }], predicates: [{ name: 'employeeNumber', type: '>', value: 1000 }] }] } })
     assert.equal(template.statusCode, 201, template.body)
     const proof = await app.inject({ method: 'POST', url: '/v1/proofs/request', headers, payload: { connectionId: 'conn-1', templateId: template.json().id, externalId: 'check-1' } })
     assert.equal(proof.statusCode, 202, proof.body)
@@ -216,8 +256,8 @@ describe('platform-api HTTP', { skip: db ? false : 'no test database' }, () => {
     assert.equal((await app.inject({ method: 'GET', url: '/v1/wallet', headers: { authorization: `Bearer ${walletToken}` } })).statusCode, 401)
   })
 
-  it('configures the webhook endpoint and returns the secret once', async () => {
-    const headers = { authorization: `Bearer ${apiKey}` }
+  it('configures the webhook endpoint from the console and returns the secret once', async () => {
+    const headers = consoleHeaders()
     assert.equal((await app.inject({ method: 'PUT', url: '/v1/webhook', headers, payload: { url: 'http://insecure.test/hook' } })).statusCode, 400)
     const set = await app.inject({ method: 'PUT', url: '/v1/webhook', headers, payload: { url: 'https://customer.test/hook', events: ['proof.state_changed'] } })
     assert.equal(set.statusCode, 200, set.body)
@@ -227,6 +267,11 @@ describe('platform-api HTTP', { skip: db ? false : 'no test database' }, () => {
     assert.equal(again.json().events, null)
     const rotated = await app.inject({ method: 'POST', url: '/v1/webhook/rotate-secret', headers })
     assert.notEqual(rotated.json().secret, set.json().secret)
+    // The replaced secret is kept for the rotation overlap (review M9).
+    const [stored] = await db!.db.select().from(webhookEndpoints)
+    assert.equal(stored.secret, rotated.json().secret)
+    assert.equal(stored.previousSecret, set.json().secret)
+    assert.ok(stored.rotatedAt)
   })
 
   it('accepts the mediator webhook only on the secret path', async () => {

@@ -147,7 +147,8 @@
       "post": {
         "summary": "Publish a schema",
         "tags": [
-          "catalogue"
+          "catalogue",
+          "console-only"
         ],
         "description": "Attributes are strings on the wire (no nested values, no native numbers). `expiresAt` (epoch seconds) is mandatory: v1 has no revocation, so every credential carries an expiry that every proof request checks.",
         "requestBody": {
@@ -254,6 +255,29 @@
             }
           },
           "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Default Response",
             "content": {
               "application/json": {
@@ -406,7 +430,8 @@
       "post": {
         "summary": "Deprecate or reactivate a schema version",
         "tags": [
-          "catalogue"
+          "catalogue",
+          "console-only"
         ],
         "description": "A deprecated version refuses new offers; credentials already issued under it stay verifiable and templates with `versions: \"all\"` keep accepting them.",
         "requestBody": {
@@ -482,6 +507,29 @@
               }
             }
           },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
           "404": {
             "description": "Default Response",
             "content": {
@@ -512,7 +560,8 @@
       "post": {
         "summary": "Publish a credential definition",
         "tags": [
-          "catalogue"
+          "catalogue",
+          "console-only"
         ],
         "description": "Published without revocation support (v1 decision, cannot be changed later for this definition).",
         "requestBody": {
@@ -605,6 +654,29 @@
             }
           },
           "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Default Response",
             "content": {
               "application/json": {
@@ -4186,7 +4258,8 @@
       "put": {
         "summary": "Set the biometric policy of a credential definition",
         "tags": [
-          "catalogue"
+          "catalogue",
+          "console-only"
         ],
         "description": "`inherit` follows the tenant default, `off` never gates, `required` gates with the given thresholds (missing values come from the tenant default). Applies to offers made after the change.",
         "requestBody": {
@@ -4394,7 +4467,8 @@
       "post": {
         "summary": "Create a proof template",
         "tags": [
-          "proofs"
+          "proofs",
+          "console-only"
         ],
         "description": "Each group discloses attributes from one credential and may add integer predicates. Credentials are referenced by schema name (all versions, or active only) or by credential definition id. `expiresAt` is always predicated and can never be disclosed. `biometricPolicy` (optional) overrides the tenant's biometric default for requests made from this template.",
         "requestBody": {
@@ -4817,6 +4891,29 @@
             }
           },
           "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Default Response",
             "content": {
               "application/json": {
@@ -5358,7 +5455,8 @@
       "put": {
         "summary": "Replace a proof template",
         "tags": [
-          "proofs"
+          "proofs",
+          "console-only"
         ],
         "requestBody": {
           "required": true,
@@ -5814,6 +5912,29 @@
               }
             }
           },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
           "404": {
             "description": "Default Response",
             "content": {
@@ -5842,7 +5963,8 @@
       "delete": {
         "summary": "Delete a proof template",
         "tags": [
-          "proofs"
+          "proofs",
+          "console-only"
         ],
         "parameters": [
           {
@@ -5870,6 +5992,29 @@
                   },
                   "required": [
                     "deleted"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason"
                   ],
                   "additionalProperties": false
                 }
@@ -6038,7 +6183,8 @@
       "put": {
         "summary": "Set the biometric policy of a proof template",
         "tags": [
-          "proofs"
+          "proofs",
+          "console-only"
         ],
         "description": "`inherit` follows the tenant default, `off` never gates, `required` gates with the given thresholds. Applies to proof requests made from this template after the change.",
         "requestBody": {
@@ -6216,6 +6362,29 @@
               }
             }
           },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
           "404": {
             "description": "Default Response",
             "content": {
@@ -6304,6 +6473,18 @@
                       "format": "date-time",
                       "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                     },
+                    "connectedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "revokedAt": {
                       "anyOf": [
                         {
@@ -6316,6 +6497,12 @@
                         }
                       ]
                     },
+                    "revokedReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "walletToken": {
                       "type": "string"
                     }
@@ -6326,7 +6513,9 @@
                     "hasMediatorInvitation",
                     "lastSyncRequestedAt",
                     "createdAt",
+                    "connectedAt",
                     "revokedAt",
+                    "revokedReason",
                     "walletToken"
                   ],
                   "additionalProperties": false
@@ -6416,6 +6605,18 @@
                         "format": "date-time",
                         "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                       },
+                      "connectedAt": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
                       "revokedAt": {
                         "anyOf": [
                           {
@@ -6427,6 +6628,12 @@
                             "type": "null"
                           }
                         ]
+                      },
+                      "revokedReason": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
                       }
                     },
                     "required": [
@@ -6435,7 +6642,9 @@
                       "hasMediatorInvitation",
                       "lastSyncRequestedAt",
                       "createdAt",
-                      "revokedAt"
+                      "connectedAt",
+                      "revokedAt",
+                      "revokedReason"
                     ],
                     "additionalProperties": false
                   }
@@ -6501,6 +6710,18 @@
                       "format": "date-time",
                       "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                     },
+                    "connectedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "revokedAt": {
                       "anyOf": [
                         {
@@ -6512,6 +6733,12 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "revokedReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     }
                   },
                   "required": [
@@ -6520,7 +6747,9 @@
                     "hasMediatorInvitation",
                     "lastSyncRequestedAt",
                     "createdAt",
-                    "revokedAt"
+                    "connectedAt",
+                    "revokedAt",
+                    "revokedReason"
                   ],
                   "additionalProperties": false
                 }
@@ -6557,7 +6786,7 @@
         "tags": [
           "wallets"
         ],
-        "description": "Revokes the wallet token; the device keeps its local data and its mediator connection, but the platform stops mapping mediator webhooks to it.",
+        "description": "Revokes the wallet token at once: the app gets 401 and the platform stops mapping mediator webhooks to it. The device keeps its local data. 30 days later the platform also removes its mediator connection, so the app can no longer receive messages; it must call reset() and credentials are issued again. Wallets that never connected to the mediator are revoked by the platform after 7 days (revokedReason never_connected).",
         "parameters": [
           {
             "schema": {
@@ -6607,6 +6836,18 @@
                       "format": "date-time",
                       "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                     },
+                    "connectedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "revokedAt": {
                       "anyOf": [
                         {
@@ -6618,6 +6859,12 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "revokedReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     }
                   },
                   "required": [
@@ -6626,7 +6873,9 @@
                     "hasMediatorInvitation",
                     "lastSyncRequestedAt",
                     "createdAt",
-                    "revokedAt"
+                    "connectedAt",
+                    "revokedAt",
+                    "revokedReason"
                   ],
                   "additionalProperties": false
                 }
@@ -6663,9 +6912,10 @@
       "put": {
         "summary": "Set the webhook endpoint",
         "tags": [
-          "webhooks"
+          "webhooks",
+          "console-only"
         ],
-        "description": "One endpoint per tenant. The signing `secret` is returned only when it is created or rotated. Events are POSTed as `{ id, type, createdAt, tenantId, data }` with `X-12id-Signature: t=<unix>,v1=<hex HMAC-SHA256(secret, \"<t>.<body>\")>`. Answer 2xx within 10 s; failures are retried with exponential backoff (about 12 attempts over a day) and then dead-lettered.",
+        "description": "One endpoint per tenant. The signing `secret` is returned only when it is created or rotated. Events are POSTed as `{ id, type, createdAt, tenantId, data }` with `X-12id-Signature: t=<unix>,v1=<hex HMAC-SHA256(secret, \"<t>.<body>\")>`. During a secret rotation the header carries one `v1` per secret for 24 h; accept a match on any of them. Answer 2xx within 10 s; failures are retried with exponential backoff (12 attempts over about 2.5 hours) and then dead-lettered. Each attempt goes to the URL set at that moment.",
         "requestBody": {
           "required": true,
           "content": {
@@ -6749,6 +6999,29 @@
                     "events",
                     "createdAt",
                     "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason"
                   ],
                   "additionalProperties": false
                 }
@@ -6843,7 +7116,8 @@
       "delete": {
         "summary": "Remove the webhook endpoint",
         "tags": [
-          "webhooks"
+          "webhooks",
+          "console-only"
         ],
         "responses": {
           "200": {
@@ -6859,6 +7133,29 @@
                   },
                   "required": [
                     "deleted"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason"
                   ],
                   "additionalProperties": false
                 }
@@ -6895,8 +7192,10 @@
       "post": {
         "summary": "Rotate the signing secret",
         "tags": [
-          "webhooks"
+          "webhooks",
+          "console-only"
         ],
+        "description": "For 24 hours after a rotation every delivery carries two signatures, `v1=<new>,v1=<previous>`, so a receiver still on the previous secret keeps accepting them. Switch within that window.",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -6911,6 +7210,29 @@
                   },
                   "required": [
                     "secret"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason"
                   ],
                   "additionalProperties": false
                 }
@@ -7216,7 +7538,8 @@
       "post": {
         "summary": "Retry a dead or pending delivery now",
         "tags": [
-          "webhooks"
+          "webhooks",
+          "console-only"
         ],
         "parameters": [
           {
@@ -7315,6 +7638,29 @@
                     "lastError",
                     "createdAt",
                     "deliveredAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason"
                   ],
                   "additionalProperties": false
                 }
@@ -8141,6 +8487,18 @@
                       "format": "date-time",
                       "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                     },
+                    "connectedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "revokedAt": {
                       "anyOf": [
                         {
@@ -8152,6 +8510,12 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "revokedReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     }
                   },
                   "required": [
@@ -8160,7 +8524,9 @@
                     "hasMediatorInvitation",
                     "lastSyncRequestedAt",
                     "createdAt",
-                    "revokedAt"
+                    "connectedAt",
+                    "revokedAt",
+                    "revokedReason"
                   ],
                   "additionalProperties": false
                 }
@@ -8196,6 +8562,29 @@
                   },
                   "required": [
                     "invitationUrl"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason"
                   ],
                   "additionalProperties": false
                 }
@@ -8695,6 +9084,18 @@
                         "null"
                       ]
                     },
+                    "rateLimitPerMin": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time",
@@ -8708,6 +9109,7 @@
                     "did",
                     "agentTenantId",
                     "lastError",
+                    "rateLimitPerMin",
                     "createdAt"
                   ],
                   "additionalProperties": false
@@ -8756,6 +9158,18 @@
                           "null"
                         ]
                       },
+                      "rateLimitPerMin": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time",
@@ -8769,6 +9183,7 @@
                       "did",
                       "agentTenantId",
                       "lastError",
+                      "rateLimitPerMin",
                       "createdAt"
                     ],
                     "additionalProperties": false
@@ -8830,6 +9245,18 @@
                         "null"
                       ]
                     },
+                    "rateLimitPerMin": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time",
@@ -8843,6 +9270,143 @@
                     "did",
                     "agentTenantId",
                     "lastError",
+                    "rateLimitPerMin",
+                    "createdAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Change tenant settings",
+        "tags": [
+          "admin",
+          "console-only"
+        ],
+        "description": "`rateLimitPerMin`: requests per minute per API key for this tenant (0 = no limit); null = the platform default (RATE_LIMIT_API_KEY_PER_MIN).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "rateLimitPerMin": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 100000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "rateLimitPerMin"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "did": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "agentTenantId": {
+                      "type": "string"
+                    },
+                    "lastError": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "rateLimitPerMin": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "status",
+                    "did",
+                    "agentTenantId",
+                    "lastError",
+                    "rateLimitPerMin",
                     "createdAt"
                   ],
                   "additionalProperties": false
@@ -8926,6 +9490,18 @@
                         "null"
                       ]
                     },
+                    "rateLimitPerMin": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time",
@@ -8939,6 +9515,7 @@
                     "did",
                     "agentTenantId",
                     "lastError",
+                    "rateLimitPerMin",
                     "createdAt"
                   ],
                   "additionalProperties": false
@@ -9260,6 +9837,18 @@
                               "null"
                             ]
                           },
+                          "rateLimitPerMin": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time",
@@ -9273,6 +9862,7 @@
                           "did",
                           "agentTenantId",
                           "lastError",
+                          "rateLimitPerMin",
                           "createdAt"
                         ],
                         "additionalProperties": false

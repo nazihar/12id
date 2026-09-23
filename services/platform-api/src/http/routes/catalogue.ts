@@ -1,13 +1,17 @@
 /**
  * Schema and credential-definition catalogue (P4): a thin, read-through layer over agent-service,
  * which owns the ledger objects and both identifier forms (4-init §2.7.2).
+ *
+ * Reads take an API key or the console. Publishing and deprecation are console only (review K1):
+ * ledger objects are immutable, so a leaked API key must not be able to write them.
  */
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { z } from 'zod'
 
 import type { AgentClient, AgentLedgerObject } from '../../agent-client.ts'
-import { assertTenantReady, type TenantContext } from '../auth.ts'
+import { assertTenantReady, type TenantContext, requireConsolePrincipal } from '../auth.ts'
 import { notFound } from '../errors.ts'
+import { CONSOLE_ONLY_TAG } from './console.ts'
 
 export interface CatalogueDeps {
   agent: AgentClient
@@ -57,19 +61,21 @@ export const catalogueRoutes = (deps: CatalogueDeps): FastifyPluginAsyncZod => a
     assertTenantReady(t)
     return t
   }
+  const publisher = (request: { tenant?: TenantContext }) => tenant({ tenant: requireConsolePrincipal(request.tenant as TenantContext, 'the catalogue is published from the console') })
+  const writeTags = ['catalogue', CONSOLE_ONLY_TAG]
 
   app.post(
     '/v1/schemas',
     {
       schema: {
-        tags: ['catalogue'],
+        tags: writeTags,
         summary: 'Publish a schema',
         description: 'Attributes are strings on the wire (no nested values, no native numbers). `expiresAt` (epoch seconds) is mandatory: v1 has no revocation, so every credential carries an expiry that every proof request checks.',
         body: z.object({ name: z.string().min(1).max(200), version: z.string().regex(/^\d+(\.\d+){0,2}$/, 'version like 1.0'), attributes: z.array(z.string().min(1).max(100)).min(1).max(125) }),
-        response: { 201: schemaView, 400: errorBody, 409: errorBody, 422: errorBody },
+        response: { 201: schemaView, 400: errorBody, 403: errorBody, 409: errorBody, 422: errorBody },
       },
     },
-    async (request, reply) => reply.code(201).send(toSchemaView(await deps.agent.publishSchema(tenant(request).agentTenantId, request.body)))
+    async (request, reply) => reply.code(201).send(toSchemaView(await deps.agent.publishSchema(publisher(request).agentTenantId, request.body)))
   )
 
   app.get('/v1/schemas', { schema: { tags: ['catalogue'], summary: 'List schemas', response: { 200: z.array(schemaView) } } }, async (request) => {
@@ -81,30 +87,30 @@ export const catalogueRoutes = (deps: CatalogueDeps): FastifyPluginAsyncZod => a
     '/v1/schemas/:id/deprecation',
     {
       schema: {
-        tags: ['catalogue'],
+        tags: writeTags,
         summary: 'Deprecate or reactivate a schema version',
         description: 'A deprecated version refuses new offers; credentials already issued under it stay verifiable and templates with `versions: "all"` keep accepting them.',
         params: z.object({ id: z.uuid() }),
         body: z.object({ deprecated: z.boolean() }),
-        response: { 200: z.object({ status: z.string() }), 400: errorBody, 404: errorBody },
+        response: { 200: z.object({ status: z.string() }), 400: errorBody, 403: errorBody, 404: errorBody },
       },
     },
-    async (request) => deps.agent.setSchemaDeprecated(tenant(request).agentTenantId, request.params.id, request.body.deprecated)
+    async (request) => deps.agent.setSchemaDeprecated(publisher(request).agentTenantId, request.params.id, request.body.deprecated)
   )
 
   app.post(
     '/v1/credential-definitions',
     {
       schema: {
-        tags: ['catalogue'],
+        tags: writeTags,
         summary: 'Publish a credential definition',
         description: 'Published without revocation support (v1 decision, cannot be changed later for this definition).',
         body: z.object({ schemaId: z.uuid(), tag: z.string().regex(/^[A-Za-z0-9_-]{1,32}$/).default('default') }),
-        response: { 201: credentialDefinitionView, 400: errorBody, 404: errorBody, 409: errorBody, 422: errorBody },
+        response: { 201: credentialDefinitionView, 400: errorBody, 403: errorBody, 404: errorBody, 409: errorBody, 422: errorBody },
       },
     },
     async (request, reply) =>
-      reply.code(201).send(toCredentialDefinitionView(await deps.agent.publishCredentialDefinition(tenant(request).agentTenantId, { schemaObjectId: request.body.schemaId, tag: request.body.tag })))
+      reply.code(201).send(toCredentialDefinitionView(await deps.agent.publishCredentialDefinition(publisher(request).agentTenantId, { schemaObjectId: request.body.schemaId, tag: request.body.tag })))
   )
 
   app.get('/v1/credential-definitions', { schema: { tags: ['catalogue'], summary: 'List credential definitions', response: { 200: z.array(credentialDefinitionView) } } }, async (request) => {

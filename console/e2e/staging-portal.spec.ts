@@ -11,7 +11,9 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 
-import { type Page, expect, test } from '@playwright/test'
+import type { Page } from '@playwright/test'
+
+import { expect, test, watchCsp } from './csp'
 import { generateSync } from 'otplib'
 
 import { submitSignIn } from './staging-signin'
@@ -50,7 +52,7 @@ async function signIn(page: Page, email: string, password: string, secretFile: s
 
 const tab = (page: Page, name: string) => page.getByRole('navigation', { name: 'Organization sections' }).getByRole('link', { name, exact: true })
 
-test('staging: tenant owner works through the portal', async ({ browser, page }) => {
+test('staging: tenant owner works through the portal', async ({ browser, page, cspViolations }) => {
   test.setTimeout(300_000)
   mkdirSync('.staging', { recursive: true })
   const stamp = Date.now()
@@ -72,7 +74,9 @@ test('staging: tenant owner works through the portal', async ({ browser, page })
   await expect(members).toContainText(ownerEmail)
 
   // Owner.
-  const owner = await (await browser.newContext({ baseURL: url })).newPage()
+  const ownerContext = await browser.newContext({ baseURL: url })
+  watchCsp(ownerContext, cspViolations)
+  const owner = await ownerContext.newPage()
   await signIn(owner, ownerEmail, ownerPassword, OWNER_SECRET_FILE)
   await expect(owner).toHaveURL(/\/account/)
   await owner.getByTestId('organizations').getByText(tenantName, { exact: true }).click()

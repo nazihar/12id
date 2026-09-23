@@ -19,6 +19,8 @@ export const tenants = pgTable('tenants', {
   did: text('did'),
   status: text('status', { enum: TENANT_STATUSES }).notNull().default('provisioning'),
   lastError: text('last_error'),
+  /** Operator override of the per-API-key request limit (review M4); null = RATE_LIMIT_API_KEY_PER_MIN. */
+  rateLimitPerMin: integer('rate_limit_per_min'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [uniqueIndex('tenants_agent_tenant_unique').on(table.agentTenantId)])
@@ -53,7 +55,16 @@ export const wallets = pgTable('wallets', {
   /** Biometric capture add-ons the SDK reported (`provider@version`), for the console's adoption view (Phase 6). */
   captureModules: text('capture_modules').array(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  /**
+   * First time the platform saw a mediator connection for this wallet (the wake path, or the sweep's
+   * check of the mediator's connections by out-of-band id; review M10). Null = never connected.
+   */
+  connectedAt: timestamp('connected_at', { withTimezone: true }),
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  /** Why the wallet was revoked: null = by the customer (DELETE /v1/wallets/:id), 'never_connected' = the sweep. */
+  revokedReason: text('revoked_reason'),
+  /** When the sweep removed the revoked wallet's mediator connection, mediation and queue (review M10). */
+  mediationRemovedAt: timestamp('mediation_removed_at', { withTimezone: true }),
 }, (table) => [
   uniqueIndex('wallets_token_unique').on(table.tokenHash),
   uniqueIndex('wallets_oob_unique').on(table.mediatorOobId),
@@ -140,6 +151,12 @@ export const webhookEndpoints = pgTable('webhook_endpoints', {
   tenantId: uuid('tenant_id').primaryKey().references(() => tenants.id),
   url: text('url').notNull(),
   secret: text('secret').notNull(),
+  /**
+   * The secret a rotation replaced, still signed with for a while after `rotated_at` so receivers
+   * can switch over without rejecting deliveries (review M9). Plaintext for the same reason.
+   */
+  previousSecret: text('previous_secret'),
+  rotatedAt: timestamp('rotated_at', { withTimezone: true }),
   /** null = every event type. */
   events: text('events').array(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -156,6 +173,7 @@ export const webhookDeliveries = pgTable('webhook_deliveries', {
   eventType: text('event_type').notNull(),
   /** The full signed body (envelope), serialised once so retries sign identical bytes. */
   body: text('body').notNull(),
+  /** Where the last attempt went. Each attempt posts to the endpoint's current URL (review M8). */
   url: text('url').notNull(),
   status: text('status', { enum: DELIVERY_STATUSES }).notNull().default('pending'),
   attempts: integer('attempts').notNull().default(0),
@@ -167,6 +185,8 @@ export const webhookDeliveries = pgTable('webhook_deliveries', {
 }, (table) => [
   index('webhook_deliveries_due_idx').on(table.nextAttemptAt).where(sql`${table.status} in ('pending', 'sending')`),
   index('webhook_deliveries_tenant_idx').on(table.tenantId, table.createdAt),
+  // Outbox events carry an id derived from the outbox row, so a replayed row enqueues nothing (review M6).
+  uniqueIndex('webhook_deliveries_event_unique').on(table.eventId),
 ])
 
 /** Single-row cursor into agent-service's outbox. */

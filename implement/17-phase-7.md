@@ -4,6 +4,11 @@
 **Status:**
 - The review ran 2026-09-16 and changed nothing itself.
 - **Fixed since: H2 and H3, on staging 2026-09-22** (§10 item 1, [`infra/runbooks/postgres-roles.md`](../infra/runbooks/postgres-roles.md)).
+- **Re-validated against the code 2026-09-22.** Every medium finding was re-read against the current source:
+  - Twelve needed a correction to their impact, fix or status. Each has a **Re-validated 2026-09-22** note under it.
+  - A new finding, **K1** (setup routes become console only), was added by owner decision.
+  - The §10 order was rewritten.
+- **Kept open by owner decision (2026-09-22):** M13 (off-site backups, later) and M17 (tags and CI, in the publishing phase).
 - Everything else is open.
 
 Every finding names its file and line. The evidence marker on each finding says how it was checked:
@@ -25,24 +30,25 @@ Severity is exploitability × impact against the **production** threat model (cu
 | H1 | High | platform-api, agent-service | Personal data is retained forever in five places and there is no deletion path; §5.3 promises one | 2–3 d |
 | H2 | High | infra | **Done 2026-09-22.** One shared internal token and a shared Docker network let platform-api call endorser-service directly (undoes §12.10) | 0.5 d |
 | H3 | High | infra | **Done 2026-09-22.** Every service is a Postgres superuser; the endorser store lives in the internet-facing mediator's Postgres with its password | 1 d |
-| M1 | Med | agent-service, edge | Public DIDComm endpoint accepts 5 MB junk, processed serially for all tenants → cheap cross-tenant DoS | 0.5 d |
-| M2 | Med | platform-api | Webhook dispatcher is sequential: one slow customer stalls every tenant's webhooks (up to 200 s per tick) | 0.5 d |
-| M3 | Med | platform-api, endorser | Any API key can publish unlimited immutable ledger objects; no quota, no approval | 1 d |
-| M4 | Med | platform-api, edge | **B** No per-API-key / per-wallet rate limit; `GET /v1/wallet/mediator-invitation` mints an unexpiring mediator record per call | 1 d |
-| M5 | Med | agent-service | **B** Trap 44 root cause: internal API `connectionTimeout: 10_000` destroys the socket during long handlers (cred-def publish) → 502 `agent_unreachable` | 2 h |
-| M6 | Med | platform-api | Outbox consumer: a crash between the mirror upsert and the webhook enqueue loses that event for good | 0.5 d |
-| M7 | Med | agent-service | Outbox settle window: an insert committing > 2 s after its id is allocated is skipped forever | 0.5 d |
-| M8 | Med | platform-api | Delivery rows snapshot the webhook URL: retries keep posting to a URL the customer replaced or removed, up to a day | 2 h |
-| M9 | Med | platform-api | Webhook secret rotation has no overlap; in-flight and retried deliveries fail the customer's check | 0.5 d |
-| M10 | Med | platform-api, mediator | **B** Orphaned wallets, revoked wallets that stay mediated, and dead-holder queue rows have no sweep | 1 d |
-| M11 | Med | infra | Secrets are container env vars: readable via `docker inspect`, `/proc/<pid>/environ`, crash dumps | 0.5 d |
-| M12 | Med | console | CSP is only `frame-ancestors 'none'`; no `script-src`/`default-src` | 0.5 d |
-| M13 | Med | infra | Backups are VM-local, encrypted to the only age key, which lives on the same VM | owner + 0.5 d |
-| M14 | Med | SDK | Framework DEBUG lines (proof-request JSON, connection records) are forwarded to the host app's `LogSink` with no level floor; `apiBaseUrl` accepts `http://` | 2 h |
+| K1 | Med | platform-api | **Done 2026-09-22.** *Added 2026-09-22.* Every API key can do everything the console can for its tenant: publish to the ledger, change the webhook URL and secret, edit templates and policy. Setup becomes console only | 0.5 d |
+| M1 | Med | agent-service, edge | **Done 2026-09-22.** Public DIDComm endpoint accepts 5 MB junk, processed serially for all tenants → cheap cross-tenant DoS | 0.5 d |
+| M2 | Med | platform-api | **Done 2026-09-22.** Webhook dispatcher is sequential: one slow customer stalls every tenant's webhooks (up to 200 s per tick) | 0.5 d |
+| M3 | Med | platform-api, endorser | **Done 2026-09-22.** Any API key can publish unlimited immutable ledger objects; no quota, no approval | 1 d |
+| M4 | Med | platform-api, edge | **Done 2026-09-22.** **B** No per-API-key / per-wallet rate limit; `GET /v1/wallet/mediator-invitation` mints an unexpiring mediator record per call | 1 d |
+| M5 | Med | agent-service | **Done 2026-09-22.** **B** Trap 44 root cause: internal API `connectionTimeout: 10_000` destroys the socket during long handlers (cred-def publish) → 502 `agent_unreachable` | 2 h |
+| M6 | Med | platform-api | **Done 2026-09-22.** Outbox consumer: a crash between the mirror upsert and the webhook enqueue loses that event for good | 0.5 d |
+| M7 | Med | agent-service | **Done 2026-09-22.** Outbox settle window: an insert committing > 2 s after its id is allocated is skipped forever | 0.5 d |
+| M8 | Med | platform-api | **Done 2026-09-22.** Delivery rows snapshot the webhook URL: retries keep posting to a URL the customer replaced or removed, up to a day | 2 h |
+| M9 | Med | platform-api | **Done 2026-09-22.** Webhook secret rotation has no overlap; in-flight and retried deliveries fail the customer's check | 0.5 d |
+| M10 | Med | platform-api, mediator | **Done 2026-09-22.** **B** Orphaned wallets, revoked wallets that stay mediated, and dead-holder queue rows have no sweep | 1 d |
+| M11 | Med | infra | **Kept open (owner, 2026-09-23).** Secrets are container env vars: readable via `docker inspect`, `/proc/<pid>/environ`, crash dumps | 0.5 d |
+| M12 | Med | console | **Done 2026-09-22.** CSP is only `frame-ancestors 'none'`; no `script-src`/`default-src` | 0.5 d |
+| M13 | Med | infra | Backups are VM-local, encrypted to the only age key, which lives on the same VM. **Kept open (owner, 2026-09-22)** | owner + 0.5 d |
+| M14 | Med | SDK | **Done 2026-09-22.** Framework DEBUG lines (proof-request JSON, connection records) are forwarded to the host app's `LogSink` with no level floor; `apiBaseUrl` accepts `http://` | 2 h |
 | M15 | Med | SDK | **B** Genesis authenticity on device rests on a sha256 from the same platform response (minisign published, not verified) | 1 d |
-| M16 | Med | infra | No alerts for webhook dead-letters, outbox lag, endorser refusals, API 5xx rate, mediator OOB growth; alert e-mail unconfigured | 0.5 d |
-| M17 | Med | infra | Mutable image tags (`phase3`, `phase4`, `postgres:15-alpine`, `valkey:8-alpine`); agent and platform stacks run different builds of one source tree; no CI | 1–2 d (5b.3) |
-| M18 | Med | mediator | Credo `drizzle-storage` 0.6.0 creates **no secondary indexes**: every inbound message (each wallet's 10 s poll) sequentially scans `Did` and `DidcommConnection`; the pickup queue's `recipient_dids` branch is unindexed too — the mediator's scaling cliff | 0.5 d |
+| M16 | Med | infra | **Done 2026-09-23.** No alerts for webhook dead-letters, outbox lag, endorser refusals, API 5xx rate, mediator OOB growth; alert e-mail unconfigured | 0.5 d |
+| M17 | Med | infra | Mutable image tags (`phase3`, `phase4`, `postgres:15-alpine`, `valkey:8-alpine`); agent and platform stacks run different builds of one source tree; no CI. **Stack drift gone since H2/H3 (all on `phase7`); rest kept open for the publishing phase (owner, 2026-09-22)** | 1–2 d (5b.3) |
+| M18 | Med | mediator | **Done 2026-09-22.** Credo `drizzle-storage` 0.6.0 creates **no secondary indexes**: every inbound message (each wallet's 10 s poll) sequentially scans `Did` and `DidcommConnection`; the pickup queue's `recipient_dids` branch is unindexed too — the mediator's scaling cliff | 0.5 d |
 | L1 | Low | edge | `X-Powered-By: Express` on agent + mediator; HSTS without `includeSubDomains`/`preload`; `Server: Caddy` on genesis 404s | 1 h |
 | L2 | Low | edge | Grafana and the von-network browser are public login/info surfaces | 1 h |
 | L3 | Low | platform-api | List routes cap at 200 with no cursor; no `(tenant_id, created_at)` index on the three mirror tables | 0.5 d |
@@ -77,37 +83,165 @@ Severity is exploitability × impact against the **production** threat model (cu
 **Fix:** (a) `DELETE /v1/credentials/{id}`, `/v1/proofs/{id}`, `/v1/connections/{id}` that scrub `attributes`/`disclosed`, null the delivery bodies for that record, and call a new agent-service route that deletes the Credo exchange record; (b) a tenant-level retention setting (default e.g. 90 d after `done`/`abandoned`) enforced by a nightly job over the mirror tables, `webhook_deliveries` (keep metadata, null the body) and `outbox`; (c) write the customer-facing §5.3 document from what (a)+(b) actually do. Test: unit test per table + a staging run that issues, deletes, and greps every store for the value.
 **Added by Phase 6 (biometric gate):** (a) and (b) must also cover the biometric log. That means platform-api `exchange_gates` and `exchange_gate_events` (scores, decisions, AWS session ids) and biometric-service `checks`, `sessions` and `results`. Phase 6 deliberately ships **no automatic deletion** of these; face images themselves are already deleted at decision time.
 
+### K1 · Medium · API keys hold setup powers the console already covers (added 2026-09-22)
+**Where:** `services/platform-api/src/http/app.ts:133-144` (one customer scope for API keys and the console), `http/auth.ts:91-107` (an API key has no scopes and no expiry). Only three things are console only today: API keys (`routes/console.ts:34`), stats (`routes/stats.ts:188`), and the tenant-wide biometric settings (`routes/biometrics.ts:142-146`).
+**Evidence:** *source read*. With an API key, a caller can:
+- publish schemas and credential definitions, and deprecate schemas;
+- create, update and delete proof templates and both biometric policies;
+- set or delete the webhook URL, rotate its secret, and retry deliveries;
+- use every exchange and wallet route, and read every record, including attribute values and disclosed values.
+**Impact:**
+- A leaked key is a full takeover of the tenant's integration. The worst part: it can fill the immutable ledger (M3) and send webhooks and their personal data to an attacker's URL.
+- The customer backend only needs exchanges, wallets and reads while running. The console portal already calls every setup route (`console/src/features/portal/portal-data.functions.ts`).
+**Fix (owner decision 2026-09-22: setup is console only):**
+- These routes answer 403 to an API key:
+  - `POST /v1/schemas`, `/v1/credential-definitions`, `/v1/schemas/:id/deprecation`;
+  - proof-template create, update and delete;
+  - both `PUT …/biometric-policy`;
+  - `PUT` and `DELETE /v1/webhook`, `POST /v1/webhook/rotate-secret`, `POST /v1/webhook/deliveries/:id/retry`.
+- Every GET stays with the API key.
+- Pull `consoleTenant` into a shared `requireConsolePrincipal` in `http/auth.ts`, and tag these routes `CONSOLE_ONLY_TAG`.
+- The smokes switch to console headers over the SSH tunnel.
+- **Trade-off:** customers can't script their setup. An opt-in setup scope can come later if someone asks.
+- Test: an API key gets 403 and the console gets 2xx on every moved route.
+
+**Status (2026-09-22): done on staging.**
+- **Built:**
+  - `requireConsolePrincipal` in `http/auth.ts`, used by every moved route and by the three existing console-only checks (API keys, stats, biometric settings);
+  - the moved routes are tagged `CONSOLE_ONLY_TAG`: the customer `openapi.json` went from 32 to 29 paths and lost the write methods on the paths it kept, and the console client was regenerated;
+  - `docs/api.md` now says setup happens in the console.
+- **Smokes:** they cannot hold the console token, which never leaves the VM. They make their setup calls through `consoleClient` (`infra/smoke/platform-common.ts`): SSH into the platform container, as `biometric-setup.sh` does. `platform-bootstrap.ts` also prints `PLATFORM_TENANT_ID`.
+- **Evidence:**
+  - platform-api tests 59/59 (the new K1 test covers eleven write routes);
+  - staging probe from the internet with an API key: `POST /v1/schemas`, `PUT /v1/webhook`, `POST /v1/webhook/rotate-secret` and `POST /v1/proof-templates` answer 403; all five GETs answer 200;
+  - console `e2e:staging` 3/3;
+  - `smoke:platform-credo` PASSED with setup through the console client.
+
 ### M2 · Medium · Webhook dispatcher head-of-line blocking
 **Where:** `services/platform-api/src/webhooks/dispatcher.ts:95-127` — `for (const delivery of claimed) { … await deliverOnce(…) }` with `batch = 20`, `timeoutMs = 10_000`.
 **Evidence:** *source read*. Deliveries are attempted strictly one after another; the claim is global, not per tenant.
 **Impact:** one customer endpoint that hangs makes each tick take up to 20 × 10 s; every other tenant's `credential.state_changed` waits behind it. The wake path (`wallet.sync_requested`, the push trigger) is delayed by an unrelated tenant.
 **Fix:** attempt the claimed batch with bounded concurrency (e.g. 8) and at most 1–2 in flight per tenant, or claim per tenant round-robin; keep `inFlight` accounting for drain. Test: dispatcher test with one endpoint that sleeps 9 s and one fast one; assert the fast delivery completes in < 1 s.
+**Re-validated 2026-09-22:** confirmed (the loop is now `dispatcher.ts:99-128`). Changes to the fix:
+- Use **fair share, not a hard per-tenant cap.**
+  - `WEBHOOK_CONCURRENCY` sets the slots (default 8).
+  - When only one tenant has deliveries due, it gets all of them, so a single-tenant self-hosted install is never throttled.
+  - When several tenants are waiting, each gets `max(WEBHOOK_PER_TENANT, floor(concurrency / tenants waiting))` slots (default per-tenant value 2).
+  - Rows over a tenant's share go back to `pending`.
+- Add a test: one tenant with 20 due deliveries runs 8 at once.
+
+**Status (2026-09-22): done on staging.**
+- `webhooks/dispatcher.ts` is a pool of `WEBHOOK_CONCURRENCY` slots (default 8), refilled as each attempt finishes.
+- The claim is round-robin across tenants (`row_number() over (partition by tenant_id …)`). A tenant holding `WEBHOOK_PER_TENANT` slots (default 2) is skipped while others have work due. A second, uncapped pass lets it use the rest.
+- New `test/dispatcher-pool.test.ts`: while one endpoint hangs, the other tenant's 5 deliveries finish in under 1.5 s; a lone tenant reaches 8 concurrent.
+- Evidence: platform-api tests 66/66 and agent-service 51/51; staging `smoke:platform-credo` PASSED (all signatures valid, nothing pending) and `smoke:biometric-credo` 18/18 on the new build.
 
 ### M4 · Medium · **B** No per-principal rate limit; unbounded invitation minting
 **Where:** `infra/staging/Caddyfile` (`api_per_ip 600`), `services/platform-api/src/http/routes/wallets.ts:104-113`.
 **Evidence:** *source read*; 10-phase-3 "Rate limits: per-IP only".
 **Impact:** a leaked or abusive key behind a large NAT is indistinguishable from the rest of that NAT. `GET /v1/wallet/mediator-invitation` calls the mediator and creates an out-of-band record with **no expiry** (`infra/staging/mediator/patch/agent.js:107`; 10-phase-3 "There is no expiry on OOB records") on every call — a wallet-token holder can grow the mediator's `DidcommOutOfBand` table without bound.
 **Fix:** `@fastify/rate-limit` keyed on `request.tenant.principal` / `request.wallet.id` after auth (per key e.g. 300/min; per wallet 10/min; the invitation route 3 per 10 min); a mediator-side sweep of unused OOB records older than 24 h (SQL job against the Drizzle DB with a dedicated role, or a second patched route). Test: unit test hitting the limit; staging probe expecting 429.
+**Re-validated 2026-09-22:** confirmed.
+- Use an in-process limiter behind a store interface (§8), with defaults of 300/min per key, 60/min per wallet, and 3 per 10 min on the invitation route.
+- **Every limit is a setting** (`RATE_LIMIT_API_KEY_PER_MIN`, `RATE_LIMIT_WALLET_PER_MIN`, `RATE_LIMIT_INVITATION_PER_10MIN`; 0 = off), for self-hosting.
+- Add an operator override per tenant (nullable `tenants.rate_limit_per_min`) for a busy customer.
+- The per-key limit applies even with a single tenant, because it guards against a leaked key.
+
+**Status (2026-09-22): done on staging.**
+- `http/rate-limit.ts`: in-process fixed windows behind `RateLimitStore`.
+  - Per API key: `RATE_LIMIT_API_KEY_PER_MIN`, default 300. It is overridden per tenant by `tenants.rate_limit_per_min`, set through `PATCH /admin/tenants/:id` and the operator console's API keys page.
+  - Per wallet: 60/min. Per wallet on the invitation route: 3 per 10 min.
+  - 429 `rate_limited` with `Retry-After`. The console is not limited.
+- The invitation half of the fix, the mediator OOB sweep, is in M10 (`POST /admin/sweep`).
+- **Staging probe:** a fourth invitation within 10 minutes got 429 with `Retry-After: 600`.
+- Evidence: platform-api tests 72/72, endorser-service 32/32, console `tsc` + Vitest 22/22 + build + `check:client`; staging `smoke:platform-credo` PASSED, `smoke:biometric-credo` 18/18, console `e2e:staging` 3/3 on the new build.
 
 ### M6 · Medium · Lost webhook event on a crash mid-row
 **Where:** `services/platform-api/src/outbox-consumer.ts:159-167`: `applyRow` (mirror upsert with the `last_outbox_id` guard) → `enqueueEvent` → `writeCursor`, three separate transactions.
 **Evidence:** *source read*. A crash after the upsert but before `enqueueEvent` leaves the cursor behind; on restart the same row is re-read, the guard `lastOutboxId < excluded.last_outbox_id` makes the upsert a no-op, `applyRow` returns `null`, and no event is ever enqueued.
 **Fix:** run upsert + enqueue + cursor advance in one `db.transaction`. Test: inject a throw between the two calls, restart the consumer, assert the delivery row exists.
+**Re-validated 2026-09-22:** confirmed and **worse than stated**. The loop is now `outbox-consumer.ts:146-160`.
+- **Any error** after the upsert loses the event, not only a crash. The tick catches it, the row is re-read, and the guard makes the upsert a no-op. A transient DB error on the delivery insert is enough.
+- The replay also skips `gates.onExchangeState`, so a gated exchange never records `hold_reached` and waits until it expires.
+- **The fix above does not work.** `applyRow` calls agent-service over HTTP, and the gate calls biometric-service, so neither fits inside one transaction.
+- **Corrected fix: make replay safe.**
+  1. Change the guard to `last_outbox_id <= excluded.last_outbox_id`.
+  2. The gate is already compare-and-set (`biometric/gate.ts:203-221`).
+  3. Make the event id deterministic, `uuidv5("outbox:<row.id>")`, with a unique index on `webhook_deliveries(event_id)` and `onConflictDoNothing` in `enqueueEvent`.
+- Test: the enqueue throws once and runs again; exactly one delivery exists, and the gate recorded `hold_reached`.
+
+**Status (2026-09-22): done on staging.**
+- Guard `<=` in `outbox-consumer.ts`.
+- `outboxEventId(row.id)` (a v5-style UUID) as the event id.
+- Migration `0005_webhook_reliability`: unique `webhook_deliveries(event_id)`, and `enqueueEvent` uses `onConflictDoNothing`.
+- The new consumer test fails with the old guard and passes with the new one. A replay from a reset cursor adds no delivery.
+- Evidence: platform-api tests 66/66 and agent-service 51/51; staging `smoke:platform-credo` PASSED (all signatures valid, nothing pending) and `smoke:biometric-credo` 18/18 on the new build.
 
 ### M8 · Medium · Delivery URL snapshot
 **Where:** `services/platform-api/src/webhooks/events.ts:52` stores `url: endpoint.url`; `dispatcher.ts:108` posts to `delivery.url`.
 **Impact:** after `PUT /v1/webhook` with a new URL (or `DELETE /v1/webhook`), pending retries (12 attempts over about a day) keep posting signed customer data to the old host. If the change was made *because* the old host was compromised, this defeats it.
 **Fix:** resolve the URL from `webhook_endpoints` at send time (the secret already is, `dispatcher.ts:99`); on `DELETE` mark pending rows `dead` with `lastError: 'endpoint removed'`. Test: dispatcher test changing the URL between attempts.
+**Re-validated 2026-09-22:** only the URL-change half is real.
+- **The DELETE case is already handled.** The dispatcher looks up the endpoint at send time, and a missing endpoint marks the delivery `dead` with "webhook endpoint removed" (`dispatcher.ts:102-111`).
+- **The retry window is about 2.4 h, not about a day.** There are 12 attempts, and `backoffMs(1..11)` adds up to 8,715 s. The `PUT /v1/webhook` description (`webhook.ts:56`) and `docs/api.md` say "about a day", which is wrong.
+- **Fix:** take `url` from the endpoint row the dispatcher already loads. Keep `delivery.url` as the URL actually used on the last attempt. Correct the retry-window text.
+
+**Status (2026-09-22): done on staging.**
+- Every attempt posts to the endpoint's current URL, and the row records where it went.
+- The retry-window text now says about 2.5 hours in the route description, `docs/api.md` and the console's endpoint dialog.
+- The pool test changes the URL between two attempts: the retry goes to the new host.
+- Evidence: platform-api tests 66/66 and agent-service 51/51; staging `smoke:platform-credo` PASSED (all signatures valid, nothing pending) and `smoke:biometric-credo` 18/18 on the new build.
 
 ### M9 · Medium · No overlap on secret rotation
 **Where:** `services/platform-api/src/http/routes/webhook.ts:81-86`.
 **Impact:** every delivery in flight or retried after rotation is signed with the new secret; the customer's receiver, still on the old one, rejects it → dead letters on every rotation.
 **Fix:** keep `previous_secret` + `rotated_at`; send both `v1=` MACs for 24 h (Stripe pattern). Test: signer test with two secrets.
+**Re-validated 2026-09-22:** confirmed, with corrected impact and one trap.
+- **Impact:** the signature is computed at send time (`signer.ts:12-15`), so after a rotation **every** delivery carries the new secret, not only retries. A customer who takes longer than the ~2.4 h retry window (see M8) to deploy the new secret loses those events to dead letters. Otherwise deliveries are delayed by up to an hour.
+- **Trap:** our own `verifySignature` (`signer.ts:19`) builds a map from the header, so a second `v1` overwrites the first. Customers who copied it would break the same way.
+- **Fix:** accept any matching `v1` in `verifySignature`, and document in `docs/api.md` that the header can carry several.
+
+**Status (2026-09-22): done on staging.**
+- `webhook_endpoints.previous_secret` and `rotated_at` (migration `0005`). Rotation keeps the replaced secret.
+- For 24 h `signPayload` emits `t=…,v1=<new>,v1=<old>`, newest first, so the docs' old first-`v1` snippet keeps working for receivers already on the new secret.
+- `verifySignature`, the smoke receiver and the docs snippet accept any `v1`. The console's rotate dialog explains the overlap.
+- Tests cover the signer with two secrets, the 24 h window, and a dispatcher test verifying with the old and the new secret.
+- Evidence: platform-api tests 66/66 and agent-service 51/51; staging `smoke:platform-credo` PASSED (all signatures valid, nothing pending) and `smoke:biometric-credo` 18/18 on the new build.
 
 ### M10 · Medium · **B** Orphans: wallets, mediation, queue rows
 **Where:** `wallets.ts:52` (create without an idempotency key), `wallets.ts:75-88` (revoke keeps the device's mediation), mediator `message_pickup.queued_message` (12 `pending` rows for dead holders, former bucket B).
 **Impact:** the mediator relays and queues for wallets the platform no longer maps; the relay is exactly the resource §2.3 says to protect. Never-connected wallets accumulate.
 **Fix:** nightly job: wallets with `mediator_connection_id IS NULL` older than 7 d → revoked; revoked wallets → delete their mediator connection, mediation record and queued rows (needs a write path to the mediator: a third patched admin route `DELETE /admin/connections/:id`, or a SQL job with a dedicated role); queued rows older than 30 d → delete with a metric. Test: staging run with a throw-away wallet.
+**Re-validated 2026-09-22:** confirmed, with two corrections.
+- **"Never connected" can't be read from `mediator_connection_id`.** That column is a cache:
+  - it is filled on the first mediator webhook (`wake.ts:37`);
+  - it is reset whenever the app fetches a new invitation (`wallets.ts:112`).
+- **The correct test:** there is no `DidcommConnection` row whose `out_of_band_id` equals the wallet's `mediator_oob_id`. platform-api can already check this through `platform_ro` (`mediator-client.ts:56`), batched with `= any($1)`.
+- The console dashboard's count (`stats.ts:163`, Phase 4 C8) uses the same flawed test and gets the same fix.
+- **What the user sees if a never-connected wallet is revoked:**
+  - They lose nothing, because no credential can have reached that wallet.
+  - When the app returns, the SDK asks the backend for a new token.
+  - Within 24 h of the original call, `POST /v1/wallets` with the same idempotency key answers 409 `wallet_revoked`, and the backend must create a new wallet with a new key.
+  - After 24 h the key has expired, and the same call simply creates a new wallet.
+- **Deleting a revoked wallet's mediation cuts that phone off:** it needs `reset()` and re-issue. That contradicts `wallets.ts:77`, so:
+  - wait a 30-day grace period after `revoked_at`;
+  - update the route description and `sdk-android/docs/integration.md`;
+  - use the patched `DELETE /admin/connections/:id` (Credo's repository, not raw SQL).
+
+**Status (2026-09-22): done on staging.**
+- **platform-api `src/sweep.ts`** runs hourly (`SWEEP_INTERVAL_MS`) and is idempotent:
+  1. It marks `wallets.connected_at` from the mediator's connections by out-of-band id. The wake path now sets it too.
+  2. It revokes wallets still unconnected after `WALLET_UNCONNECTED_REVOKE_DAYS` (7), with `revoked_reason = 'never_connected'`.
+  3. `WALLET_REVOKED_GRACE_DAYS` (30) after any revocation, it calls the mediator's new `DELETE /admin/connections/:id` (mediation, connection, queue) and sets `mediation_removed_at`.
+  4. It calls `POST /admin/sweep`: unused single-use invitations older than 24 h, and queued messages older than 30 d. The reusable startup invitation is kept.
+- Migration `0006_wallet_sweep_rate_limits`, which backfills `connected_at` from the cached mapping.
+- The dashboard's never-connected count now uses `connected_at`.
+- The wallet view gains `connectedAt` and `revokedReason`.
+- The revoke description, `docs/api.md` and `sdk-android/docs/integration.md` explain the lifecycle and the 409 `wallet_revoked` handling.
+- **Mediator `-p5`:** the two admin routes, token-guarded. Probes: 401 without the token, 400 for a non-UUID, zeros for an unknown id, 404 from the internet.
+- **The first staging sweep proved the correction.** The review's rule (`mediator_connection_id IS NULL`, older than 7 d) matched 3 live wallets. The sweep found all 3 (plus one more) connected in the mediator: `connected: 4, revokedNeverConnected: 0`. The old rule would have cut off working wallets.
+- Evidence: platform-api tests 72/72, endorser-service 32/32, console `tsc` + Vitest 22/22 + build + `check:client`; staging `smoke:platform-credo` PASSED, `smoke:biometric-credo` 18/18, console `e2e:staging` 3/3 on the new build.
+- **Not run:** checking on the phone that the SDK onboards again after a `never_connected` revocation.
 
 ### L3 · Low · Pagination and indexes
 `exchanges.ts` list routes: `limit ≤ 200`, ordered by `createdAt desc`, no cursor — a tenant with more than 200 connections cannot list the rest. Queries filter `(tenant_id, state)` and sort by `created_at`; only the `(tenant_id, record_id)` PK and `(tenant_id, connection_id)` indexes exist (`db/schema.ts:73,89,106`). Fix: `?after=<createdAt,recordId>` cursor + index `(tenant_id, created_at desc)` on the three mirror tables. *Index half planned in Phase 4 C8 (`11-phase-4.md` §C8, migration `0003_stats_indexes`: `(tenant_id, created_at desc)` and `(tenant_id, state)` on all three tables, needed by the dashboard aggregates); the cursor half stays here.*
@@ -133,21 +267,81 @@ Hashed tokens with prefix lookup and length-checked `timingSafeEqual` (`auth/tok
 **Evidence:** *run* — `POST https://agent.<domain>/ -H 'content-type: application/ssi-agent-wire' --data '{"protected":"x"}'` → `500 Error processing message` with `X-Powered-By: Express` (junk reaches Credo). The body limit and serial processing are *source read*.
 **Impact:** 300 × 5 MB per minute per IP is JSON-parsed and unpacked in the one queue every tenant shares; legitimate holder replies (credential requests, presentations) wait behind it. No authentication exists on this endpoint by design.
 **Fix:** Caddy `request_body { max_size 256KB }` on the `@didcomm` handle (a v1 credential message with 125 attributes is far below this — measure and set with margin); lower `agent_per_ip` to about 60/min; consider a small Express handler before the transport that answers 400 for a body that is not a JWE envelope; schedule the concurrency switch for the Phase 8 load test. Test: staging probe expecting 413 for a 300 KB body.
+**Re-validated 2026-09-22:** confirmed. **Also missed:**
+- `mediator.` runs the same Credo HTTP inbound transport with no body cap, and it is the more critical service. It gets the same `request_body` cap.
+- Holders behind carrier-grade NAT share addresses, so lowering the per-IP limits can block real users.
+  - Lower `agent_per_ip` (to about 120, not 60) only after reading the staging access logs.
+  - Leave `mediator_per_ip` alone until the Phase 8 load test.
+- These are edge settings, so self-hosters get the recommended values in the self-hosting docs.
+
+**Status (2026-09-22): done on staging.**
+- **Built:**
+  - Caddy `request_body { max_size 512KB }` on the agent's `@didcomm` handle and on the mediator site;
+  - mediator image `12id/mediator:375518d-p3`: the patched `agent.js` gives the WebSocket server `maxPayload: 512 KiB` (ws defaults to 100 MiB, and Caddy's cap does not cover WebSocket frames).
+- **Sizing:** a 125-attribute offer or presentation with short values is roughly 30–40 KB of JSON and about 50–60 KB once encrypted and forwarded.
+- **Evidence:**
+  - a 700 KB POST answers 413 on `agent.` and `mediator.`;
+  - a 600 KB WebSocket message is closed with 1009, and a 10 KB one is accepted;
+  - both mediator replicas rolled one at a time and are healthy;
+  - `smoke:platform-credo` PASSED.
+- **Found on the way (trap 50):** the edge container had not seen any Caddyfile change since 2026-09-20. A single-file bind mount keeps the old inode after a tarball sync, so `caddy reload` reloaded the old file. Fixed by recreating the container.
+- **Also observed:** Credo holds each rejected HTTP request open for 10 s (`processedMessageListenerTimeoutMs`) because no "processed" event arrives. The serial queue itself moves on immediately, so this only ties up sockets. The per-IP limit bounds it.
+- **Not changed:** `agent_per_ip` / `mediator_per_ip` (carrier NAT; to be revisited from access logs and the Phase 8 load test). The phone smoke over the new mediator was not run (needs the device).
 
 ### M3 · Medium · Unlimited ledger writes per API key
 **Where:** `services/platform-api/src/http/routes/catalogue.ts:68` (any tenant principal), `services/endorser-service/src/policy.ts` (checks *who*, never *how many*).
 **Impact:** ledger objects are immutable and, on a production network, cost money or governance; a leaked key can publish thousands of schemas under the tenant's DID in minutes. The endorser audit table records it but nothing stops it.
 **Fix:** per-tenant daily quota on schema/cred-def publication in platform-api (default e.g. 20/day, raised by an operator); optional tenant setting "console only" so API keys cannot publish; endorser-service refuses above a hard ceiling per tenant per day as the second line. Test: unit tests on both.
+**Re-validated 2026-09-22:** confirmed (`policy.ts` checks who, never how many).
+- **K1 removes publishing from API keys altogether**, so the platform-api quota and the "console only" tenant setting are dropped.
+- What remains is the endorser-side ceiling, as a backstop against a hijacked console account or a bug:
+  - `ENDORSER_DAILY_CEILING`, default 50 across schemas and cred-defs, 0 = off (self-hosting);
+  - counted from `endorsement_audit` `(tenant_id, created_at)`.
+
+**Status (2026-09-22): done on staging.**
+- `endorser-api.ts` refuses a schema or cred def once the tenant has `ENDORSER_DAILY_CEILING` (default 50, 0 = off) allowed ledger writes in the last 24 h. The refusal is audited. NYMs are never counted.
+- The count query was checked against Postgres: allowed schemas and cred defs in the window only.
+- Staging's busiest smoke tenant is at 14 per 24 h. Heavy smoke days should reuse `CRED_DEF_ID`.
+- Evidence: platform-api tests 72/72, endorser-service 32/32, console `tsc` + Vitest 22/22 + build + `check:client`; staging `smoke:platform-credo` PASSED, `smoke:biometric-credo` 18/18, console `e2e:staging` 3/3 on the new build.
 
 ### M5 · Medium · **B** Trap 44 re-diagnosed: `connectionTimeout` on the internal API
 **Where:** `services/agent-service/src/http/internal-api.ts:43` `connectionTimeout: 10_000`; `services/platform-api/src/agent-client.ts:96` default `timeoutMs = 30_000` (not passed from `main.ts`, so 30 s).
 **Evidence:** *source read*. Fastify's `connectionTimeout` is Node's `server.timeout`: the socket is destroyed after 10 s of *inactivity*, and a handler still publishing a credential definition has written nothing. The client then sees a socket error, not a timeout — which is the `502 agent_unreachable` with both services healthy in 14-phase-5 finding 11. The platform client's 30 s never fires.
 **Fix:** on the internal API set `connectionTimeout: 0` and use `requestTimeout` (headers) plus per-route deadlines; better, make `POST /tenants/:id/credential-definitions` return 202 and let the catalogue row's `status` carry the result (the catalogue already persists action state, 8-phase-2 T2). Test: a route that sleeps 15 s answered through the real server.
+**Re-validated 2026-09-22:** confirmed (`internal-api.ts:40`) and **wider than stated**. Every long synchronous route is exposed, including:
+- `POST /tenants/:id/onboard` (`command-routes.ts:88-91`, a DID registration on the ledger);
+- `POST …/schemas` (`:94`).
+
+The fix:
+- `connectionTimeout: 0` plus `requestTimeout: 120_000`. Idle keep-alive sockets still close through `keepAliveTimeout`, so drain is unaffected.
+- The platform client has one timeout for every call (`agent-client.ts:102`, 30 s). It gets a per-call override, 90 s for publish and onboard.
+- The async 202 publish is a follow-up.
+
+**Status (2026-09-22): done on staging.**
+- agent-service `internal-api.ts` now sets `connectionTimeout: 0` and `requestTimeout: 30_000`.
+- platform-api's agent client gained `ledgerTimeoutMs` (90 s) for onboard, schema and cred-def calls.
+- **Evidence:**
+  - A new test holds a handler silent for 11 s over a real socket. It failed with `fetch failed` on the old code and passes on the new.
+  - agent-service tests 49/49.
+  - `smoke:platform-credo` published a cred def in 4.5 s and PASSED.
+- **Left:** the async 202 publish (optional).
 
 ### M7 · Medium · Outbox settle window skips slow commits
 **Where:** `services/agent-service/src/http/outbox-routes.ts:41-46` (`createdAt <= now − 2 s`); the consumer advances its cursor past every row it saw.
 **Evidence:** *source read*; the file's own comment names the gap ("anything but a stalled insert").
 **Fix:** either insert outbox rows inside the same transaction as the state change so ids and commits are ordered, or hold the cursor below `txid_current_snapshot()`'s xmin (the "xmin horizon" pattern). Test: two concurrent inserts, the lower id committing later.
+**Re-validated 2026-09-22:** confirmed. The inserts are fire-and-forget autocommits (`outbox-listener.ts:143`), and the feed filter is at `outbox-routes.ts:43-47`.
+- **Neither fix above works:**
+  - The first is impossible: Credo commits to Askar, which is a different database.
+  - The xmin horizon has an edge case: `nextval` runs before the xid is assigned, so a lower id can hold a higher xid.
+- **Corrected fix:** take `pg_advisory_xact_lock(<outbox key>)` in the insert transaction, so outbox commits happen in id order. This also works across replicas. Keep the 2 s window as a margin.
+- Rare in practice (it needs a commit stalled by more than 2 s), but there is no recovery: reconciliation only re-emits for exchanges stuck in Credo.
+
+**Status (2026-09-22): done on staging.**
+- `events/outbox-writer.ts` `insertOutboxRow`: `pg_advisory_xact_lock`, then insert, in one transaction.
+- All four writers use it: the listener, abandonment in `exchanges.ts`, and both reconcile paths.
+- New `test/outbox-order.test.ts` (real Postgres): while a writer holds an uncommitted row, a second writer waits and nothing is visible; after the commit the ids are in commit order. 25 concurrent writers lose nothing.
+- Evidence: platform-api tests 66/66 and agent-service 51/51; staging `smoke:platform-credo` PASSED (all signatures valid, nothing pending) and `smoke:biometric-credo` 18/18 on the new build.
 
 ### H2 · High · ✅ Done 2026-09-22 · One internal token, one shared network → platform-api can reach the endorser
 **Where:** `infra/staging/compose.agent.yml`: `INTERNAL_API_TOKEN`, `ENDORSER_SERVICE_TOKEN` and the endorser's `INTERNAL_TOKEN` are all `${AGENT_INTERNAL_TOKEN}`; `endorser-service` is on `[default, mediator]`; `compose.platform.yml`: `platform-api` is on `[agent, mediator]` and holds `AGENT_API_TOKEN = ${AGENT_INTERNAL_TOKEN}`.
@@ -213,20 +407,63 @@ The edge blocks hold under path normalisation and header casing; the port surfac
 **Where:** every `compose.*.yml` `environment:` block (store keys, DB passwords, all tokens, `BETTER_AUTH_SECRET`).
 **Impact:** `docker inspect`, `/proc/<pid>/environ`, `ps e`, child processes and crash reports all carry them; the tmpfs decryption (`infra/scripts/deploy.sh:35-37`) protects the file on disk, not the running container.
 **Fix:** Compose `secrets:` (file mounts under `/run/secrets`) with each service reading `*_FILE` variants; keep SOPS as the source. Test: `docker inspect` shows no secret values.
+**Re-validated 2026-09-22:** confirmed. H3's new role passwords are env vars too.
+- **Achievable:**
+  - our services and the console read `*_FILE`;
+  - Postgres takes `POSTGRES_PASSWORD_FILE`.
+- **The limit:** the third-party mediator image reads only env vars. A wrapper that reads the files and then `exec`s keeps them out of `docker inspect`, but not out of that process's `/proc/<pid>/environ`. Accept this and document it.
+- **The pass condition stays:** `docker inspect` shows no secret values for any container.
+
+**Status (2026-09-23): kept open by owner decision.** It moves to the production host, where the choice belongs with M13 (backups) and M17 (CI and tags). The trade-off that has to be settled there:
+- **Files on disk** (root-only, e.g. `/opt/12id/run-secrets`): the VM still restarts its containers unattended after a reboot, and the values leave `docker inspect` and Docker's own on-disk config. A decrypted copy then lives on the disk, like the age key already does.
+- **Files on tmpfs:** nothing decrypted at rest, but a reboot leaves every container crash-looping until an operator runs the deploy script.
+- Either way the mediator is third-party and reads only env vars: a wrapper keeps its values out of `docker inspect`, not out of its own `/proc/<pid>/environ`.
 
 ### M13 · Medium · Backups on the VM, one age recipient
 **Where:** `infra/scripts/backup-postgres.sh:12,23` (`KEEP_DAYS` rotation, VM-local), `.sops.yaml` (single recipient), the owner item "back up the age key" (Appendix A).
 **Impact:** disk loss or a mis-typed `rm` takes the data and the only key that decrypts the backups; the script's own header calls this "not a production pattern".
 **Fix:** a second age recipient (operator's offline key) on both SOPS and backups; nightly copy to object storage in another provider/region; a restore drill from the off-site copy. Owner decision on where.
+**Re-validated 2026-09-22 — kept open (owner decision: off-site backups come later).** Nothing has changed:
+- Backups go to `/opt/12id/backups` nightly at 02:30 UTC and are kept 7 days (`backup-postgres.sh:16-18`).
+- They are encrypted to the only age key, `/opt/12id/secrets/age.key`, which is on the same VM (`6-phase-1-findings.md` §W9).
+- Recommended in the meantime: copy the age key somewhere safe off the VM. It costs nothing.
 
 ### M16 · Medium · Alert coverage
 **Where:** `infra/staging/monitoring/alerts.yml` — 14 alerts, all infrastructure-level (targets, TLS, ledger, mediator queue, disk, memory, restarts).
 **Missing:** `webhook_deliveries` dead count rising; outbox lag (`max(outbox.id) − outbox_cursor.last_id`); endorser `allowed = false` rate; platform-api / agent-service 5xx rate; mediator `DidcommOutOfBand` and `DidcommMediation` record growth (the open-relay signal beyond the spike alert); idempotency table size. Alert e-mail still needs the app password (owner). Fix: the postgres-exporter custom queries already exist (`monitoring/postgres-exporter-queries.yml`) — add these and their rules; fire each once deliberately (Phase 1 item still open).
+**Re-validated 2026-09-22:** partly changed.
+- There are 19 rules now (Phase 6 added the biometric ones), and Alertmanager's SMTP reads `/run/smtp/password`. The owner still has to confirm that mail actually arrives.
+- The application alerts are still missing.
+- **No service exposes `/metrics`.** So:
+  - the 5xx-rate alert comes from Caddy's metrics (`caddy_http_requests_total` by code);
+  - dead letters, outbox lag, OOB growth and endorser refusals come from SQL in `postgres-exporter-queries.yml`.
+
+**Status (2026-09-23): done on staging. 26 rules, 22 targets, all up.**
+- **New metric sources:**
+  - Caddy's own per-server metrics (the `servers { metrics }` global option), scraped from the admin endpoint: status codes at the edge;
+  - `postgres-exporter-agent` (9190, `agent_service`): outbox backlog and the age of the oldest unacknowledged row, which is exactly the consumer's lag;
+  - `postgres-exporter-endorser` (9191, `endorser_service`): decisions in 24 h by outcome, and the busiest tenant's ledger writes (pressure against M3's ceiling);
+  - the platform exporter gained webhook deliveries by status with the oldest age, wallet counts (including never-connected, review M10) and the idempotency table size;
+  - the drizzle exporter gained `DidcommOutOfBand` / `DidcommMediation` / `DidcommConnection` counts.
+- `pg-roles.sh` grants `monitoring_ro` read access to those tables (it is still read-only).
+- **New alerts:** `WebhookDeadLetters`, `WebhookBacklogStuck`, `OutboxLag`, `EndorserRefusals`, `EdgeServerErrors`, `MediatorOutOfBandGrowth`, `IdempotencyKeysGrowing`.
+- **Each was fired deliberately** (thresholds temporarily replaced by an always-true expression): all 7 reached Prometheus and Alertmanager, which mails the ops address. The real thresholds were restored, and nothing is firing now.
+- **Owner:** confirm the seven `[FIRING]` mails (and their `[RESOLVED]` pairs) arrived at onetwoidadmin@gmail.com.
+- **Found on the way:** a single-file bind mount again (trap 50). A changed exporter query file needs `--force-recreate`, not just `up -d`.
 
 ### M17 · Medium · Mutable tags, drifted stacks, no CI
 **Where:** `compose.agent.yml` `12id/services:phase3` vs `compose.platform.yml` `12id/services:phase4` (same Dockerfile, different builds); `postgres:15-alpine`, `valkey/valkey:8-alpine`, `node:22-alpine` (webhook-sink) unpinned; `nazihar/12id` has no `.github/`.
 **Impact:** "what is running" cannot be answered from the repo; a `docker compose pull` can move a database major silently; every gate in this file was run by hand.
 **Fix:** tag images by git SHA and deploy both stacks from the same one; pin base images by digest; 5b.3 CI (PR: typecheck + tests + `npm audit --audit-level=high` + `check:client` + SDK `apiCheck`; tag: build, push, `services/VERSIONS.md`).
+**Re-validated 2026-09-22 — partly fixed, the rest kept open.**
+- **Fixed by the H2/H3 rollout:** the agent, platform and biometric stacks all run `12id/services:phase7`, so they no longer drift apart.
+- **Still true:**
+  - tags are mutable;
+  - the console runs `phase6`, and its tools image `phase4-tools`;
+  - the base images are unpinned;
+  - there is no CI.
+- **Correction:** "a `docker compose pull` can move a database major silently" is wrong. `postgres:15-alpine` stays on 15 and `valkey/valkey:8-alpine` stays on 8; only patch releases change.
+- **Owner decision:** kept open until the publishing phase (tag policy, digest pins, CI with 5b.3), with production images built fresh then. Until then, staging deploys every stack from one build per step.
 
 ### M18 · Medium · The mediator's databases have no secondary indexes
 **Where:** DDL read out of the pinned image `mediator:375518d` (`@credo-ts/drizzle-storage@0.6.0`, `migrations/{core,didcomm,tenants,…}/postgres/*.sql`) and `phase0/mediator-src/packages/transport-queue-postgres/migrations/001-initial-schema.sql`.
@@ -250,6 +487,33 @@ create index if not exists queued_recipient_dids_gin on queued_message using gin
 create index if not exists queued_pending_idx on queued_message (connection_id, created_at) where state = 'pending';
 ```
 Confirm the exact predicate shapes with `auto_explain` / `pg_stat_statements` on staging before finalising (the column list above is from the tag → column mapping in drizzle-storage; the planner decides). File upstream alongside the queue bug. Test: `EXPLAIN (ANALYZE)` of a poll's queries with 10 k synthetic `Did` + connection rows, before/after; the Phase 8 load test then measures the real profile.
+**Re-validated 2026-09-22:** the finding is confirmed, but the fix can't go in `Dockerfile.migrate`:
+- The `migrate` container (`compose.mediator.yml:118-131`) is the mediator image with pnpm, and it has no `psql`.
+- `queued_message` lives in `message_pickup`, which the mediator creates on its first start, after `migrate` has run.
+
+**Corrected fix:**
+- Put the list in `infra/staging/mediator/indexes.sql`, using `create index concurrently if not exists`.
+- A one-shot `mediator-indexes` service (`postgres:15-alpine`, role `mediator`) runs it with `depends_on: mediator-1: service_healthy`.
+- `conn_oob_idx` also serves M10's never-connected check.
+
+**Status (2026-09-22): done on staging. Indexes alone would not have worked.**
+- **What the review missed.** Statement logging on staging showed every array/jsonb lookup written by drizzle-storage 0.6.0 as `to_jsonb(column) @> to_jsonb(array[…])`. `to_jsonb` is STABLE, not IMMUTABLE: it cannot be indexed, and a plain GIN index on the column is never used for it. The hottest query of all has that form: the `Did` lookup by recipient-key fingerprint, run for every inbound message and every 10 s poll.
+- **Fix, part 1: mediator image `-p4`.** `patch/queryToDrizzlePostgres.mjs` (`arrayContainsAll`) emits native `column @> $n` for jsonb and array columns, encoded by the column itself. The meaning is the same.
+- **Fix, part 2: indexes.** `infra/staging/mediator/indexes.sql` holds 12 indexes on `drizzle` and 2 on `message_pickup`. They are GIN on the containment columns, plus btree on the equality lookups: connection by DID, by `out_of_band_id` and by `id`; mediation by connection; out-of-band invitation by thread and by `@id`. The one-shot `mediator-indexes` service applies them with `CREATE INDEX CONCURRENTLY IF NOT EXISTS` as the `mediator` role.
+- **Evidence:**
+  - **Scratch copy of the staging schema with 10,000 synthetic wallets:**
+
+    | Query | Before | After |
+    |---|---|---|
+    | `Did` fingerprint lookup | 12 ms, seq scan even with the GIN index | 0.086 ms, bitmap index scan |
+    | mediation by recipient key | 11 ms | 0.06 ms |
+    | connection, mediation, platform `out_of_band_id` lookups | 0.7–3 ms, seq scan | 0.06–0.15 ms, index scan |
+
+  - **Staging:** all 14 indexes exist, and both replicas rolled to `-p4` one at a time. A statement capture during `smoke:platform-credo` (PASSED) showed **0** `to_jsonb` forms and 264 native containment lookups. With seq scan disabled, the planner uses `12id_did_recipient_key_fingerprints_gin`; the staging tables are too small for it to choose the index on cost.
+- **Left:**
+  - file the `to_jsonb` form upstream with the queue bug;
+  - re-check the patch on any drizzle-storage upgrade;
+  - the Phase 8 load test measures the real profile.
 
 ### L1 · Low · Header hygiene
 *run*: `X-Powered-By: Express` on `agent.` and `mediator.`; HSTS `max-age=31536000` without `includeSubDomains`/`preload`; `Server: Caddy` on `genesis.` 404s. Fix: `header -X-Powered-By` in the `hardening` snippet; `Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"` (every subdomain is TLS already); `handle_errors` on genesis.
@@ -277,6 +541,20 @@ Loopback-only port publishing; `DOCKER-USER` drops on the node-to-node ports (`u
 **Where:** `Caddyfile` apex block: `Content-Security-Policy "frame-ancestors 'none'"`; `console/src/start.ts:17-22` sets nosniff / referrer / frame headers, no CSP.
 **Impact:** an XSS in any console dependency, or a crafted tenant name rendered unsafely, runs with the operator's session — every tenant's console scope.
 **Fix:** a per-request nonce in `securityHeaders` (`default-src 'self'; script-src 'nonce-…' 'strict-dynamic'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`) passed to TanStack Start's script tags; drop the Caddy CSP once the app sets it. Test: a Playwright staging spec that fails on a CSP violation.
+**Re-validated 2026-09-22:** confirmed (`console/src/start.ts:17-22`, `Caddyfile:148`). **Feasibility checked:** the installed router (Start 1.168.54) applies `router.options.ssr.nonce` to its inline scripts (`@tanstack/react-router/dist/esm/ssr/renderRouterToStream.js:25,76`). So the per-request nonce goes to `ssr.nonce` in the per-request `getRouter`.
+
+**Status (2026-09-22): done on staging.**
+- **`console/src/start.ts`:** the `securityHeaders` request middleware creates a 16-byte nonce per request and sends `default-src 'self'; script-src 'nonce-…' 'strict-dynamic'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`. It passes the nonce on as request context.
+- **Router:** `router.tsx` reads it through `getGlobalStartContext()` into `ssr.nonce`. The read is guarded for router builds outside a request.
+- **One more inline script:** the Playwright guard found that next-themes' pre-paint theme script had no nonce. `__root.tsx` now passes it `nonce`.
+- **Dev mode:** the header is not sent under `vite dev`, which injects unnonced scripts.
+- **Edge:** the Caddy apex no longer sets `frame-ancestors 'none'`, because Caddy's `header` would replace the app's policy. The Caddy container was recreated (trap 50).
+- **Test:** `console/e2e/csp.ts` is an automatic fixture. Every staging spec fails on any CSP report from any page, the owner's second browser context included.
+- **Evidence:**
+  - Vitest 23/23 (a new policy test), `tsc`, build and `check:client` clean;
+  - one CSP header, with a fresh nonce on every request;
+  - all 5 script tags and the modulepreload link on `/login` carry the nonce;
+  - `e2e:staging` 3/3 with **zero** CSP violations. The first run failed on the next-themes script, which shows the guard works.
 
 ### L11 · Low · Session lifetime
 `auth.server.ts:56-59`: 7 d sliding for everyone; `middleware.ts:19` caps operators at 12 h. Consider 24 h for tenant members (they manage API keys and webhook URLs).
@@ -292,6 +570,17 @@ A branded `Principal` only the middleware can create; the tenant resolved from t
 **Where:** `sdk-android/sdk/src/main/java/org/slf4j/impl/StaticLoggerBinder.kt:102` `isDebugEnabled = SdkLog.sink != null`; framework DEBUG lines include `Proof request json:` (`ariesframework/…/proofs/ProofCommand.kt:148`), `Connection record: {…}` (`connection/ConnectionService.kt:303` — DIDs, DID documents, the invitation), `Parsed Peer DID JSON` (`PeerDIDService.kt:88`); `OneTwoIdConfig.kt` accepts any `apiBaseUrl`; the sample writes the sink to Logcat.
 **Impact:** an integrator who wires `logSink` to a crash reporter (the obvious thing to do) ships DIDComm internals and proof-request contents to a third party; a typo `http://` base URL sends the wallet token in clear on API 24–27 (cleartext is only blocked by default from API 28).
 **Fix:** `OneTwoIdConfig(minLogLevel = Info)` and never forward framework DEBUG unless the host opts in; refuse a non-`https` base URL outside debuggable builds; document both in `docs/integration.md`. Test: JVM test that a Debug line does not reach a sink configured at Info.
+**Re-validated 2026-09-22:** confirmed.
+- `StaticLoggerBinder.kt:102-123`: every level is enabled whenever a sink is set.
+- `OneTwoIdConfig.kt` does not check `apiBaseUrl`.
+- Adding `minLogLevel` changes the public API, so run `apiDump`.
+
+**Status (2026-09-22): done (SDK code; not on a device).**
+- `OneTwoIdConfig(minLogLevel = LogLevel.Info)` by default. `SdkLog.enabled()` is the one floor, and the slf4j binding's `is*Enabled` asks it, so the framework itself stops formatting debug lines.
+- `internal/ApiBaseUrl.kt`: `initialize` refuses a non-https `apiBaseUrl` with the new `OneTwoIdException.InvalidConfiguration`, unless the app is debuggable (`FLAG_DEBUGGABLE`), where `http://` is allowed for a local platform API.
+- `docs/integration.md` documents both, and the sample shows the opt-in commented out.
+- **Evidence:** `:sdk:testDebugUnitTest` 44/44, including a test that a framework debug line does not reach a sink at Info and that the binding reports `isDebugEnabled = false`; `apiDump` + `apiCheck` green with the new constructor parameter and exception.
+- **Not run:** the phone smoke (`smoke:sdk-android`), which needs the device.
 
 ### M15 · Medium · **B** Genesis authenticity
 **Where:** `sdk/…/internal/GenesisCache.kt` (sha256 from `/v1/ledger`), `platform-api/src/http/routes/public.ts` (publishes the minisign URL and key).
@@ -412,18 +701,25 @@ Two cheap adjacent wins while in here: `GET /v1/ledger` returns static, env-deri
 - cross-database access denied
 - restore drill passed
 - smokes: biometric 18/18, platform-credo, console 3/3 |
-| 2 | M11: file-based secrets | `docker inspect` clean |
-| 3 | M1: DIDComm body cap + per-IP tightening | staging probe 413 |
-| 4 | M5: internal-API timeout fix (+ async cred-def) | 15 s handler test; `smoke:platform-credo` |
-| 5 | M2 + M6 + M8 + M9: dispatcher concurrency, transactional consumer, live URL, secret overlap | dispatcher + consumer unit tests |
-| 6 | M4 + M10 + M18: per-principal rate limits; wallet / mediation / queue sweep; mediator index migration | 429 probe; staging sweep run; `EXPLAIN` before/after on 10 k synthetic rows |
-| 7 | M3: ledger write quota | unit tests; endorser refusal metric |
-| 8 | M12: nonce CSP | Playwright CSP spec |
-| 9 | M14: SDK log floor + https check | JVM tests |
-| 10 | H1: deletion routes + retention job + the §5.3 customer document (2–3 d) | staging issue → delete → grep every store |
-| 11 | L1, L4, L5, L6, L7, L13, L14, L15, I2 | probes / unit tests; `valkey-cli config get maxmemory-policy` returns `allkeys-lru`; one agent-service call per offer instead of two; `curl -I /v1/ledger` shows `Cache-Control` |
+| 2 | ✅ **Done 2026-09-22.** K1: setup routes console only (added 2026-09-22) | API key → 403 on every moved route, console → 2xx; smokes on console headers. **Passed:** staging probe 403/200, `e2e:staging` 3/3, `smoke:platform-credo` |
+| 3 | ✅ **Done 2026-09-22.** M5: internal-API timeout fix (per-call client timeout; async cred-def later) | 15 s handler test; `smoke:platform-credo`. **Passed:** 11 s silent-handler test (fails on the old code), `smoke:platform-credo` |
+| 4 | ✅ **Done 2026-09-22.** M2 + M6 + M8 + M9: fair-share dispatcher concurrency, replay-safe consumer (deterministic event id), live URL, secret overlap with multi-`v1` verify | dispatcher + consumer + signer unit tests. **Passed:** 66/66, `smoke:platform-credo`, `smoke:biometric-credo` 18/18 |
+| 5 | ✅ **Done 2026-09-22.** M7: advisory-locked outbox insert | concurrent-insert test. **Passed:** `outbox-order.test.ts` (real Postgres), smokes above |
+| 6 | ✅ **Done 2026-09-22.** M1: DIDComm body cap on agent **and mediator** (per-IP only after reading logs) | staging probe 413 on both. **Passed:** 413 on both, WebSocket 1009, `smoke:platform-credo` |
+| 7 | ⏸ **Kept open (owner, 2026-09-23)**, with the production host. M11: file-based secrets (mediator: `docker inspect` only) | `docker inspect` clean |
+| 8 | ✅ **Done 2026-09-22.** M4 + M10 + M18: configurable per-principal rate limits; wallet / mediation / queue sweep (OOB-based "never connected", 30 d grace for revoked); mediator index service. ✅ **M18 done 2026-09-22** (drizzle-storage patch `-p4` + 14 indexes) | 429 probe; staging sweep run; `EXPLAIN` before/after on 10 k synthetic rows. **M18 passed:** 12 ms → 0.09 ms on 10 k wallets; 0 `to_jsonb` forms on staging. **M4/M10 passed:** invitation 429 probe; first sweep `connected: 4, revoked: 0` |
+| 9 | ✅ **Done 2026-09-22.** M3: endorser daily ceiling (`ENDORSER_DAILY_CEILING`) | policy unit test. **Passed:** 32/32, count query checked on Postgres |
+| 10 | ✅ **Done 2026-09-22.** M12: nonce CSP | Playwright CSP spec. **Passed:** `e2e:staging` 3/3 with the CSP guard, 0 violations |
+| 11 | ✅ **Done 2026-09-22.** M14: SDK log floor + https check | JVM tests; `apiDump`. **Passed:** 44/44, `apiCheck` green. Phone smoke not run |
+| 12 | ✅ **Done 2026-09-23.** M16: application alerts (SQL + Caddy metrics) | each fired once. **Passed:** 7 new rules fired to Alertmanager and were restored; 26 rules, 22/22 targets up |
+| 13 | H1: deletion routes + retention job + the §5.3 customer document (2–3 d) | staging issue → delete → grep every store |
+| 14 | L1, L4, L5, L6, L7, L13, L14, L15, I2 | probes / unit tests; `valkey-cli config get maxmemory-policy` returns `allkeys-lru`; one agent-service call per offer instead of two; `curl -I /v1/ledger` shows `Cache-Control` |
 
-**Owner decisions (not code):** M13 off-site backups and a second age recipient; M16 alert channel; M17 / 5b.3 CI and tag policy; L2 whether Grafana and the ledger browser exist in production at all; L8 rotate the `.staging` credentials; §12.1 ledger topology, a clean production host, TAA (bucket C).
+**Order revised 2026-09-22** after the re-validation: K1 added; M5 and the webhook bundle moved up; M7 and M16 given their own rows.
+
+**Kept open by the owner:** M13 off-site backups and a second age recipient (2026-09-22, later); M17 tag policy, digest pins and CI (2026-09-22, publishing phase, with 5b.3); M11 file-based secrets (2026-09-23, with the production host).
+
+**Owner decisions (not code):** M16 confirm alert e-mail delivery; L2 whether Grafana and the ledger browser exist in production at all; L8 rotate the `.staging` credentials; §12.1 ledger topology, a clean production host, TAA (bucket C).
 
 **Defer to their phases:** M15 with 5b.1 (the wrapper rebuild changes the size budget); L9, M1's concurrency switch and M2's numbers with the Phase 8 load tests; L3, L10, L11 when those surfaces are next touched.
 
@@ -436,6 +732,18 @@ Two cheap adjacent wins while in here: `GET /v1/ledger` returns static, env-deri
 - `15-next-step.md` removed; this file takes its number. Its Phase 5b recommendation (Android SDK release) is preserved in Appendix A and follows Phase 6.
 
 **Renumbering (2026-09-21):** the biometric gate was inserted as **Phase 6** ([`15-phase-6-biometric.md`](15-phase-6-biometric.md)). This file was renamed from `15-phase-6.md` to `15-phase-7.md`, then to `17-phase-7.md` so the files run in phase order (Phase 6 plan `15`, findings `16`, Phase 7 review `17`); its fix set is now **Phase 7 — Pre-production hardening**, and Hardening is **Phase 8**. The references in the body were updated; the bullets above keep the numbering of their date. Appendix A (5b) now runs after Phase 7.
+
+**Re-validation (2026-09-22):** every medium finding was re-read against the current source before building.
+- The summary gains **K1** (owner decision: setup routes console only).
+- Corrections noted under M1, M3, M5, M6, M7, M8, M9, M10, M11, M16, M17 and M18. The largest:
+  - M6's proposed transaction cannot work;
+  - M8's DELETE half is already handled, and the retry window is ~2.4 h, not a day;
+  - M1 applies to the mediator too;
+  - M18's index SQL cannot run in the migrate container.
+- M13 and M17 are kept open by the owner.
+- §10 re-ordered.
+- The origin phase docs got dated back-notes for H2/H3; each medium fix adds its own when it lands.
+- `4-init-post-phase-0.md` trap 44 corrected.
 
 ---
 

@@ -1,0 +1,30 @@
+# Custom postgres-exporter queries against agent-service's database (Phase 7 review M16).
+# The platform API consumes `outbox` and acknowledges rows (`delivered_at`), so an unacknowledged
+# backlog is exactly the consumer's lag.
+
+agent_outbox:
+  query: |
+    SELECT count(*) FILTER (WHERE delivered_at IS NULL) AS undelivered,
+           COALESCE(EXTRACT(EPOCH FROM (now() - min(created_at) FILTER (WHERE delivered_at IS NULL))), 0) AS oldest_undelivered_seconds,
+           count(*) AS rows_total
+    FROM outbox
+  metrics:
+    - undelivered:
+        usage: GAUGE
+        description: Outbox rows the platform API has not acknowledged
+    - oldest_undelivered_seconds:
+        usage: GAUGE
+        description: Age of the oldest unacknowledged outbox row
+    - rows_total:
+        usage: GAUGE
+        description: Outbox rows kept (never pruned until review H1)
+
+agent_tenants:
+  query: SELECT status, count(*) AS tenants FROM tenants GROUP BY status
+  metrics:
+    - status:
+        usage: LABEL
+        description: Tenant onboarding status
+    - tenants:
+        usage: GAUGE
+        description: Tenants in this status

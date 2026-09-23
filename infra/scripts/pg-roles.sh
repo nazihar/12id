@@ -136,7 +136,9 @@ agent() {
   database "$c" platform_api platform_api
   database "$c" console console
   database "$c" biometric biometric
-  monitor "$c" platform_api exchange_gate_events exchange_gates
+  monitor "$c" platform_api exchange_gate_events exchange_gates webhook_deliveries wallets idempotency_keys
+  monitor "$c" agent_service outbox tenants          # review M16: outbox lag
+  monitor "$c" endorser_service endorsement_audit    # review M16: refusals and ledger-write pressure
   echo "agent-postgres: roles and ownership applied"
 }
 
@@ -157,7 +159,7 @@ GRANT USAGE ON SCHEMA public TO platform_ro;
 GRANT SELECT ("id", "out_of_band_id", "thread_id") ON "DidcommConnection" TO platform_ro;
 SQL
   monitor "$c" message_pickup queued_message live_session
-  monitor "$c" drizzle DidcommMediation
+  monitor "$c" drizzle DidcommMediation DidcommOutOfBand DidcommConnection  # review M16: record growth
   # The endorser store moved to agent-postgres (H3). Until the old copy is dropped, nobody but the
   # superuser may open it.
   psql_in "$c" <<SQL

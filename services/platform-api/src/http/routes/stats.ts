@@ -14,8 +14,8 @@ import { z } from 'zod'
 import type { Database } from '../../db/client.ts'
 import { DELIVERY_STATUSES, tenants, webhookEndpoints } from '../../db/schema.ts'
 import type { ReadinessReport } from '../app.ts'
-import type { TenantContext } from '../auth.ts'
-import { PlatformError, notFound } from '../errors.ts'
+import { type TenantContext, requireConsolePrincipal } from '../auth.ts'
+import { notFound } from '../errors.ts'
 import { CONSOLE_ONLY_TAG } from './console.ts'
 
 export type ExchangeKind = 'connections' | 'credentials' | 'proofs'
@@ -158,9 +158,13 @@ const terminal = sql.join(TERMINAL_EXCHANGE_STATES.map((s) => sql`${s}`), sql`, 
 const stuckCount = (db: Database, table: 'credentials' | 'proofs', tenantId?: string) =>
   scalar(db, sql`select count(*)::int as n from ${sql.raw(table)} where state not in (${terminal}) and updated_at < now() - ${STUCK_AFTER} ${tenantId ? sql`and tenant_id = ${tenantId}` : sql``}`)
 
-/** Wallets that never completed mediation (no connection id from the wake path) and are past the grace period. */
+/**
+ * Wallets with no mediator connection a day after creation. `connected_at` is set by the wake path and
+ * by the sweep's check of the mediator's connections (review M10); `mediator_connection_id` alone was
+ * only a cache of the first webhook, reset on every new invitation.
+ */
 const walletsNeverConnectedCount = (db: Database, tenantId?: string) =>
-  scalar(db, sql`select count(*)::int as n from wallets where mediator_connection_id is null and revoked_at is null and created_at < now() - ${STUCK_AFTER} ${tenantId ? sql`and tenant_id = ${tenantId}` : sql``}`)
+  scalar(db, sql`select count(*)::int as n from wallets where connected_at is null and revoked_at is null and created_at < now() - ${STUCK_AFTER} ${tenantId ? sql`and tenant_id = ${tenantId}` : sql``}`)
 
 /**
  * Issued credentials by their `expiresAt` attribute (epoch seconds as a string, §5.2). The regex guard
@@ -183,11 +187,7 @@ const totals = (counts: Record<string, number>) => ({ byState: counts, total: su
 // --- routes -------------------------------------------------------------------------------------
 
 export const tenantStatsRoutes = (deps: { db: Database }): FastifyPluginAsyncZod => async (app) => {
-  const tenant = (request: { tenant?: TenantContext }) => {
-    const t = request.tenant as TenantContext
-    if (t.principal.kind !== 'console') throw new PlatformError(403, 'forbidden', 'stats are served to the console only')
-    return t
-  }
+  const tenant = (request: { tenant?: TenantContext }) => requireConsolePrincipal(request.tenant as TenantContext, 'stats are served to the console only')
 
   app.get(
     '/v1/stats',

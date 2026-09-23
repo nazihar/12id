@@ -37,6 +37,7 @@ const api = buildEndorserApi({
   bindings: createTenantBindings(db),
   sign: (request) => agent.modules.indyVdr.endorseTransaction(request, config.ENDORSER_DID),
   audit: createAuditWriter(db),
+  dailyLedgerWriteCeiling: config.ENDORSER_DAILY_CEILING,
 })
 await api.listen({ host: config.HOST, port: config.PORT })
 

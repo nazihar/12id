@@ -193,6 +193,18 @@ export interface paths {
                     };
                 };
                 /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -267,6 +279,18 @@ export interface paths {
                 };
                 /** @description Default Response */
                 400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -379,6 +403,18 @@ export interface paths {
                 };
                 /** @description Default Response */
                 400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -2106,6 +2142,18 @@ export interface paths {
                         };
                     };
                 };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
             };
         };
         delete?: never;
@@ -2321,6 +2369,18 @@ export interface paths {
                     };
                 };
                 /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -2355,6 +2415,18 @@ export interface paths {
                     content: {
                         "application/json": {
                             deleted: boolean;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
                         };
                     };
                 };
@@ -2493,6 +2565,18 @@ export interface paths {
                     };
                 };
                 /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -2545,7 +2629,9 @@ export interface paths {
                             lastSyncRequestedAt: string | null;
                             /** Format: date-time */
                             createdAt: string;
+                            connectedAt: string | null;
                             revokedAt: string | null;
+                            revokedReason: string | null;
                         }[];
                     };
                 };
@@ -2586,7 +2672,9 @@ export interface paths {
                             lastSyncRequestedAt: string | null;
                             /** Format: date-time */
                             createdAt: string;
+                            connectedAt: string | null;
                             revokedAt: string | null;
+                            revokedReason: string | null;
                             walletToken: string;
                         };
                     };
@@ -2643,7 +2731,9 @@ export interface paths {
                             lastSyncRequestedAt: string | null;
                             /** Format: date-time */
                             createdAt: string;
+                            connectedAt: string | null;
                             revokedAt: string | null;
+                            revokedReason: string | null;
                         };
                     };
                 };
@@ -2665,7 +2755,7 @@ export interface paths {
         post?: never;
         /**
          * Revoke a wallet
-         * @description Revokes the wallet token; the device keeps its local data and its mediator connection, but the platform stops mapping mediator webhooks to it.
+         * @description Revokes the wallet token at once: the app gets 401 and the platform stops mapping mediator webhooks to it. The device keeps its local data. 30 days later the platform also removes its mediator connection, so the app can no longer receive messages; it must call reset() and credentials are issued again. Wallets that never connected to the mediator are revoked by the platform after 7 days (revokedReason never_connected).
          */
         delete: {
             parameters: {
@@ -2691,7 +2781,9 @@ export interface paths {
                             lastSyncRequestedAt: string | null;
                             /** Format: date-time */
                             createdAt: string;
+                            connectedAt: string | null;
                             revokedAt: string | null;
+                            revokedReason: string | null;
                         };
                     };
                 };
@@ -2763,7 +2855,7 @@ export interface paths {
         };
         /**
          * Set the webhook endpoint
-         * @description One endpoint per tenant. The signing `secret` is returned only when it is created or rotated. Events are POSTed as `{ id, type, createdAt, tenantId, data }` with `X-12id-Signature: t=<unix>,v1=<hex HMAC-SHA256(secret, "<t>.<body>")>`. Answer 2xx within 10 s; failures are retried with exponential backoff (about 12 attempts over a day) and then dead-lettered.
+         * @description One endpoint per tenant. The signing `secret` is returned only when it is created or rotated. Events are POSTed as `{ id, type, createdAt, tenantId, data }` with `X-12id-Signature: t=<unix>,v1=<hex HMAC-SHA256(secret, "<t>.<body>")>`. During a secret rotation the header carries one `v1` per secret for 24 h; accept a match on any of them. Answer 2xx within 10 s; failures are retried with exponential backoff (12 attempts over about 2.5 hours) and then dead-lettered. Each attempt goes to the URL set at that moment.
          */
         put: {
             parameters: {
@@ -2799,6 +2891,18 @@ export interface paths {
                         };
                     };
                 };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
             };
         };
         post?: never;
@@ -2820,6 +2924,18 @@ export interface paths {
                     content: {
                         "application/json": {
                             deleted: boolean;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
                         };
                     };
                 };
@@ -2851,7 +2967,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Rotate the signing secret */
+        /**
+         * Rotate the signing secret
+         * @description For 24 hours after a rotation every delivery carries two signatures, `v1=<new>,v1=<previous>`, so a receiver still on the previous secret keeps accepting them. Switch within that window.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -2869,6 +2988,18 @@ export interface paths {
                     content: {
                         "application/json": {
                             secret: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
                         };
                     };
                 };
@@ -3051,6 +3182,18 @@ export interface paths {
                             /** Format: date-time */
                             createdAt: string;
                             deliveredAt: string | null;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
                         };
                     };
                 };
@@ -3398,7 +3541,9 @@ export interface paths {
                             lastSyncRequestedAt: string | null;
                             /** Format: date-time */
                             createdAt: string;
+                            connectedAt: string | null;
                             revokedAt: string | null;
+                            revokedReason: string | null;
                         };
                     };
                 };
@@ -3440,6 +3585,18 @@ export interface paths {
                     content: {
                         "application/json": {
                             invitationUrl: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
                         };
                     };
                 };
@@ -3724,6 +3881,7 @@ export interface paths {
                             did: string | null;
                             agentTenantId: string;
                             lastError: string | null;
+                            rateLimitPerMin: number | null;
                             /** Format: date-time */
                             createdAt: string;
                         }[];
@@ -3760,6 +3918,7 @@ export interface paths {
                             did: string | null;
                             agentTenantId: string;
                             lastError: string | null;
+                            rateLimitPerMin: number | null;
                             /** Format: date-time */
                             createdAt: string;
                         };
@@ -3804,6 +3963,7 @@ export interface paths {
                             did: string | null;
                             agentTenantId: string;
                             lastError: string | null;
+                            rateLimitPerMin: number | null;
                             /** Format: date-time */
                             createdAt: string;
                         };
@@ -3828,7 +3988,60 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Change tenant settings
+         * @description `rateLimitPerMin`: requests per minute per API key for this tenant (0 = no limit); null = the platform default (RATE_LIMIT_API_KEY_PER_MIN).
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        rateLimitPerMin: number | null;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            id: string;
+                            name: string;
+                            status: string;
+                            did: string | null;
+                            agentTenantId: string;
+                            lastError: string | null;
+                            rateLimitPerMin: number | null;
+                            /** Format: date-time */
+                            createdAt: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
         trace?: never;
     };
     "/admin/tenants/{id}/onboard": {
@@ -3864,6 +4077,7 @@ export interface paths {
                             did: string | null;
                             agentTenantId: string;
                             lastError: string | null;
+                            rateLimitPerMin: number | null;
                             /** Format: date-time */
                             createdAt: string;
                         };
@@ -4061,6 +4275,7 @@ export interface paths {
                                 did: string | null;
                                 agentTenantId: string;
                                 lastError: string | null;
+                                rateLimitPerMin: number | null;
                                 /** Format: date-time */
                                 createdAt: string;
                             };

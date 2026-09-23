@@ -2,7 +2,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
-import { createApiKeyInput, createTenantInput, tenantInput } from '@/features/tenants/tenants.schemas'
+import { createApiKeyInput, createTenantInput, rateLimitInput, tenantInput } from '@/features/tenants/tenants.schemas'
 import { operatorMiddleware } from '@/server/middleware'
 import { platformFor, unwrap } from '@/server/platform.server'
 
@@ -25,6 +25,19 @@ export const retryOnboarding = createServerFn({ method: 'POST' })
   .middleware([operatorMiddleware])
   .validator(tenantInput)
   .handler(async ({ context, data }) => unwrap(await platformFor(context.principal).POST('/admin/tenants/{id}/onboard', { params: { path: { id: data.tenantId } } })))
+
+/** Operator override of the tenant's per-API-key request limit (review M4); null restores the platform default. */
+export const setTenantRateLimit = createServerFn({ method: 'POST' })
+  .middleware([operatorMiddleware])
+  .validator(tenantInput.extend(rateLimitInput.shape))
+  .handler(async ({ context, data }) =>
+    unwrap(
+      await platformFor(context.principal).PATCH('/admin/tenants/{id}', {
+        params: { path: { id: data.tenantId } },
+        body: { rateLimitPerMin: data.useDefault ? null : data.rateLimitPerMin },
+      })
+    )
+  )
 
 // API keys go through the console-only /v1/api-keys route, the same path the tenant portal uses,
 // so every key action is audited with its tenant.

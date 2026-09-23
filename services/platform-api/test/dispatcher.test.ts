@@ -21,7 +21,7 @@ describe('webhook dispatcher (pure parts)', () => {
       seen.push({ url: String(url), headers: init?.headers as Record<string, string>, body: String(init?.body) })
       return new Response('ok', { status: seen.length === 1 ? 200 : 500 })
     }) as typeof fetch
-    const delivery = { url: 'https://customer.test/hook', body: '{"a":1}', eventType: 'proof.state_changed', eventId: 'ev-1', secret: 'whsec_x' }
+    const delivery = { url: 'https://customer.test/hook', body: '{"a":1}', eventType: 'proof.state_changed', eventId: 'ev-1', secrets: 'whsec_x' }
     const first = await deliverOnce(fetchMock, delivery, 1000, 1_700_000_000)
     assert.deepEqual(first, { ok: true, statusCode: 200 })
     assert.equal(seen[0].headers['x-12id-event'], 'proof.state_changed')
@@ -35,7 +35,7 @@ describe('webhook dispatcher (pure parts)', () => {
     const failing = (async () => {
       throw new Error('ECONNREFUSED')
     }) as typeof fetch
-    const result = await deliverOnce(failing, { url: 'https://x', body: '{}', eventType: 't', eventId: 'e', secret: 's' }, 1000, 1)
+    const result = await deliverOnce(failing, { url: 'https://x', body: '{}', eventType: 't', eventId: 'e', secrets: 's' }, 1000, 1)
     assert.equal(result.ok, false)
     assert.match(result.error ?? '', /ECONNREFUSED/)
   })

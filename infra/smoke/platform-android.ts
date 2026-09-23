@@ -12,17 +12,19 @@
  * Scenario: connect, LIVE offer, OFFLINE offer (force-stop → queued → wake webhook → reopen),
  * PROOF from a template. No Credo on this machine; only fetch + adb.
  *
- * Env: PLATFORM_API, PLATFORM_API_KEY, WEBHOOK_URL, RECEIVER_PORT, CRED_DEF_ID (optional: reuse a
+ * Env: PLATFORM_API, PLATFORM_API_KEY, PLATFORM_TENANT_ID (console setup over SSH, K1), WEBHOOK_URL, RECEIVER_PORT, CRED_DEF_ID (optional: reuse a
  * published cred def instead of publishing), MEDIATOR_INVITATION_OUT | SKIP_WALLET.
  */
 import { execFileSync } from 'node:child_process'
 import { writeFileSync } from 'node:fs'
 
-import { env, now, offerAttributes, platformClient, publishCatalogue, sleep, startReceiver } from './platform-common.ts'
+import { consoleClient, env, now, offerAttributes, platformClient, publishCatalogue, sleep, startReceiver } from './platform-common.ts'
 
 const APP = 'org.hyperledger.ariesproject'
 const baseUrl = env('PLATFORM_API', 'https://api.12id.naziharitsolution.com')
 const api = platformClient(baseUrl, env('PLATFORM_API_KEY'))
+// Setup routes are console only (review K1): publishing, templates, policies, the webhook endpoint.
+const setup = consoleClient()
 const webhookUrl = env('WEBHOOK_URL', 'https://smoke-issuer.12id.naziharitsolution.com/webhook')
 const externalId = `android-${Date.now()}`
 const adb = (...args: string[]) => execFileSync('adb', args, { encoding: 'utf8' }).trim()
@@ -52,9 +54,9 @@ try {
   await receiver.listening
   console.log(`device: ${adb('shell', 'getprop', 'ro.product.model')}, Android ${adb('shell', 'getprop', 'ro.build.version.release')}`)
 
-  const endpoint = await api.must<{ secret?: string }>('PUT', '/v1/webhook', { url: webhookUrl })
-  secret = endpoint.secret ?? (await api.must<{ secret: string }>('POST', '/v1/webhook/rotate-secret')).secret
-  const credDefId = process.env.CRED_DEF_ID ?? (await publishCatalogue(api, 'smoke-badge')).credentialDefinitionLedgerId
+  const endpoint = await setup.must<{ secret?: string }>('PUT', '/v1/webhook', { url: webhookUrl })
+  secret = endpoint.secret ?? (await setup.must<{ secret: string }>('POST', '/v1/webhook/rotate-secret')).secret
+  const credDefId = process.env.CRED_DEF_ID ?? (await publishCatalogue(setup, 'smoke-badge')).credentialDefinitionLedgerId
 
   // --- connect (the app fetches the invitation from /phase0/invitation on a fresh launch) ---
   const invitation = await api.must<{ invitationId: string; invitationUrl: string }>('POST', '/v1/connections/invitations', { externalId })
@@ -98,7 +100,7 @@ try {
 
   // --- proof from a template -------------------------------------------------------------
   console.log('\n=== PROOF (template: attributes + automatic expiresAt predicate) ===')
-  const template = await api.must<{ id: string }>('POST', '/v1/proof-templates', { name: 'smoke-platform-android', groups: [{ key: 'employee', attributes: ['name', 'department'], credentials: [{ credentialDefinitionId: credDefId }] }] })
+  const template = await setup.must<{ id: string }>('POST', '/v1/proof-templates', { name: 'smoke-platform-android', groups: [{ key: 'employee', attributes: ['name', 'department'], credentials: [{ credentialDefinitionId: credDefId }] }] })
   const proof = await api.must<{ id: string }>('POST', '/v1/proofs/request', { connectionId, templateId: template.id, externalId })
   const proofResult = await waitState('proof.state_changed', proof.id, ['done', 'abandoned'], 120_000, 'proof')
   const proofView = await api.must<{ verified: boolean | null; disclosed: Record<string, Record<string, string>> | null }>('GET', `/v1/proofs/${proof.id}`)

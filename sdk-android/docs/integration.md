@@ -57,12 +57,19 @@ class MyApp : Application() {
                 walletTokenProvider = { myBackend.walletToken(installationId) },
                 label = "Acme Wallet",                       // what organisations see; fixed at first launch
                 logSink = { level, message, error -> Log.println(level.priority(), "12id", message) },
+                // minLogLevel = LogLevel.Debug,                // diagnosing only; see below
             ))
         }
     }
 }
 ```
 
+- **`apiBaseUrl` must be https.** A release build refuses anything else with `InvalidConfiguration`:
+  the wallet token travels on it, and Android blocks cleartext by default only from API 28. A debuggable
+  build may use `http://` for a local platform API.
+- **`logSink` receives Info and above by default.** Set `minLogLevel = LogLevel.Debug` only while
+  diagnosing, and never in a release build: framework debug lines carry proof-request contents,
+  connection records and DID documents, and a sink usually ends up in a crash reporter.
 - `initialize` is idempotent and safe to call from anywhere; it opens the wallet, and on the first
   launch creates it, fetches the ledger genesis (verified by checksum) and connects to the mediator.
 - **Wallet token.** Your backend creates one wallet per app installation with `POST /v1/wallets`,
@@ -70,6 +77,11 @@ class MyApp : Application() {
   returns `walletToken` to the app. A retry of that call returns the same wallet with a *new* token,
   so the provider should always fetch the latest one; the SDK calls it again once when the platform
   rejects a token. The app never holds a platform API key.
+- **Revoked wallets.** If your backend's `POST /v1/wallets` answers `409 wallet_revoked`, the wallet for
+  that installation was revoked. You did it, or 12id did because it never connected to the mediator
+  within 7 days. Create a new wallet with a new `Idempotency-Key` and return its token; the SDK then
+  onboards again. A wallet *you* revoke loses its mediator connection 30 days later. After that the
+  app can no longer receive messages, so call `reset()` and have its credentials issued again.
 - Observe `OneTwoId.state` (`Uninitialized`, `Initializing`, `Ready`, `Failed(error)`).
 
 ## Everyday calls

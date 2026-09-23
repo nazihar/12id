@@ -176,6 +176,13 @@ First manual run, `20260913T070457Z`:
 
 **Limits:** VM loss still loses backups, the age key and the sops-decryptable secrets together (accepted for staging). The drill did not start a mediator against the restored databases; the plan's verification line asks for that, and it remains open.
 
+> **Phase 7 update (2026-09-22, review H3):**
+> - `endorser.dump.age` is no longer produced from this instance. The store is dumped from `agent-postgres` as `agent-endorser.dump.age`.
+> - Both instances' `--globals-only` dumps now carry the per-service roles.
+> - A restore drill of an Askar store must connect as a role named like the store's schema (trap 49). The endorser drill passed that way on 2026-09-22.
+> - See [`17-phase-7.md`](17-phase-7.md) H3 and [`infra/runbooks/postgres-roles.md`](../infra/runbooks/postgres-roles.md).
+> - The limits above are unchanged (review M13, kept open).
+
 ---
 
 ## W4 — Mediator (in progress)
@@ -193,6 +200,12 @@ The `_oobid` travels inside the invitation URL, so anyone who has seen that URL 
 A reverse proxy that forwards every path, which is the natural default for a DIDComm endpoint, publishes this route. The staging Caddyfile answers `/invite` with 404 on `mediator.12id…`; tooling that needs the invitation reads it on the VM via `127.0.0.1:3001/invite`. Active Caddy health checks and the container healthchecks both target `/health` expecting 202.
 
 **For Phase 3:** the per-user invitation endpoint (`GET /mediator/invitation`) must be the only way invitations leave the platform, and the mediator's own `/invite` must stay unreachable from outside.
+
+> **Phase 7 update (2026-09-22, review M18):** the Drizzle migration creates no secondary indexes.
+> - drizzle-storage also wrote every array/jsonb lookup as an unindexable `to_jsonb(…) @> …`, so each inbound message scanned `Did` in full.
+> - Image `-p4` patches the query builder, and `infra/staging/mediator/indexes.sql` adds 14 indexes through the one-shot `mediator-indexes` service.
+> - At 10,000 wallets the per-message lookup went from 12 ms to 0.09 ms.
+> - See [`17-phase-7.md`](17-phase-7.md) M18.
 
 ### Pre-baked migration image
 `infra/staging/mediator/Dockerfile.migrate` extends `mediator:375518d`:
@@ -254,6 +267,12 @@ Both replicas ran `provisionStore` against the same Postgres at once and raced o
 ## W3 — Endorser DID (done)
 
 Tool: `infra/ledger/`, a small Credo 0.7 project run as a one-off container (`compose.ledger.yml`, service `bootstrap-endorser`). It joins von-network's Docker network to reach `/register` and the mediator network to reach Postgres. It fetches the public signed genesis and checks its sha256 before connecting.
+
+> **Phase 7 update (2026-09-22, review H3):**
+> - The `endorser` Askar store described here was moved off the mediator's Postgres, by dump and restore. It is now on `agent-postgres`, owned by the `endorser_service` role, and no other role may connect to it.
+> - The mediator instance's copy is kept until 2026-09-29, then dropped.
+> - **Trap 49:** Askar keeps its tables in schema `"$user"`, so changing a store's DB user needs `pg-roles.sh askar-schema-*`.
+> - Evidence: [`infra/runbooks/postgres-roles.md`](../infra/runbooks/postgres-roles.md). See [`17-phase-7.md`](17-phase-7.md) H3.
 
 Image `12id/ledger-tools:credo-0.7.0` (`node:22.20.0-bookworm-slim`, `npm ci --omit=dev` from a committed lockfile) builds in 166 s and is 603 MB. All three native bindings (`askar`, `indyVdr`, `anoncreds`) load inside it under plain Node type stripping.
 
@@ -505,6 +524,8 @@ Both cases recreated both replicas with the stated environment (checked via `doc
 
 ## W7 — Monitoring and alerting (deployed)
 
+> **Phase 7 update (2026-09-23, review M16):** the alerts were infrastructure-only. Added: webhook dead letters and backlog, outbox lag, endorser refusals, edge 5xx, mediator out-of-band growth, and idempotency table size (26 rules now). New sources: Caddy's per-server metrics, and postgres-exporters for `agent_service` (9190) and `endorser_service` (9191), with `monitoring_ro` granted the reads. Each new alert was fired once deliberately and reached Alertmanager. See [`17-phase-7.md`](17-phase-7.md) M16.
+
 **Stack** (`infra/staging/compose.monitoring.yml`, deployed with `EXTRA_SECRETS=mediator deploy.sh monitoring`; first deploy 366 s, mostly image pulls):
 
 | Component | Version |
@@ -550,6 +571,10 @@ Everything listens on `127.0.0.1`; only Grafana is published, through Caddy.
 ---
 
 ## W6 — Mediator abuse controls (partly deployed)
+
+> **Phase 7 update (2026-09-22, review M4, M10):** per-wallet invitations are rate-limited, 3 per 10 minutes. The mediator image `-p5` adds `POST /admin/sweep` and `DELETE /admin/connections/:id`. The platform's hourly sweep uses them to delete unused invitations after 24 hours, stale queue rows after 30 days, and revoked wallets' connections and mediations after 30 days. The open-relay surface no longer grows with abandoned wallets. See [`17-phase-7.md`](17-phase-7.md) M4, M10.
+>
+> **Phase 7 update (2026-09-22, review M1):** the mediator site now caps HTTP bodies at 512 KB at the edge. Image `-p3` caps WebSocket messages at 512 KiB (the `ws` default is 100 MiB). A 700 KB POST gets 413, and a 600 KB WebSocket message is closed with 1009. See [`17-phase-7.md`](17-phase-7.md) M1.
 
 | Control | State |
 |---|---|

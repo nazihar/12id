@@ -17,6 +17,7 @@ import { expireIdempotencyKeys } from './http/idempotency.ts'
 import { createMediatorClient } from './mediator-client.ts'
 import { createOutboxConsumer } from './outbox-consumer.ts'
 import { handleMediatorWebhook } from './wake.ts'
+import { startSweep } from './sweep.ts'
 import { createDispatcher } from './webhooks/dispatcher.ts'
 import { endpointLookup } from './webhooks/events.ts'
 
@@ -54,11 +55,15 @@ const app = buildApp({
 })
 
 const consumer = createOutboxConsumer({ db, agent, logger, endpoints, batch: config.OUTBOX_BATCH, gates })
-const dispatcher = createDispatcher({ db, logger, timeoutMs: config.WEBHOOK_TIMEOUT_MS, maxAttempts: config.WEBHOOK_MAX_ATTEMPTS })
+const dispatcher = createDispatcher({ db, logger, timeoutMs: config.WEBHOOK_TIMEOUT_MS, maxAttempts: config.WEBHOOK_MAX_ATTEMPTS, concurrency: config.WEBHOOK_CONCURRENCY, perTenant: config.WEBHOOK_PER_TENANT })
 
 await app.listen({ host: config.HOST, port: config.PORT })
 const stopConsumer = consumer.start(config.OUTBOX_POLL_MS)
 const stopDispatcher = dispatcher.start(config.WEBHOOK_POLL_MS)
+// Wallet and mediator housekeeping (review M10, M4).
+const stopSweep = config.SWEEP_INTERVAL_MS > 0
+  ? startSweep({ db, mediator, logger, unconnectedRevokeDays: config.WALLET_UNCONNECTED_REVOKE_DAYS, revokedGraceDays: config.WALLET_REVOKED_GRACE_DAYS, invitationTtlHours: config.MEDIATOR_INVITATION_TTL_HOURS, queueTtlDays: config.MEDIATOR_QUEUE_TTL_DAYS }, config.SWEEP_INTERVAL_MS)
+  : async () => undefined
 const expiry = setInterval(() => void expireIdempotencyKeys(db, config.IDEMPOTENCY_TTL_MS).catch((error: unknown) => logger.warn({ err: error }, 'idempotency expiry failed')), 10 * 60 * 1000)
 // Biometric gates past their TTL are expired and their exchanges abandoned; unsettled gates are retried.
 const gateExpiry = gates ? setInterval(() => void gates.expireDue().catch((error: unknown) => logger.warn({ err: error }, 'biometric gate expiry failed')), config.BIOMETRIC_EXPIRY_POLL_MS) : undefined
@@ -70,7 +75,7 @@ async function drain(signal: string) {
   logger.info({ signal }, 'drain started')
   clearInterval(expiry)
   if (gateExpiry) clearInterval(gateExpiry)
-  await Promise.all([stopConsumer(), stopDispatcher()])
+  await Promise.all([stopConsumer(), stopDispatcher(), stopSweep()])
   const deadline = started + config.DRAIN_DEADLINE_MS
   while (dispatcher.inFlight() > 0 && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 100))
   await app.close()

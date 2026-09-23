@@ -1,14 +1,17 @@
 /**
- * Shared plumbing for the Phase 3 smokes: a platform API client (API key), a webhook receiver
- * that verifies signatures, and the catalogue/wallet setup both scenarios need.
+ * Shared plumbing for the Phase 3 smokes: a platform API client (API key), a console client for
+ * the setup routes (review K1), a webhook receiver that verifies signatures, and the
+ * catalogue/wallet setup both scenarios need.
  *
  * The receiver is reached from the VM through the same reverse tunnel Phase 2 used for the
  * smoke issuer: `ssh -R 3200:127.0.0.1:3201` puts this process behind
  * https://smoke-issuer.<domain>/, so the webhook URL is https://smoke-issuer.<domain>/webhook
  * and the Android app still fetches its issuer invitation from /phase0/invitation.
  */
+import { spawn } from 'node:child_process'
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { createServer, type Server } from 'node:http'
+import { homedir } from 'node:os'
 
 export const env = (name: string, fallback?: string): string => {
   const value = process.env[name] ?? fallback
@@ -38,6 +41,50 @@ export function platformClient(baseUrl: string, bearer: string): PlatformClient 
     async must<T>(method: string, path: string, body?: unknown, headers?: Record<string, string>) {
       const { status, json } = await call<T>(method, path, body, headers)
       if (status >= 400) throw new Error(`${method} ${path} -> ${status} ${JSON.stringify(json)}`)
+      return json
+    },
+  }
+}
+
+/**
+ * Setup routes are console only (review K1): catalogue publishing, proof templates, biometric
+ * policies and the webhook endpoint. The smokes call them the way `biometric-setup.sh` does. They
+ * run inside the platform container, where CONSOLE_TOKEN already lives, reached over SSH, so the
+ * token never leaves the VM. The request travels base64-encoded in an env var and the script on
+ * stdin, so nothing needs shell quoting.
+ *
+ * Env: PLATFORM_TENANT_ID (printed by platform-bootstrap.ts), VM_SSH (default
+ * ubuntu@123.176.58.72), VM_SSH_KEY (default ~/.ssh/12id_staging_ed25519), PLATFORM_CONTAINER.
+ */
+export function consoleClient(tenantId = env('PLATFORM_TENANT_ID')): PlatformClient {
+  const target = env('VM_SSH', 'ubuntu@123.176.58.72')
+  const key = env('VM_SSH_KEY', `${homedir()}/.ssh/12id_staging_ed25519`)
+  const container = env('PLATFORM_CONTAINER', 'platform-platform-api-1')
+  const script = `
+const { method, path, body, tenant } = JSON.parse(Buffer.from(process.env.REQ, 'base64').toString())
+const headers = { 'x-console-token': process.env.CONSOLE_TOKEN, 'x-console-actor': 'smoke', 'x-console-role': 'owner', 'x-console-tenant': tenant }
+if (body !== undefined) headers['content-type'] = 'application/json'
+const res = await fetch('http://127.0.0.1:3500' + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) })
+const json = await res.json().catch(() => ({}))
+process.stdout.write(JSON.stringify({ status: res.status, json }))
+`
+  async function call<T>(method: string, path: string, body?: unknown) {
+    const req = Buffer.from(JSON.stringify({ method, path, body, tenant: tenantId })).toString('base64')
+    const child = spawn('ssh', ['-i', key, '-o', 'BatchMode=yes', target, 'docker', 'exec', '-i', '-e', `REQ=${req}`, container, 'node', '--input-type=module', '-'], { stdio: ['pipe', 'pipe', 'pipe'] })
+    let stdout = ''
+    let stderr = ''
+    child.stdout.on('data', (chunk) => (stdout += chunk))
+    child.stderr.on('data', (chunk) => (stderr += chunk))
+    child.stdin.end(script)
+    const code = await new Promise<number | null>((resolve) => child.on('close', resolve))
+    if (code !== 0) throw new Error(`console call ${method} ${path} over ssh exited ${code}: ${stderr.trim()}`)
+    return JSON.parse(stdout) as { status: number; json: T }
+  }
+  return {
+    call,
+    async must<T>(method: string, path: string, body?: unknown) {
+      const { status, json } = await call<T>(method, path, body)
+      if (status >= 400) throw new Error(`console ${method} ${path} -> ${status} ${JSON.stringify(json)}`)
       return json
     },
   }
@@ -93,9 +140,11 @@ export function startReceiver(port: number, options: ReceiverOptions) {
       request.on('data', (chunk) => (body += chunk))
       request.on('end', () => {
         const header = String(request.headers['x-12id-signature'] ?? '')
-        const parts = Object.fromEntries(header.split(',').map((p) => p.split('=') as [string, string]))
-        const expected = createHmac('sha256', options.secret()).update(`${parts.t}.${body}`).digest('hex')
-        const signatureValid = typeof parts.v1 === 'string' && parts.v1.length === expected.length && timingSafeEqual(Buffer.from(parts.v1), Buffer.from(expected))
+        // Several v1 values during a secret rotation (review M9): any match is valid.
+        const parts = header.split(',').map((p) => p.split('=') as [string, string])
+        const t = parts.find(([key]) => key === 't')?.[1]
+        const expected = createHmac('sha256', options.secret()).update(`${t}.${body}`).digest('hex')
+        const signatureValid = parts.some(([key, value]) => key === 'v1' && typeof value === 'string' && value.length === expected.length && timingSafeEqual(Buffer.from(value), Buffer.from(expected)))
         const event = JSON.parse(body) as ReceivedEvent['event']
         events.push({ receivedAt: now(), type: event.type, signatureValid, event })
         const summary = event.type === 'wallet.sync_requested' ? `wallet ${String(event.data.walletId).slice(0, 8)}` : `${String(event.data.id).slice(0, 8)} ${event.data.previousState ?? '·'} -> ${event.data.state}`
@@ -136,7 +185,7 @@ export interface Catalogue {
   credentialDefinitionLedgerId: string
 }
 
-/** Publishes a fresh schema version + cred def for this run (about 4 s on staging). */
+/** Publishes a fresh schema version + cred def for this run (about 4 s on staging). Console only (K1). */
 export async function publishCatalogue(api: PlatformClient, name: string): Promise<Catalogue> {
   const version = `1.${Math.floor(Date.now() / 1000) % 1_000_000}`
   const schema = await api.must<{ id: string; schemaId: string }>('POST', '/v1/schemas', { name, version, attributes: ['name', 'employeeNumber', 'department', 'expiresAt'] })

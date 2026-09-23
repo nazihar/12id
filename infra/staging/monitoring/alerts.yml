@@ -182,3 +182,76 @@ groups:
           severity: warning
         annotations:
           summary: 'Container {{ $labels.name }} restarted more than twice in 15 minutes'
+
+      # --- Phase 7 review M16: the application itself, not only its infrastructure --------------
+
+      - alert: WebhookDeadLetters
+        expr: delta(platform_webhook_deliveries{status="dead"}[1h]) > 5
+        labels:
+          severity: warning
+        annotations:
+          summary: 'More than 5 webhook deliveries dead-lettered in an hour'
+          description: >
+            A customer endpoint refused or timed out through all 12 attempts (about 2.5 h). Check
+            GET /v1/webhook/deliveries?status=dead for the tenant, and whether a secret rotation or a
+            URL change is behind it (review M8, M9).
+
+      - alert: WebhookBacklogStuck
+        expr: platform_webhook_oldest_age_seconds{status="pending"} > 900
+        for: 10m
+        annotations:
+          summary: 'A webhook delivery has been pending for more than 15 minutes'
+          description: >
+            The dispatcher should retry within about 5 minutes at first. A pending delivery this old
+            means the worker is not running, or every attempt is failing.
+        labels:
+          severity: warning
+
+      - alert: OutboxLag
+        expr: agent_outbox_oldest_undelivered_seconds > 600
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'agent-service outbox rows unacknowledged for more than 10 minutes'
+          description: >
+            platform-api's consumer reads the outbox and acknowledges it. A growing backlog means the
+            consumer stopped, so mirror rows and webhooks stop with it.
+
+      - alert: EndorserRefusals
+        expr: delta(endorser_decisions{allowed="false"}[1h]) > 3
+        labels:
+          severity: warning
+        annotations:
+          summary: 'The endorser refused more than 3 requests in an hour'
+          description: >
+            Every refusal is a request to sign something the policy does not allow, or a tenant at its
+            daily ledger-write ceiling (review M3). Check endorsement_audit.
+
+      - alert: EdgeServerErrors
+        expr: sum(rate(caddy_http_request_errors_total[5m])) > 0.2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'The edge is returning server errors'
+          description: 'More than 0.2 failed requests per second over 10 minutes, summed across all sites.'
+
+      - alert: MediatorOutOfBandGrowth
+        expr: delta(mediator_records{table="DidcommOutOfBand"}[24h]) > 500
+        labels:
+          severity: warning
+        annotations:
+          summary: 'The mediator gained more than 500 out-of-band records in a day'
+          description: >
+            One per wallet invitation, and unused ones are swept after 24 h (review M4, M10). Growth
+            like this means the sweep stopped, or something is minting invitations.
+
+      - alert: IdempotencyKeysGrowing
+        expr: platform_idempotency_keys_keys > 50000
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: 'More than 50000 idempotency keys stored'
+          description: 'They expire after 24 h; this many means the expiry loop stopped.'

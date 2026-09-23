@@ -49,6 +49,7 @@ describe('wake path', { skip: db ? false : 'no test database' }, () => {
     assert.equal(body.data.externalId, 'user-7')
     const [cached] = await db!.db.select().from(wallets).where(eq(wallets.id, wallet.id))
     assert.equal(cached.mediatorConnectionId, 'med-1')
+    assert.ok(cached.connectedAt, 'the first webhook also records that the wallet connected (review M10)')
 
     // A revoked wallet no longer wakes anyone.
     await db!.db.update(wallets).set({ revokedAt: new Date() }).where(eq(wallets.id, wallet.id))
@@ -67,7 +68,8 @@ describe('wake path', { skip: db ? false : 'no test database' }, () => {
       { tenantId: tenant.id, eventType: 'proof.state_changed', body: '{"n":1}', url: 'https://customer.test/ok', nextAttemptAt: clock },
       { tenantId: tenant.id, eventType: 'proof.state_changed', body: '{"n":2}', url: 'https://customer.test/fail', nextAttemptAt: clock },
     ])
-    const fetchMock = (async (url: string | URL | Request) => new Response('', { status: String(url).endsWith('/ok') ? 200 : 503 })) as typeof fetch
+    // Every attempt goes to the endpoint's current URL (review M8), so the body decides the outcome.
+    const fetchMock = (async (_url: string | URL | Request, init?: RequestInit) => new Response('', { status: String(init?.body) === '{"n":1}' ? 200 : 503 })) as typeof fetch
     const dispatcher = createDispatcher({ db: db!.db, logger: silentLogger, timeoutMs: 1000, maxAttempts: 2, fetch: fetchMock, now: () => clock, random: () => 0.5 })
 
     assert.equal(await dispatcher.runOnce(), 2)

@@ -147,6 +147,12 @@ The minified release onboards on the phone (`state=Ready`). R8 prints one warnin
 **F12 · Monitoring (2026-09-21, *run*).**
 - **Probe.** biometric-service `/healthz` is published on 127.0.0.1:3430 and probed by a new plain-HTTP blackbox module `http_2xx_local` (job `blackbox-http-local`). The public `http_2xx` module requires TLS, and the first attempt failed on exactly that.
 - **Exporter.** A new `postgres-exporter-biometric` (127.0.0.1:9189) reads platform-api's biometric log: `biometric_attempts_last_15m{decision}`, `biometric_vendor_failures_last_15m`, `biometric_gates_unsettled`, `biometric_gates_overdue_pending`.
+  > **Phase 7 update (2026-09-23, review M16):** this exporter also reports platform-api's webhook deliveries, wallet counts and idempotency table size, next to two new exporters for `agent_service` (outbox lag) and `endorser_service` (refusals). A changed query file needs `--force-recreate`: the single-file mount keeps a stale inode (trap 50).
+  >
+  > **Phase 7 update (2026-09-22, review H3):**
+  > - This exporter and the two others connect as `monitoring_ro` (`pg_monitor` plus read-only access), no longer as `postgres`. Scrape errors stayed at 0.
+  > - biometric-service itself connects as the `biometric` role, owner of the `biometric` database only.
+  > - See [`17-phase-7.md`](17-phase-7.md) H3.
 - **Alerts:** `BiometricServiceDown`, `BiometricFailureRateHigh`, `BiometricVendorErrors`, `BiometricGateStuck`, `BiometricExpiryStalled`. Validated with promtool (19 rules); all inactive against live data.
 
 Found on the way, all pre-existing:

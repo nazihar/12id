@@ -21,6 +21,12 @@ const configSchema = z.object({
   /** endorser-service's own tables (bindings, audit), separate from the Askar store. */
   DATABASE_URL: z.url().refine((url) => url.startsWith('postgres://') || url.startsWith('postgresql://'), 'must be a postgres URL'),
 
+  /**
+   * Most schemas + credential definitions one tenant may have endorsed in any 24 h (review M3).
+   * 0 turns the ceiling off (for example a self-hosted install on its own ledger).
+   */
+  ENDORSER_DAILY_CEILING: z.coerce.number().int().min(0).default(50),
+
   /** Shared secret agent-service presents. */
   INTERNAL_TOKEN: z.string().min(32),
   HOST: z.string().min(1).default('127.0.0.1'),

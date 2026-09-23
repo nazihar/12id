@@ -229,7 +229,7 @@ The tested image is built on **Credo 0.6.0** (`@credo-ts/didcomm@0.6.0`, `@openw
 
 Responsibilities:
 - REST API over the issuer and verifier agents
-- Tenant and API key management
+- Tenant and API key management, with per-API-key, per-wallet and per-invitation request limits (Phase 7 M4). **API keys run the integration only** (exchanges, wallets, reads). Setup (catalogue publishing, proof templates, biometric policies, the webhook endpoint and secret) is console only since Phase 7 K1 (2026-09-22), so a leaked key can neither write to the ledger nor redirect webhooks
 - Schema and credential definition catalogue — **storing both qualified and unqualified identifiers** per ledger object (§2.7.2)
 - Proof request templates
 - Webhook delivery to customer backends
@@ -488,7 +488,7 @@ If revocation is added later, the original flow applies (registry entries batche
 1. The wallet's mediator connection was created from an invitation minted for that wallet (§4.3 step 3); the mediator stores its `out_of_band_id`.
 2. A message for the holder arrives at the mediator and is queued (`QueueAndLiveModeDelivery`).
 3. Mediator POSTs `{ connectionId }` to `platform-api/internal/mediator/<secret>` (**confirmed**; needs multi-instance `none` + the Firebase placeholder, §2.3). One call **per queued message**, including while the app is open.
-4. Platform API reads the connection's `out_of_band_id` (read-only role on the mediator database), finds the wallet, and emits at most one signed `wallet.sync_requested` webhook per wallet per 30 s (**confirmed**).
+4. Platform API reads the connection's `out_of_band_id` (read-only role on the mediator database), finds the wallet, and emits at most one signed `wallet.sync_requested` webhook per wallet per 30 s (**confirmed**). *Since Phase 7 M2 (2026-09-22), webhooks are delivered from a fair-share pool, so a slow endpoint at another tenant no longer delays this wake-up.*
 5. The customer backend pushes its app with its own FCM/APNs; the app's push handler enqueues WorkManager expedited work that calls the SDK's `sync()` (sample: `SyncWorker`).
 6. `sync()` opens the wallet if the push started the process (using the last `initialize` configuration, polling left off in the background), then runs `PickUpV1` batch pickups until one comes back empty (fork change F4) or a timeout. (**Confirmed in Phase 5 with the process dead:** wake webhook 0.2 s after the offer, the offer collected 5 s after the simulated push, `done` 11 s after the offer. Phase 0/3 had confirmed the reopen path: collected 1.7 s after reopen.)
 
@@ -559,6 +559,7 @@ Write this up once as a customer-facing document — every enterprise customer's
 ## 6. Security notes
 
 - **Store keys** for Askar wallets go in a secrets manager, never in environment variables committed anywhere.
+- **An API key is one tenant's integration credential** (Phase 7 K1). It can run exchanges, manage wallets and read everything of that tenant, including disclosed attribute values, so it is still sensitive. It cannot publish to the ledger, repoint the webhook, or change templates and policies: those are console only. Keys have no scopes and no expiry. Revocation takes effect on the next request.
 - **The console token (`CONSOLE_TOKEN`) can act as any tenant and as an operator** (Phase 4). It exists only in the console's and platform-api's environment on the private network, the edge refuses the header, and every use is audited with the acting user. Treat it like the endorser store key.
 - **Endorser DID private key** is the highest-value secret in the system. Anyone with it can publish credential definitions under our name. Consider an HSM or at minimum a separate, tightly-scoped secrets store.
 - **Wallet recovery** is not solved by default. If a user loses their phone, their link secret and credentials are gone. Decide explicitly: accept re-issuance as the recovery path, or build an encrypted backup/export flow. This is a product decision, not a technical one.
@@ -933,6 +934,23 @@ Findings and the ordered fix set: [`17-phase-7.md`](17-phase-7.md) §10 (this wa
   - Left:
     - drop the old `endorser` database on the mediator instance after 2026-09-29;
     - remove the unused `AGENT_INTERNAL_TOKEN` from `agent.sops.env`.
+- [ ] **Medium findings, re-validated against the code 2026-09-22** (corrections are under each finding in `17-phase-7.md`). Build order (§10 there):
+  1. ✅ K1: setup routes console only (new, owner decision). **Done on staging 2026-09-22:** probe 403/200, `e2e:staging` 3/3, `smoke:platform-credo` PASSED with setup through the console client;
+  2. ✅ M5: internal-API timeout. **Done on staging 2026-09-22:** a silent-handler test fails on the old code; `smoke:platform-credo` PASSED;
+  3. ✅ M2 + M6 + M8 + M9: webhook reliability. **Done on staging 2026-09-22:** fair-share pool, replay-safe consumer, live URL, 24 h secret overlap; `smoke:platform-credo` and `smoke:biometric-credo` 18/18;
+  4. ✅ M7: outbox ordering. **Done on staging 2026-09-22:** advisory-locked insert;
+  5. ✅ M1: DIDComm body caps on agent and mediator. **Done on staging 2026-09-22:** 512 KB at the edge (413), 512 KiB WebSocket cap in mediator `-p3`; found trap 50;
+  6. ⏸ M11: file secrets. **Kept open (owner, 2026-09-23)**, with the production host: files on disk keep unattended reboots, tmpfs leaves nothing at rest but needs an operator after one;
+  7. ✅ M4 + M10 + M18: rate limits, orphan sweep, mediator indexes. **M4 + M10 done on staging 2026-09-22:** per-key, per-wallet and per-invitation limits, and an hourly sweep (OOB-based "never connected", 30 d grace, mediator `-p5` admin routes). **M18 done on staging 2026-09-22:** mediator `-p4` makes drizzle-storage containment indexable, and 14 indexes (12 ms → 0.09 ms per lookup at 10 k wallets);
+  8. ✅ M3: endorser daily ceiling. **Done on staging 2026-09-22** (`ENDORSER_DAILY_CEILING` 50);
+  9. ✅ M12: nonce CSP. **Done on staging 2026-09-22:** a per-request nonce with `strict-dynamic`; next-themes gets the nonce; `e2e:staging` fails on any violation (0);
+  10. ✅ M14: SDK log floor. **Done 2026-09-22:** `minLogLevel` (Info by default) and an https-only `apiBaseUrl`; 44/44 JVM tests, `apiCheck` green; phone smoke not run;
+  11. ✅ M16: application alerts. **Done on staging 2026-09-23:** 7 new rules (webhook dead letters and backlog, outbox lag, endorser refusals, edge 5xx, mediator OOB growth, idempotency size), each fired once deliberately; the owner confirms the mails.
+- [ ] **H1:** deletion routes and a retention job.
+- **Kept open by the owner:**
+  - M13: off-site backups, later (2026-09-22);
+  - M17: image tags and CI, in the publishing phase (2026-09-22);
+  - M11: file-based secrets, with the production host (2026-09-23).
 
 ### Phase 8 — Hardening
 
@@ -1034,6 +1052,9 @@ Findings and the ordered fix set: [`17-phase-7.md`](17-phase-7.md) §10 (this wa
 43. **`UnsatisfiedLinkError` is an `Error`, not an `Exception`** (Phase 5). A `catch (e: Exception)` around wallet initialisation let the failure escape and left the SDK's state at `Initializing` for good. Catch `Throwable` at the API boundary and report a typed failure.
 
 44. **The platform-api → agent-service client times out at 10 s, and a credential-definition publication can take longer** (Phase 5, staging). One `POST /v1/credential-definitions` answered 502 `agent_unreachable` while both services were healthy. Raise the timeout for catalogue writes (platform follow-up).
+    - **Corrected by the Phase 7 review (M5, re-validated 2026-09-22):** the cause is not the platform client, whose default is already 30 s (`agent-client.ts:102`). It is agent-service's internal API, `connectionTimeout: 10_000` (`internal-api.ts:40`). That is Node's socket idle timeout, and it destroys the socket while a handler is still waiting on the ledger. The client then sees a socket error, reported as `agent_unreachable`.
+    - It affects every long synchronous route: onboarding, schema and cred-def publishing.
+    - Fix: [`17-phase-7.md`](17-phase-7.md) M5.
 
 45. **A tree sync that includes `infra/staging/secrets/` overwrites secrets edited on the VM** (Phase 4 C8). `*.sops.env` files are committed, but keys added on the VM with `sops` (`CONSOLE_TOKEN` in `platform.sops.env`, runbook step 1) were never committed back, so extracting a tarball of the repo over `/opt/12id` silently replaced the file with the older committed one and the next `deploy.sh platform` failed at interpolation. Nothing running was affected; the value was recoverable from `console.sops.env`, which holds the same token and is not in the repo. Exclude `infra/staging/secrets/` from every sync, or commit the VM's file first.
 
@@ -1044,6 +1065,12 @@ Findings and the ordered fix set: [`17-phase-7.md`](17-phase-7.md) §10 (this wa
 48. **Biometric add-ons change the host app's build** (Phase 6, F3). Amplify needs core library desugaring and leaves the empty `listenablefuture` stub on the compile classpath, which hides CameraX's `ListenableFuture` from app code. Both fixes are in the integration guide.
 
 49. **Askar on Postgres keeps its tables in a schema named after the user that created the store** (Phase 7 H3). It creates schema `"$user"` and reads through the default `search_path` (`"$user", public`). Our three stores (`agent_root`, `endorser`, `mediator`) were created as `postgres`, so they sat in schema `postgres`. Under a new login role they would look empty: Askar would fail to open the store, or provision a fresh empty one. The cutover renames the schema to the role (`pg-roles.sh askar-schema-agent|askar-schema-mediator`), with the store's consumers stopped. A restore drill must connect as a role with the schema's name. Changing a store's user without this is silent data "loss".
+
+50. **Caddy did not see Caddyfile edits: a single-file bind mount follows the inode, and the tarball syncs replace the file** (Phase 7 M1, 2026-09-22).
+    - `compose.edge.yml` mounts `./Caddyfile` as one file. Extracting a tarball over `/opt/12id` writes a new file (a new inode), but the running container keeps the old, deleted one.
+    - So `caddy reload` succeeded and reloaded the *old* config. Staging had run like that since the container started on 2026-09-20. The content happened to match, so nothing broke until M1's `request_body` cap did not apply.
+    - Check with `docker exec edge-caddy-1 grep … /etc/caddy/Caddyfile`.
+    - After any sync that touches the Caddyfile, run `deploy.sh edge up -d --force-recreate caddy`, not a reload. Or mount the directory instead of the file.
 
 ---
 
@@ -1096,7 +1123,7 @@ The published mediator image is Credo 0.6.0; our agents are 0.7.0. Upstream `mai
 
 Staging runs two replicas of this image with a pre-baked migration image (§7.3). A Credo 0.7 issuer and a Credo 0.7 holder interoperate with it end to end over TLS (Phase 1 `smoke:credo`).
 
-**Amended in Phase 3: `12id/mediator:375518d-p2`** adds a second patched file, `apps/mediator/build/agent.js`, with an internal `POST /admin/invitations` route (token-guarded, absent without `ADMIN_API_TOKEN`, 404 at the edge) that mints single-use invitations for the platform API.
+**Amended in Phase 3: `12id/mediator:375518d-p2`** adds a second patched file, `apps/mediator/build/agent.js`, with an internal `POST /admin/invitations` route (token-guarded, absent without `ADMIN_API_TOKEN`, 404 at the edge) that mints single-use invitations for the platform API. **Amended in Phase 7 (M1, 2026-09-22): `-p3`** also caps WebSocket messages at 512 KiB in the same file (`maxPayload`); the edge caps HTTP bodies at 512 KB. **`-p4` (M18, 2026-09-22)** patches a third file, drizzle-storage's `queryToDrizzlePostgres.mjs`, so array/jsonb containment is written as native `column @> value` and can use the GIN indexes in `infra/staging/mediator/indexes.sql` (applied by the one-shot `mediator-indexes` service).
 
 **Amended in Phase 2: the image is now `12id/mediator:375518d-p1`**, the pinned image plus one patched file. The Postgres pickup queue never deleted messages handed to a **pickup-v1** holder (`takeFromQueue({ deleteMessages: true })` only selected), so the native holder was re-sent every message on every poll and answered every copy of a proof request. Upstream `main` has the same code. The patch (`infra/staging/mediator/Dockerfile.patched`) replaces that branch with an atomic delete-on-handover. File it upstream; re-check on every mediator upgrade. `8-phase-2-findings.md` has the evidence.
 

@@ -50,3 +50,58 @@ biometric_gates:
     - overdue_pending:
         usage: GAUGE
         description: Pending gates more than 10 minutes past their expiry
+
+# --- Phase 7 review M16: platform-api health, from the same database ---------------------------
+
+# platform_webhook_deliveries{status}: every status is emitted, with 0 when empty, so an alert on
+# dead letters does not go stale. platform_webhook_oldest_pending_seconds is the delivery backlog.
+platform_webhook:
+  query: |
+    SELECT s.status,
+           COALESCE(d.deliveries, 0) AS deliveries,
+           COALESCE(d.oldest_age_seconds, 0) AS oldest_age_seconds
+    FROM (VALUES ('pending'), ('sending'), ('delivered'), ('dead')) AS s(status)
+    LEFT JOIN (
+      SELECT status,
+             count(*) AS deliveries,
+             EXTRACT(EPOCH FROM (now() - min(created_at))) AS oldest_age_seconds
+      FROM webhook_deliveries
+      GROUP BY status
+    ) d ON d.status = s.status
+  metrics:
+    - status:
+        usage: LABEL
+        description: Delivery status
+    - deliveries:
+        usage: GAUGE
+        description: Webhook deliveries in this status
+    - oldest_age_seconds:
+        usage: GAUGE
+        description: Age of the oldest delivery in this status
+
+# platform_wallets_*: wallets the platform maps, and those that never reached the mediator
+# (review M10; the hourly sweep revokes them after 7 days).
+platform_wallets:
+  query: |
+    SELECT count(*) FILTER (WHERE revoked_at IS NULL) AS active,
+           count(*) FILTER (WHERE revoked_at IS NULL AND connected_at IS NULL) AS never_connected,
+           count(*) FILTER (WHERE revoked_reason = 'never_connected') AS revoked_never_connected
+    FROM wallets
+  metrics:
+    - active:
+        usage: GAUGE
+        description: Wallets not revoked
+    - never_connected:
+        usage: GAUGE
+        description: Live wallets with no mediator connection yet
+    - revoked_never_connected:
+        usage: GAUGE
+        description: Wallets the sweep revoked for never connecting
+
+# platform_idempotency_keys_keys: the 24 h table; unbounded growth means the sweep stopped.
+platform_idempotency_keys:
+  query: SELECT count(*) AS keys FROM idempotency_keys
+  metrics:
+    - keys:
+        usage: GAUGE
+        description: Idempotency keys stored

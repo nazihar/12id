@@ -9,7 +9,17 @@
 #    single-use out-of-band invitation for the platform API (one per wallet). Guarded by the
 #    ADMIN_API_TOKEN env (route absent without it) and never proxied by the edge.
 #
-# Everything else is the pinned image. Re-check both files on every mediator upgrade.
+# 3. apps/mediator/build/agent.js (Phase 7 review M1): the WebSocket server gets `maxPayload: 512 KiB`
+#    (ws defaults to 100 MiB, and the edge's request_body cap does not cover WebSocket frames).
+# 4. @credo-ts/drizzle-storage build/adapter/queryToDrizzlePostgres.mjs (Phase 7 review M18, -p4):
+#    array/jsonb containment as native `column @> value` instead of `to_jsonb(column) @> ...`,
+#    so the GIN indexes in indexes.sql can serve it (to_jsonb cannot be indexed).
+# 5. apps/mediator/build/agent.js (Phase 7 review M4, M10, -p5): `DELETE /admin/connections/:id` (a revoked
+#    wallet's mediation, connection and queue) and `POST /admin/sweep` (unused invitations, stale queue
+#    rows), behind the same ADMIN_API_TOKEN guard; the platform API's sweep calls them.
+#
+# Everything else is the pinned image. Re-check every file on every mediator upgrade.
 FROM ghcr.io/openwallet-foundation/didcomm-mediator-credo/mediator:375518d
 COPY --chown=agent:agent patch/TransportQueuePostgres.js /app/packages/transport-queue-postgres/build/TransportQueuePostgres.js
 COPY --chown=agent:agent patch/agent.js /app/apps/mediator/build/agent.js
+COPY --chown=agent:agent patch/queryToDrizzlePostgres.mjs /app/node_modules/.pnpm/@credo-ts+drizzle-storage@0.6.0_@hyperledger+anoncreds-shared@0.3.4_drizzle-orm@0.44.7__9bddfa36e957075bf8704d55767df5f1/node_modules/@credo-ts/drizzle-storage/build/adapter/queryToDrizzlePostgres.mjs

@@ -107,7 +107,7 @@ function EndpointCard({ endpoint, organizationId, orgSlug, canUpdate, canRotate 
                     </Button>
                   }
                   title="Rotate the signing secret?"
-                  description="A new secret is shown once. The previous secret stops working immediately, so deliveries fail signature checks until your backend uses the new one."
+                  description="A new secret is shown once. For 24 hours every delivery is signed with both the new and the previous secret, so your backend keeps accepting events while you switch it over. After that only the new secret signs."
                   confirmLabel="Rotate secret"
                   pendingLabel="Rotating…"
                   destructive

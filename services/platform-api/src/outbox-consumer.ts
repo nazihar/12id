@@ -2,9 +2,12 @@
  * Outbox consumer (P6): polls agent-service's outbox feed, mirrors every state transition into
  * the platform tables and enqueues the matching webhook event.
  *
- * Idempotent by construction: each mirror row remembers the highest outbox id applied
- * (`last_outbox_id`); an older or repeated row is a no-op. So re-reading after a crash, or the
- * feed's 2 s settle window replaying, is safe. The cursor advances only after a batch is applied.
+ * Replay-safe (review M6): each mirror row remembers the highest outbox id applied
+ * (`last_outbox_id`). An older row is a no-op; the *same* row applies again, because a failure
+ * after the upsert (detail fetch, biometric gate, enqueue) leaves the cursor behind it and the
+ * retry must finish the job. Every step is idempotent: the upsert writes the same values, the gate
+ * transitions are compare-and-set, and the webhook event id is derived from the outbox row id, so
+ * a second enqueue of it is dropped. The cursor advances per row, after the row is fully applied.
  */
 import { eq, sql } from 'drizzle-orm'
 import type { Logger as PinoLogger } from 'pino'
@@ -14,7 +17,7 @@ import type { GateEngine } from './biometric/gate.ts'
 import type { Database } from './db/client.ts'
 import { connections, credentials, outboxCursor, proofs, tenants } from './db/schema.ts'
 import { toConnectionView, toCredentialView, toProofView } from './views.ts'
-import { type EndpointLookup, type EventType, enqueueEvent } from './webhooks/events.ts'
+import { type EndpointLookup, type EventType, enqueueEvent, outboxEventId } from './webhooks/events.ts'
 
 const CURSOR_ID = 'agent'
 
@@ -45,8 +48,9 @@ export function tenantResolver(db: Database): TenantResolver {
 const str = (value: unknown): string | null => (typeof value === 'string' ? value : null)
 
 /**
- * Applies one outbox row. Returns the event to emit, or null when the row was stale/duplicate
- * or belongs to no platform tenant. Exported for tests (pure apart from the db/agent deps).
+ * Applies one outbox row. Returns the event to emit, or null when the row is stale (an older outbox
+ * id than the mirror already holds) or belongs to no platform tenant. Exported for tests (pure apart
+ * from the db/agent deps).
  */
 export async function applyRow(deps: ConsumerDeps, resolve: TenantResolver, row: OutboxRow): Promise<{ tenantId: string; type: EventType; data: Record<string, unknown> } | null> {
   const tenantId = await resolve(row.tenantId)
@@ -55,7 +59,7 @@ export async function applyRow(deps: ConsumerDeps, resolve: TenantResolver, row:
     return null
   }
   const now = new Date()
-  const guard = (table: { lastOutboxId: unknown }) => sql`${table.lastOutboxId} < excluded.last_outbox_id`
+  const guard = (table: { lastOutboxId: unknown }) => sql`${table.lastOutboxId} <= excluded.last_outbox_id`
 
   if (row.recordType === 'connection') {
     const [updated] = await deps.db
@@ -149,7 +153,7 @@ export function createOutboxConsumer(deps: ConsumerDeps) {
     for (const row of rows) {
       const event = await applyRow(deps, resolve, row)
       if (event) {
-        const deliveryId = await enqueueEvent(deps.db, deps.endpoints, event.tenantId, event.type, event.data)
+        const deliveryId = await enqueueEvent(deps.db, deps.endpoints, event.tenantId, event.type, event.data, outboxEventId(row.id))
         log.debug({ outboxId: row.id, recordType: row.recordType, state: row.state, deliveryId }, 'outbox row applied')
       }
       // Advance per row so a failure mid-batch resumes exactly there.

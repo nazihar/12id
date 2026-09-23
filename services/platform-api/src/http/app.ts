@@ -1,8 +1,10 @@
 /**
  * platform-api HTTP surface (P2, Phase 4 C1). Scopes by credential:
  *   public        /v1/ledger, /v1/health, /openapi.json
- *   API key       /v1/* customer resources (+ Idempotency-Key on POST/PUT)
- *   console       the same /v1/* routes with console headers, plus /v1/api-keys (console only)
+ *   API key       /v1/* customer resources (+ Idempotency-Key on POST/PUT): exchanges, wallets, reads
+ *   console       the same /v1/* routes with console headers, plus the console-only ones: API keys,
+ *                 stats, biometric settings, and every setup write (catalogue publishing, proof
+ *                 templates, biometric policies, webhook endpoint/secret/retry; review K1)
  *   wallet token  /v1/wallet/*
  *   operator      /admin/* (console token + operator role, or the break-glass admin token)
  *   none          /internal/mediator/:secret, /healthz, /readyz (never proxied by the edge)
@@ -26,6 +28,7 @@ import { consoleAuditHook } from './audit.ts'
 import { CONSOLE_TOKEN_HEADER, requireOperator, requireTenantPrincipal, requireWalletToken } from './auth.ts'
 import { platformErrorHandler } from './errors.ts'
 import { useIdempotency } from './idempotency.ts'
+import { rateLimiter } from './rate-limit.ts'
 import { adminRoutes } from './routes/admin.ts'
 import { biometricRoutes, walletBiometricRoutes } from './routes/biometrics.ts'
 import { catalogueRoutes } from './routes/catalogue.ts'
@@ -129,9 +132,13 @@ export function buildApp(deps: AppDeps, options: BuildOptions = {}) {
   app.register(publicRoutes({ config: deps.config, readiness: deps.readiness }))
   app.register(internalRoutes({ webhookSecret: deps.config.MEDIATOR_WEBHOOK_SECRET, wake: deps.wake, readiness: deps.readiness }))
 
-  // Customer scope: API key or console, then idempotency on mutations.
+  // Per-principal limits (review M4), one in-process store for the whole app.
+  const limits = rateLimiter({ apiKeyPerMin: deps.config.RATE_LIMIT_API_KEY_PER_MIN, walletPerMin: deps.config.RATE_LIMIT_WALLET_PER_MIN, invitationsPer10Min: deps.config.RATE_LIMIT_INVITATION_PER_10MIN })
+
+  // Customer scope: API key or console, then the per-key limit, then idempotency on mutations.
   app.register(async (scope) => {
     scope.addHook('onRequest', requireTenantPrincipal(deps.db, deps.config.CONSOLE_TOKEN))
+    scope.addHook('onRequest', limits.tenant)
     useIdempotency(scope, deps.db)
     await scope.register(catalogueRoutes({ agent: deps.agent }))
     await scope.register(exchangeRoutes({ db: deps.db, agent: deps.agent, biometric: deps.biometric?.client, gates: deps.biometric?.gates }))
@@ -146,7 +153,8 @@ export function buildApp(deps: AppDeps, options: BuildOptions = {}) {
   // SDK scope: wallet token.
   app.register(async (scope) => {
     scope.addHook('onRequest', requireWalletToken(deps.db))
-    await scope.register(walletDeviceRoutes({ db: deps.db, mediator: deps.mediator }))
+    scope.addHook('onRequest', limits.wallet)
+    await scope.register(walletDeviceRoutes({ db: deps.db, mediator: deps.mediator, invitationLimit: limits.invitation }))
     if (deps.biometric) await scope.register(walletBiometricRoutes({ gates: deps.biometric.gates }))
   })
 

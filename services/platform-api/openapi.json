@@ -138,186 +138,6 @@
       }
     },
     "/v1/schemas": {
-      "post": {
-        "summary": "Publish a schema",
-        "tags": [
-          "catalogue"
-        ],
-        "description": "Attributes are strings on the wire (no nested values, no native numbers). `expiresAt` (epoch seconds) is mandatory: v1 has no revocation, so every credential carries an expiry that every proof request checks.",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "name": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 200
-                  },
-                  "version": {
-                    "type": "string",
-                    "pattern": "^\\d+(\\.\\d+){0,2}$"
-                  },
-                  "attributes": {
-                    "minItems": 1,
-                    "maxItems": 125,
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 100
-                    }
-                  }
-                },
-                "required": [
-                  "name",
-                  "version",
-                  "attributes"
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "name": {
-                      "type": "string"
-                    },
-                    "version": {
-                      "type": "string"
-                    },
-                    "attributes": {
-                      "anyOf": [
-                        {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "status": {
-                      "type": "string"
-                    },
-                    "schemaId": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "qualifiedId": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "lastError": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "name",
-                    "version",
-                    "attributes",
-                    "status",
-                    "schemaId",
-                    "qualifiedId",
-                    "lastError"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "reason": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "reason"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "reason": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "reason"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "reason": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "reason"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        }
-      },
       "get": {
         "summary": "List schemas",
         "tags": [
@@ -396,302 +216,7 @@
         }
       }
     },
-    "/v1/schemas/{id}/deprecation": {
-      "post": {
-        "summary": "Deprecate or reactivate a schema version",
-        "tags": [
-          "catalogue"
-        ],
-        "description": "A deprecated version refuses new offers; credentials already issued under it stay verifiable and templates with `versions: \"all\"` keep accepting them.",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "deprecated": {
-                    "type": "boolean"
-                  }
-                },
-                "required": [
-                  "deprecated"
-                ]
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-            },
-            "in": "path",
-            "name": "id",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "status": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "status"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "reason": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "reason"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "reason": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "reason"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/v1/credential-definitions": {
-      "post": {
-        "summary": "Publish a credential definition",
-        "tags": [
-          "catalogue"
-        ],
-        "description": "Published without revocation support (v1 decision, cannot be changed later for this definition).",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "schemaId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
-                  "tag": {
-                    "default": "default",
-                    "type": "string",
-                    "pattern": "^[A-Za-z0-9_-]{1,32}$"
-                  }
-                },
-                "required": [
-                  "schemaId"
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "schemaId": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "schemaName": {
-                      "type": "string"
-                    },
-                    "schemaVersion": {
-                      "type": "string"
-                    },
-                    "tag": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string"
-                    },
-                    "credentialDefinitionId": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "qualifiedId": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "lastError": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "schemaId",
-                    "schemaName",
-                    "schemaVersion",
-                    "tag",
-                    "status",
-                    "credentialDefinitionId",
-                    "qualifiedId",
-                    "lastError"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "reason": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "reason"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "reason": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "reason"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "reason": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "reason"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "reason": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "reason"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        }
-      },
       "get": {
         "summary": "List credential definitions",
         "tags": [
@@ -3366,665 +2891,9 @@
             }
           }
         }
-      },
-      "put": {
-        "summary": "Set the biometric policy of a credential definition",
-        "tags": [
-          "catalogue"
-        ],
-        "description": "`inherit` follows the tenant default, `off` never gates, `required` gates with the given thresholds (missing values come from the tenant default). Applies to offers made after the change.",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "oneOf": [
-                  {
-                    "type": "object",
-                    "properties": {
-                      "mode": {
-                        "type": "string",
-                        "enum": [
-                          "inherit"
-                        ]
-                      }
-                    },
-                    "required": [
-                      "mode"
-                    ]
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "mode": {
-                        "type": "string",
-                        "enum": [
-                          "off"
-                        ]
-                      }
-                    },
-                    "required": [
-                      "mode"
-                    ]
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "mode": {
-                        "type": "string",
-                        "enum": [
-                          "required"
-                        ]
-                      },
-                      "minMatchScore": {
-                        "type": "number",
-                        "minimum": 0,
-                        "maximum": 100
-                      },
-                      "minLivenessScore": {
-                        "type": "number",
-                        "minimum": 0,
-                        "maximum": 100
-                      },
-                      "maxAttempts": {
-                        "type": "integer",
-                        "minimum": 1,
-                        "maximum": 5
-                      },
-                      "ttlMinutes": {
-                        "type": "integer",
-                        "minimum": 5,
-                        "maximum": 1440
-                      }
-                    },
-                    "required": [
-                      "mode"
-                    ]
-                  }
-                ]
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 300
-            },
-            "in": "path",
-            "name": "id",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "credentialDefinitionId": {
-                      "type": "string"
-                    },
-                    "biometricPolicy": {
-                      "oneOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "mode": {
-                              "type": "string",
-                              "enum": [
-                                "inherit"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "mode"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "mode": {
-                              "type": "string",
-                              "enum": [
-                                "off"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "mode"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "mode": {
-                              "type": "string",
-                              "enum": [
-                                "required"
-                              ]
-                            },
-                            "minMatchScore": {
-                              "type": "number",
-                              "minimum": 0,
-                              "maximum": 100
-                            },
-                            "minLivenessScore": {
-                              "type": "number",
-                              "minimum": 0,
-                              "maximum": 100
-                            },
-                            "maxAttempts": {
-                              "type": "integer",
-                              "minimum": 1,
-                              "maximum": 5
-                            },
-                            "ttlMinutes": {
-                              "type": "integer",
-                              "minimum": 5,
-                              "maximum": 1440
-                            }
-                          },
-                          "required": [
-                            "mode"
-                          ],
-                          "additionalProperties": false
-                        }
-                      ]
-                    }
-                  },
-                  "required": [
-                    "credentialDefinitionId",
-                    "biometricPolicy"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "reason": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "reason"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        }
       }
     },
     "/v1/proof-templates": {
-      "post": {
-        "summary": "Create a proof template",
-        "tags": [
-          "proofs"
-        ],
-        "description": "Each group discloses attributes from one credential and may add integer predicates. Credentials are referenced by schema name (all versions, or active only) or by credential definition id. `expiresAt` is always predicated and can never be disclosed. `biometricPolicy` (optional) overrides the tenant's biometric default for requests made from this template.",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "name": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 100
-                  },
-                  "groups": {
-                    "minItems": 1,
-                    "maxItems": 20,
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "key": {
-                          "type": "string",
-                          "pattern": "^[A-Za-z0-9_-]{1,50}$"
-                        },
-                        "attributes": {
-                          "default": [],
-                          "maxItems": 50,
-                          "type": "array",
-                          "items": {
-                            "type": "string",
-                            "pattern": "^[A-Za-z0-9_.-]{1,100}$"
-                          }
-                        },
-                        "credentials": {
-                          "minItems": 1,
-                          "maxItems": 20,
-                          "type": "array",
-                          "items": {
-                            "anyOf": [
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "schemaName": {
-                                    "type": "string",
-                                    "minLength": 1,
-                                    "maxLength": 200
-                                  },
-                                  "versions": {
-                                    "default": "all",
-                                    "type": "string",
-                                    "enum": [
-                                      "active",
-                                      "all"
-                                    ]
-                                  }
-                                },
-                                "required": [
-                                  "schemaName"
-                                ]
-                              },
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "credentialDefinitionId": {
-                                    "type": "string",
-                                    "minLength": 1,
-                                    "maxLength": 300
-                                  }
-                                },
-                                "required": [
-                                  "credentialDefinitionId"
-                                ]
-                              }
-                            ]
-                          }
-                        },
-                        "predicates": {
-                          "maxItems": 20,
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "name": {
-                                "type": "string",
-                                "pattern": "^[A-Za-z0-9_.-]{1,100}$"
-                              },
-                              "type": {
-                                "type": "string",
-                                "enum": [
-                                  ">=",
-                                  ">",
-                                  "<=",
-                                  "<"
-                                ]
-                              },
-                              "value": {
-                                "type": "integer",
-                                "minimum": -9007199254740991,
-                                "maximum": 9007199254740991
-                              }
-                            },
-                            "required": [
-                              "name",
-                              "type",
-                              "value"
-                            ]
-                          }
-                        }
-                      },
-                      "required": [
-                        "key",
-                        "credentials"
-                      ]
-                    }
-                  },
-                  "biometricPolicy": {
-                    "oneOf": [
-                      {
-                        "type": "object",
-                        "properties": {
-                          "mode": {
-                            "type": "string",
-                            "enum": [
-                              "inherit"
-                            ]
-                          }
-                        },
-                        "required": [
-                          "mode"
-                        ]
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "mode": {
-                            "type": "string",
-                            "enum": [
-                              "off"
-                            ]
-                          }
-                        },
-                        "required": [
-                          "mode"
-                        ]
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "mode": {
-                            "type": "string",
-                            "enum": [
-                              "required"
-                            ]
-                          },
-                          "minMatchScore": {
-                            "type": "number",
-                            "minimum": 0,
-                            "maximum": 100
-                          },
-                          "minLivenessScore": {
-                            "type": "number",
-                            "minimum": 0,
-                            "maximum": 100
-                          },
-                          "maxAttempts": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 5
-                          },
-                          "ttlMinutes": {
-                            "type": "integer",
-                            "minimum": 5,
-                            "maximum": 1440
-                          }
-                        },
-                        "required": [
-                          "mode"
-                        ]
-                      }
-                    ]
-                  }
-                },
-                "required": [
-                  "name",
-                  "groups"
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "name": {
-                      "type": "string"
-                    },
-                    "definition": {
-                      "type": "object",
-                      "properties": {
-                        "name": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 100
-                        },
-                        "groups": {
-                          "minItems": 1,
-                          "maxItems": 20,
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "key": {
-                                "type": "string",
-                                "pattern": "^[A-Za-z0-9_-]{1,50}$"
-                              },
-                              "attributes": {
-                                "default": [],
-                                "maxItems": 50,
-                                "type": "array",
-                                "items": {
-                                  "type": "string",
-                                  "pattern": "^[A-Za-z0-9_.-]{1,100}$"
-                                }
-                              },
-                              "credentials": {
-                                "minItems": 1,
-                                "maxItems": 20,
-                                "type": "array",
-                                "items": {
-                                  "anyOf": [
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "schemaName": {
-                                          "type": "string",
-                                          "minLength": 1,
-                                          "maxLength": 200
-                                        },
-                                        "versions": {
-                                          "default": "all",
-                                          "type": "string",
-                                          "enum": [
-                                            "active",
-                                            "all"
-                                          ]
-                                        }
-                                      },
-                                      "required": [
-                                        "schemaName",
-                                        "versions"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "credentialDefinitionId": {
-                                          "type": "string",
-                                          "minLength": 1,
-                                          "maxLength": 300
-                                        }
-                                      },
-                                      "required": [
-                                        "credentialDefinitionId"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  ]
-                                }
-                              },
-                              "predicates": {
-                                "maxItems": 20,
-                                "type": "array",
-                                "items": {
-                                  "type": "object",
-                                  "properties": {
-                                    "name": {
-                                      "type": "string",
-                                      "pattern": "^[A-Za-z0-9_.-]{1,100}$"
-                                    },
-                                    "type": {
-                                      "type": "string",
-                                      "enum": [
-                                        ">=",
-                                        ">",
-                                        "<=",
-                                        "<"
-                                      ]
-                                    },
-                                    "value": {
-                                      "type": "integer",
-                                      "minimum": -9007199254740991,
-                                      "maximum": 9007199254740991
-                                    }
-                                  },
-                                  "required": [
-                                    "name",
-                                    "type",
-                                    "value"
-                                  ],
-                                  "additionalProperties": false
-                                }
-                              }
-                            },
-                            "required": [
-                              "key",
-                              "attributes",
-                              "credentials"
-                            ],
-                            "additionalProperties": false
-                          }
-                        }
-                      },
-                      "required": [
-                        "name",
-                        "groups"
-                      ],
-                      "additionalProperties": false
-                    },
-                    "biometricPolicy": {
-                      "oneOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "mode": {
-                              "type": "string",
-                              "enum": [
-                                "inherit"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "mode"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "mode": {
-                              "type": "string",
-                              "enum": [
-                                "off"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "mode"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "mode": {
-                              "type": "string",
-                              "enum": [
-                                "required"
-                              ]
-                            },
-                            "minMatchScore": {
-                              "type": "number",
-                              "minimum": 0,
-                              "maximum": 100
-                            },
-                            "minLivenessScore": {
-                              "type": "number",
-                              "minimum": 0,
-                              "maximum": 100
-                            },
-                            "maxAttempts": {
-                              "type": "integer",
-                              "minimum": 1,
-                              "maximum": 5
-                            },
-                            "ttlMinutes": {
-                              "type": "integer",
-                              "minimum": 5,
-                              "maximum": 1440
-                            }
-                          },
-                          "required": [
-                            "mode"
-                          ],
-                          "additionalProperties": false
-                        }
-                      ]
-                    },
-                    "createdAt": {
-                      "type": "string",
-                      "format": "date-time",
-                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
-                    },
-                    "updatedAt": {
-                      "type": "string",
-                      "format": "date-time",
-                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "name",
-                    "definition",
-                    "biometricPolicy",
-                    "createdAt",
-                    "updatedAt"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "reason": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "reason"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        }
-      },
       "get": {
         "summary": "List proof templates",
         "tags": [
@@ -4538,552 +3407,6 @@
             }
           }
         }
-      },
-      "put": {
-        "summary": "Replace a proof template",
-        "tags": [
-          "proofs"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "name": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 100
-                  },
-                  "groups": {
-                    "minItems": 1,
-                    "maxItems": 20,
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "key": {
-                          "type": "string",
-                          "pattern": "^[A-Za-z0-9_-]{1,50}$"
-                        },
-                        "attributes": {
-                          "default": [],
-                          "maxItems": 50,
-                          "type": "array",
-                          "items": {
-                            "type": "string",
-                            "pattern": "^[A-Za-z0-9_.-]{1,100}$"
-                          }
-                        },
-                        "credentials": {
-                          "minItems": 1,
-                          "maxItems": 20,
-                          "type": "array",
-                          "items": {
-                            "anyOf": [
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "schemaName": {
-                                    "type": "string",
-                                    "minLength": 1,
-                                    "maxLength": 200
-                                  },
-                                  "versions": {
-                                    "default": "all",
-                                    "type": "string",
-                                    "enum": [
-                                      "active",
-                                      "all"
-                                    ]
-                                  }
-                                },
-                                "required": [
-                                  "schemaName"
-                                ]
-                              },
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "credentialDefinitionId": {
-                                    "type": "string",
-                                    "minLength": 1,
-                                    "maxLength": 300
-                                  }
-                                },
-                                "required": [
-                                  "credentialDefinitionId"
-                                ]
-                              }
-                            ]
-                          }
-                        },
-                        "predicates": {
-                          "maxItems": 20,
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "name": {
-                                "type": "string",
-                                "pattern": "^[A-Za-z0-9_.-]{1,100}$"
-                              },
-                              "type": {
-                                "type": "string",
-                                "enum": [
-                                  ">=",
-                                  ">",
-                                  "<=",
-                                  "<"
-                                ]
-                              },
-                              "value": {
-                                "type": "integer",
-                                "minimum": -9007199254740991,
-                                "maximum": 9007199254740991
-                              }
-                            },
-                            "required": [
-                              "name",
-                              "type",
-                              "value"
-                            ]
-                          }
-                        }
-                      },
-                      "required": [
-                        "key",
-                        "credentials"
-                      ]
-                    }
-                  },
-                  "biometricPolicy": {
-                    "oneOf": [
-                      {
-                        "type": "object",
-                        "properties": {
-                          "mode": {
-                            "type": "string",
-                            "enum": [
-                              "inherit"
-                            ]
-                          }
-                        },
-                        "required": [
-                          "mode"
-                        ]
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "mode": {
-                            "type": "string",
-                            "enum": [
-                              "off"
-                            ]
-                          }
-                        },
-                        "required": [
-                          "mode"
-                        ]
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "mode": {
-                            "type": "string",
-                            "enum": [
-                              "required"
-                            ]
-                          },
-                          "minMatchScore": {
-                            "type": "number",
-                            "minimum": 0,
-                            "maximum": 100
-                          },
-                          "minLivenessScore": {
-                            "type": "number",
-                            "minimum": 0,
-                            "maximum": 100
-                          },
-                          "maxAttempts": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 5
-                          },
-                          "ttlMinutes": {
-                            "type": "integer",
-                            "minimum": 5,
-                            "maximum": 1440
-                          }
-                        },
-                        "required": [
-                          "mode"
-                        ]
-                      }
-                    ]
-                  }
-                },
-                "required": [
-                  "name",
-                  "groups"
-                ]
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-            },
-            "in": "path",
-            "name": "id",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "name": {
-                      "type": "string"
-                    },
-                    "definition": {
-                      "type": "object",
-                      "properties": {
-                        "name": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 100
-                        },
-                        "groups": {
-                          "minItems": 1,
-                          "maxItems": 20,
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "key": {
-                                "type": "string",
-                                "pattern": "^[A-Za-z0-9_-]{1,50}$"
-                              },
-                              "attributes": {
-                                "default": [],
-                                "maxItems": 50,
-                                "type": "array",
-                                "items": {
-                                  "type": "string",
-                                  "pattern": "^[A-Za-z0-9_.-]{1,100}$"
-                                }
-                              },
-                              "credentials": {
-                                "minItems": 1,
-                                "maxItems": 20,
-                                "type": "array",
-                                "items": {
-                                  "anyOf": [
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "schemaName": {
-                                          "type": "string",
-                                          "minLength": 1,
-                                          "maxLength": 200
-                                        },
-                                        "versions": {
-                                          "default": "all",
-                                          "type": "string",
-                                          "enum": [
-                                            "active",
-                                            "all"
-                                          ]
-                                        }
-                                      },
-                                      "required": [
-                                        "schemaName",
-                                        "versions"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "credentialDefinitionId": {
-                                          "type": "string",
-                                          "minLength": 1,
-                                          "maxLength": 300
-                                        }
-                                      },
-                                      "required": [
-                                        "credentialDefinitionId"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  ]
-                                }
-                              },
-                              "predicates": {
-                                "maxItems": 20,
-                                "type": "array",
-                                "items": {
-                                  "type": "object",
-                                  "properties": {
-                                    "name": {
-                                      "type": "string",
-                                      "pattern": "^[A-Za-z0-9_.-]{1,100}$"
-                                    },
-                                    "type": {
-                                      "type": "string",
-                                      "enum": [
-                                        ">=",
-                                        ">",
-                                        "<=",
-                                        "<"
-                                      ]
-                                    },
-                                    "value": {
-                                      "type": "integer",
-                                      "minimum": -9007199254740991,
-                                      "maximum": 9007199254740991
-                                    }
-                                  },
-                                  "required": [
-                                    "name",
-                                    "type",
-                                    "value"
-                                  ],
-                                  "additionalProperties": false
-                                }
-                              }
-                            },
-                            "required": [
-                              "key",
-                              "attributes",
-                              "credentials"
-                            ],
-                            "additionalProperties": false
-                          }
-                        }
-                      },
-                      "required": [
-                        "name",
-                        "groups"
-                      ],
-                      "additionalProperties": false
-                    },
-                    "biometricPolicy": {
-                      "oneOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "mode": {
-                              "type": "string",
-                              "enum": [
-                                "inherit"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "mode"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "mode": {
-                              "type": "string",
-                              "enum": [
-                                "off"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "mode"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "mode": {
-                              "type": "string",
-                              "enum": [
-                                "required"
-                              ]
-                            },
-                            "minMatchScore": {
-                              "type": "number",
-                              "minimum": 0,
-                              "maximum": 100
-                            },
-                            "minLivenessScore": {
-                              "type": "number",
-                              "minimum": 0,
-                              "maximum": 100
-                            },
-                            "maxAttempts": {
-                              "type": "integer",
-                              "minimum": 1,
-                              "maximum": 5
-                            },
-                            "ttlMinutes": {
-                              "type": "integer",
-                              "minimum": 5,
-                              "maximum": 1440
-                            }
-                          },
-                          "required": [
-                            "mode"
-                          ],
-                          "additionalProperties": false
-                        }
-                      ]
-                    },
-                    "createdAt": {
-                      "type": "string",
-                      "format": "date-time",
-                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
-                    },
-                    "updatedAt": {
-                      "type": "string",
-                      "format": "date-time",
-                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "name",
-                    "definition",
-                    "biometricPolicy",
-                    "createdAt",
-                    "updatedAt"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "reason": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "reason"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "reason": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "reason"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "summary": "Delete a proof template",
-        "tags": [
-          "proofs"
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-            },
-            "in": "path",
-            "name": "id",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "deleted": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "deleted"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "reason": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "reason"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        }
       }
     },
     "/v1/proof-templates/{id}/biometric-policy": {
@@ -5092,212 +3415,6 @@
         "tags": [
           "proofs"
         ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-            },
-            "in": "path",
-            "name": "id",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "templateId": {
-                      "type": "string"
-                    },
-                    "biometricPolicy": {
-                      "oneOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "mode": {
-                              "type": "string",
-                              "enum": [
-                                "inherit"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "mode"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "mode": {
-                              "type": "string",
-                              "enum": [
-                                "off"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "mode"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "mode": {
-                              "type": "string",
-                              "enum": [
-                                "required"
-                              ]
-                            },
-                            "minMatchScore": {
-                              "type": "number",
-                              "minimum": 0,
-                              "maximum": 100
-                            },
-                            "minLivenessScore": {
-                              "type": "number",
-                              "minimum": 0,
-                              "maximum": 100
-                            },
-                            "maxAttempts": {
-                              "type": "integer",
-                              "minimum": 1,
-                              "maximum": 5
-                            },
-                            "ttlMinutes": {
-                              "type": "integer",
-                              "minimum": 5,
-                              "maximum": 1440
-                            }
-                          },
-                          "required": [
-                            "mode"
-                          ],
-                          "additionalProperties": false
-                        }
-                      ]
-                    }
-                  },
-                  "required": [
-                    "templateId",
-                    "biometricPolicy"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "reason": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "reason"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "summary": "Set the biometric policy of a proof template",
-        "tags": [
-          "proofs"
-        ],
-        "description": "`inherit` follows the tenant default, `off` never gates, `required` gates with the given thresholds. Applies to proof requests made from this template after the change.",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "oneOf": [
-                  {
-                    "type": "object",
-                    "properties": {
-                      "mode": {
-                        "type": "string",
-                        "enum": [
-                          "inherit"
-                        ]
-                      }
-                    },
-                    "required": [
-                      "mode"
-                    ]
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "mode": {
-                        "type": "string",
-                        "enum": [
-                          "off"
-                        ]
-                      }
-                    },
-                    "required": [
-                      "mode"
-                    ]
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "mode": {
-                        "type": "string",
-                        "enum": [
-                          "required"
-                        ]
-                      },
-                      "minMatchScore": {
-                        "type": "number",
-                        "minimum": 0,
-                        "maximum": 100
-                      },
-                      "minLivenessScore": {
-                        "type": "number",
-                        "minimum": 0,
-                        "maximum": 100
-                      },
-                      "maxAttempts": {
-                        "type": "integer",
-                        "minimum": 1,
-                        "maximum": 5
-                      },
-                      "ttlMinutes": {
-                        "type": "integer",
-                        "minimum": 5,
-                        "maximum": 1440
-                      }
-                    },
-                    "required": [
-                      "mode"
-                    ]
-                  }
-                ]
-              }
-            }
-          }
-        },
         "parameters": [
           {
             "schema": {
@@ -5488,6 +3605,18 @@
                       "format": "date-time",
                       "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                     },
+                    "connectedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "revokedAt": {
                       "anyOf": [
                         {
@@ -5500,6 +3629,12 @@
                         }
                       ]
                     },
+                    "revokedReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "walletToken": {
                       "type": "string"
                     }
@@ -5510,7 +3645,9 @@
                     "hasMediatorInvitation",
                     "lastSyncRequestedAt",
                     "createdAt",
+                    "connectedAt",
                     "revokedAt",
+                    "revokedReason",
                     "walletToken"
                   ],
                   "additionalProperties": false
@@ -5600,6 +3737,18 @@
                         "format": "date-time",
                         "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                       },
+                      "connectedAt": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
                       "revokedAt": {
                         "anyOf": [
                           {
@@ -5611,6 +3760,12 @@
                             "type": "null"
                           }
                         ]
+                      },
+                      "revokedReason": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
                       }
                     },
                     "required": [
@@ -5619,7 +3774,9 @@
                       "hasMediatorInvitation",
                       "lastSyncRequestedAt",
                       "createdAt",
-                      "revokedAt"
+                      "connectedAt",
+                      "revokedAt",
+                      "revokedReason"
                     ],
                     "additionalProperties": false
                   }
@@ -5685,6 +3842,18 @@
                       "format": "date-time",
                       "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                     },
+                    "connectedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "revokedAt": {
                       "anyOf": [
                         {
@@ -5696,6 +3865,12 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "revokedReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     }
                   },
                   "required": [
@@ -5704,7 +3879,9 @@
                     "hasMediatorInvitation",
                     "lastSyncRequestedAt",
                     "createdAt",
-                    "revokedAt"
+                    "connectedAt",
+                    "revokedAt",
+                    "revokedReason"
                   ],
                   "additionalProperties": false
                 }
@@ -5741,7 +3918,7 @@
         "tags": [
           "wallets"
         ],
-        "description": "Revokes the wallet token; the device keeps its local data and its mediator connection, but the platform stops mapping mediator webhooks to it.",
+        "description": "Revokes the wallet token at once: the app gets 401 and the platform stops mapping mediator webhooks to it. The device keeps its local data. 30 days later the platform also removes its mediator connection, so the app can no longer receive messages; it must call reset() and credentials are issued again. Wallets that never connected to the mediator are revoked by the platform after 7 days (revokedReason never_connected).",
         "parameters": [
           {
             "schema": {
@@ -5791,6 +3968,18 @@
                       "format": "date-time",
                       "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                     },
+                    "connectedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "revokedAt": {
                       "anyOf": [
                         {
@@ -5802,6 +3991,12 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "revokedReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     }
                   },
                   "required": [
@@ -5810,7 +4005,9 @@
                     "hasMediatorInvitation",
                     "lastSyncRequestedAt",
                     "createdAt",
-                    "revokedAt"
+                    "connectedAt",
+                    "revokedAt",
+                    "revokedReason"
                   ],
                   "additionalProperties": false
                 }
@@ -5844,103 +4041,6 @@
       }
     },
     "/v1/webhook": {
-      "put": {
-        "summary": "Set the webhook endpoint",
-        "tags": [
-          "webhooks"
-        ],
-        "description": "One endpoint per tenant. The signing `secret` is returned only when it is created or rotated. Events are POSTed as `{ id, type, createdAt, tenantId, data }` with `X-12id-Signature: t=<unix>,v1=<hex HMAC-SHA256(secret, \"<t>.<body>\")>`. Answer 2xx within 10 s; failures are retried with exponential backoff (about 12 attempts over a day) and then dead-lettered.",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "url": {
-                    "type": "string",
-                    "format": "uri"
-                  },
-                  "events": {
-                    "minItems": 1,
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "enum": [
-                        "connection.state_changed",
-                        "credential.state_changed",
-                        "proof.state_changed",
-                        "wallet.sync_requested",
-                        "biometric.check_completed"
-                      ]
-                    }
-                  }
-                },
-                "required": [
-                  "url"
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "url": {
-                      "type": "string"
-                    },
-                    "events": {
-                      "anyOf": [
-                        {
-                          "type": "array",
-                          "items": {
-                            "type": "string",
-                            "enum": [
-                              "connection.state_changed",
-                              "credential.state_changed",
-                              "proof.state_changed",
-                              "wallet.sync_requested",
-                              "biometric.check_completed"
-                            ]
-                          }
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "createdAt": {
-                      "type": "string",
-                      "format": "date-time",
-                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
-                    },
-                    "updatedAt": {
-                      "type": "string",
-                      "format": "date-time",
-                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
-                    },
-                    "secret": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "url",
-                    "events",
-                    "createdAt",
-                    "updatedAt"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        }
-      },
       "get": {
         "summary": "Get the webhook endpoint",
         "tags": [
@@ -5993,108 +4093,6 @@
                     "events",
                     "createdAt",
                     "updatedAt"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "reason": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "reason"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "summary": "Remove the webhook endpoint",
-        "tags": [
-          "webhooks"
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "deleted": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "deleted"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "reason": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "reason"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/v1/webhook/rotate-secret": {
-      "post": {
-        "summary": "Rotate the signing secret",
-        "tags": [
-          "webhooks"
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "secret": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "secret"
                   ],
                   "additionalProperties": false
                 }
@@ -6396,141 +4394,6 @@
         }
       }
     },
-    "/v1/webhook/deliveries/{id}/retry": {
-      "post": {
-        "summary": "Retry a dead or pending delivery now",
-        "tags": [
-          "webhooks"
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "integer",
-              "minimum": -9007199254740991,
-              "maximum": 9007199254740991
-            },
-            "in": "path",
-            "name": "id",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "integer",
-                      "minimum": -9007199254740991,
-                      "maximum": 9007199254740991
-                    },
-                    "eventId": {
-                      "type": "string"
-                    },
-                    "eventType": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string",
-                      "enum": [
-                        "pending",
-                        "sending",
-                        "delivered",
-                        "dead"
-                      ]
-                    },
-                    "attempts": {
-                      "type": "integer",
-                      "minimum": -9007199254740991,
-                      "maximum": 9007199254740991
-                    },
-                    "nextAttemptAt": {
-                      "type": "string",
-                      "format": "date-time",
-                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
-                    },
-                    "lastStatusCode": {
-                      "anyOf": [
-                        {
-                          "type": "integer",
-                          "minimum": -9007199254740991,
-                          "maximum": 9007199254740991
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "lastError": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "createdAt": {
-                      "type": "string",
-                      "format": "date-time",
-                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
-                    },
-                    "deliveredAt": {
-                      "anyOf": [
-                        {
-                          "type": "string",
-                          "format": "date-time",
-                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "eventId",
-                    "eventType",
-                    "status",
-                    "attempts",
-                    "nextAttemptAt",
-                    "lastStatusCode",
-                    "lastError",
-                    "createdAt",
-                    "deliveredAt"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "reason": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "reason"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/v1/wallet": {
       "get": {
         "summary": "This wallet",
@@ -6579,6 +4442,18 @@
                       "format": "date-time",
                       "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                     },
+                    "connectedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "revokedAt": {
                       "anyOf": [
                         {
@@ -6590,6 +4465,12 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "revokedReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     }
                   },
                   "required": [
@@ -6598,7 +4479,9 @@
                     "hasMediatorInvitation",
                     "lastSyncRequestedAt",
                     "createdAt",
-                    "revokedAt"
+                    "connectedAt",
+                    "revokedAt",
+                    "revokedReason"
                   ],
                   "additionalProperties": false
                 }
@@ -6634,6 +4517,29 @@
                   },
                   "required": [
                     "invitationUrl"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason"
                   ],
                   "additionalProperties": false
                 }

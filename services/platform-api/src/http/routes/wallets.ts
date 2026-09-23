@@ -5,6 +5,7 @@
  * Wallet endpoints are registered in two scopes by app.ts because the credentials differ.
  */
 import { and, desc, eq, isNull } from 'drizzle-orm'
+import type { preHandlerAsyncHookHandler } from 'fastify'
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { z } from 'zod'
 
@@ -74,7 +75,7 @@ export const walletCustomerRoutes = (deps: { db: Database }): FastifyPluginAsync
 
   app.delete(
     '/v1/wallets/:id',
-    { schema: { tags: ['wallets'], summary: 'Revoke a wallet', description: 'Revokes the wallet token; the device keeps its local data and its mediator connection, but the platform stops mapping mediator webhooks to it.', params: z.object({ id: z.uuid() }), response: { 200: walletView, 404: errorBody } } },
+    { schema: { tags: ['wallets'], summary: 'Revoke a wallet', description: 'Revokes the wallet token at once: the app gets 401 and the platform stops mapping mediator webhooks to it. The device keeps its local data. 30 days later the platform also removes its mediator connection, so the app can no longer receive messages; it must call reset() and credentials are issued again. Wallets that never connected to the mediator are revoked by the platform after 7 days (revokedReason never_connected).', params: z.object({ id: z.uuid() }), response: { 200: walletView, 404: errorBody } } },
     async (request) => {
       const [row] = await deps.db
         .update(wallets)
@@ -87,7 +88,7 @@ export const walletCustomerRoutes = (deps: { db: Database }): FastifyPluginAsync
   )
 }
 
-export const walletDeviceRoutes = (deps: { db: Database; mediator: Pick<MediatorClient, 'createInvitation'> }): FastifyPluginAsyncZod => async (app) => {
+export const walletDeviceRoutes = (deps: { db: Database; mediator: Pick<MediatorClient, 'createInvitation'>; invitationLimit?: preHandlerAsyncHookHandler }): FastifyPluginAsyncZod => async (app) => {
   const wallet = (request: { wallet?: WalletContext }) => request.wallet as WalletContext
 
   app.get('/v1/wallet', { schema: { tags: ['wallet (SDK)'], summary: 'This wallet', security: [{ walletToken: [] }], response: { 200: walletView } } }, async (request) => {
@@ -103,8 +104,10 @@ export const walletDeviceRoutes = (deps: { db: Database; mediator: Pick<Mediator
         summary: 'Mediator invitation for this wallet',
         description: 'Mints a single-use out-of-band invitation for the platform mediator. Call once at first launch and connect immediately; calling again replaces the previous invitation.',
         security: [{ walletToken: [] }],
-        response: { 200: z.object({ invitationUrl: z.string() }), 502: errorBody },
+        response: { 200: z.object({ invitationUrl: z.string() }), 429: errorBody, 502: errorBody },
       },
+      // Each call creates a mediator record (review M4): a few per 10 minutes per wallet.
+      ...(deps.invitationLimit ? { preHandler: deps.invitationLimit } : {}),
     },
     async (request) => {
       const w = wallet(request)

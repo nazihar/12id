@@ -4,6 +4,7 @@
  *   wallet token  /v1/wallet/biometric-*   the SDK: requirements by thread id, start/complete a session
  *   console       /v1/biometrics/*         settings, provider configuration (write-only), adoption
  *   customer      /v1/credential-definitions/:id/biometric-policy   per credential definition override
+ *                 (reading it: API key or console; setting it: console only, review K1)
  *
  * Provider configuration goes straight to biometric-service and is never stored here; responses
  * carry only its non-secret part.
@@ -18,7 +19,7 @@ import type { GateEngine } from '../../biometric/gate.ts'
 import { DEFAULT_POLICY, biometricDefaultPolicy, biometricOverride } from '../../biometric/policy.ts'
 import type { Database } from '../../db/client.ts'
 import { biometricSettings, credentialDefinitionPolicies, wallets } from '../../db/schema.ts'
-import type { TenantContext, WalletContext } from '../auth.ts'
+import { type TenantContext, type WalletContext, requireConsolePrincipal } from '../auth.ts'
 import { PlatformError } from '../errors.ts'
 import { resolveCredentialDefinition } from './catalogue.ts'
 import { CONSOLE_ONLY_TAG } from './console.ts'
@@ -139,11 +140,7 @@ const settingsView = z.object({
 })
 
 export const biometricRoutes = (deps: { db: Database; agent: AgentClient; biometric: BiometricClient }): FastifyPluginAsyncZod => async (app) => {
-  const consoleTenant = (request: { tenant?: TenantContext }) => {
-    const t = request.tenant as TenantContext
-    if (t.principal.kind !== 'console') throw new PlatformError(403, 'forbidden', 'biometric settings are managed from the console')
-    return t
-  }
+  const consoleTenant = (request: { tenant?: TenantContext }) => requireConsolePrincipal(request.tenant as TenantContext, 'biometric settings are managed from the console')
   const tenant = (request: { tenant?: TenantContext }) => request.tenant as TenantContext
   const tags = ['biometrics', CONSOLE_ONLY_TAG]
 
@@ -261,7 +258,7 @@ export const biometricRoutes = (deps: { db: Database; agent: AgentClient; biomet
     }
   )
 
-  // --- per credential definition (customer scope: API key or console) ---------------
+  // --- per credential definition (read: API key or console; write: console only) -----
   const policyView = z.object({ credentialDefinitionId: z.string(), biometricPolicy: biometricOverride })
 
   app.get(
@@ -279,7 +276,7 @@ export const biometricRoutes = (deps: { db: Database; agent: AgentClient; biomet
     '/v1/credential-definitions/:id/biometric-policy',
     {
       schema: {
-        tags: ['catalogue'],
+        tags: ['catalogue', CONSOLE_ONLY_TAG],
         summary: 'Set the biometric policy of a credential definition',
         description: '`inherit` follows the tenant default, `off` never gates, `required` gates with the given thresholds (missing values come from the tenant default). Applies to offers made after the change.',
         params: z.object({ id: z.string().min(1).max(300) }),
@@ -288,7 +285,7 @@ export const biometricRoutes = (deps: { db: Database; agent: AgentClient; biomet
       },
     },
     async (request) => {
-      const t = tenant(request)
+      const t = consoleTenant(request)
       const credDef = await resolveCredentialDefinition(deps.agent, t, request.params.id)
       const values = { biometricPolicy: request.body as Record<string, unknown>, updatedAt: new Date() }
       await deps.db

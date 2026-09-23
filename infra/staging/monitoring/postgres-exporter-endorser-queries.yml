@@ -1,0 +1,36 @@
+# Custom postgres-exporter queries against endorser-service's database (Phase 7 review M16).
+# Refusals are the signal that something is asking the endorser to sign what it may not, and the
+# allowed count shows how close a tenant is to ENDORSER_DAILY_CEILING (review M3).
+
+endorser_decisions:
+  query: |
+    SELECT a.allowed::text AS allowed,
+           COALESCE(d.decisions, 0) AS decisions
+    FROM (VALUES (true), (false)) AS a(allowed)
+    LEFT JOIN (
+      SELECT allowed, count(*) AS decisions
+      FROM endorsement_audit
+      WHERE created_at > now() - interval '24 hours'
+      GROUP BY allowed
+    ) d ON d.allowed = a.allowed
+  metrics:
+    - allowed:
+        usage: LABEL
+        description: Whether the endorser signed
+    - decisions:
+        usage: GAUGE
+        description: Endorsement decisions in the last 24 hours
+
+endorser_ledger_writes:
+  query: |
+    SELECT COALESCE(max(writes), 0) AS busiest_tenant_24h
+    FROM (
+      SELECT count(*) AS writes
+      FROM endorsement_audit
+      WHERE allowed AND kind IN ('schema', 'credentialDefinition') AND created_at > now() - interval '24 hours'
+      GROUP BY tenant_id
+    ) t
+  metrics:
+    - busiest_tenant_24h:
+        usage: GAUGE
+        description: Ledger objects endorsed for the busiest tenant in 24 h (ENDORSER_DAILY_CEILING)

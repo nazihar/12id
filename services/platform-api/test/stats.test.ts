@@ -66,7 +66,7 @@ describe('dashboard stats', { skip: db ? false : 'no test database' }, () => {
       { tenantId: globex, recordId: 'p4', state: 'request-sent', createdAt: daysAgo(2), updatedAt: daysAgo(2) },
     ])
     await db!.db.insert(wallets).values([
-      { tenantId: acme, tokenHash: 'h1', mediatorOobId: 'oob-1', mediatorConnectionId: 'mc-1', createdAt: daysAgo(3) },
+      { tenantId: acme, tokenHash: 'h1', mediatorOobId: 'oob-1', mediatorConnectionId: 'mc-1', connectedAt: daysAgo(3), createdAt: daysAgo(3) },
       { tenantId: acme, tokenHash: 'h2', mediatorOobId: 'oob-2', createdAt: daysAgo(3) },
       { tenantId: acme, tokenHash: 'h3', mediatorOobId: 'oob-3', createdAt: daysAgo(0) },
       { tenantId: acme, tokenHash: 'h4', mediatorOobId: 'oob-4', revokedAt: daysAgo(1), createdAt: daysAgo(3) },

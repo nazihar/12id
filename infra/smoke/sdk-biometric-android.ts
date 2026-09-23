@@ -13,17 +13,19 @@
  * 5 gated template proof → face check passes → respond → verified and disclosed released; 6 every
  * attempt in the biometric log.
  *
- * Env: PLATFORM_API, PLATFORM_API_KEY, WEBHOOK_URL, RECEIVER_PORT, PROVIDER, REFERENCE_IMAGE (a JPEG
+ * Env: PLATFORM_API, PLATFORM_API_KEY, PLATFORM_TENANT_ID (console setup over SSH, K1), WEBHOOK_URL, RECEIVER_PORT, PROVIDER, REFERENCE_IMAGE (a JPEG
  * path; required for aws, optional for mock), CRED_DEF_ID (optional, schema smoke-sdk-biometric).
  */
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 
-import { env, now, offerAttributes, platformClient, publishCatalogue, sleep, startReceiver } from './platform-common.ts'
+import { consoleClient, env, now, offerAttributes, platformClient, publishCatalogue, sleep, startReceiver } from './platform-common.ts'
 
 const APP = 'com.onetwoid.sample'
 const baseUrl = env('PLATFORM_API', 'https://api.12id.naziharitsolution.com')
 const api = platformClient(baseUrl, env('PLATFORM_API_KEY'))
+// Setup routes are console only (review K1): publishing, templates, policies, the webhook endpoint.
+const setup = consoleClient()
 const webhookUrl = env('WEBHOOK_URL', 'https://smoke-issuer.12id.naziharitsolution.com/webhook')
 const provider = process.env.PROVIDER ?? 'mock'
 // ATTACK=1 (aws): step 4 is a presentation attack, a photo of the reference person held up to the camera.
@@ -104,12 +106,12 @@ try {
   await receiver.listening
   console.log(`device: ${adb('shell', 'getprop', 'ro.product.model')}, Android ${adb('shell', 'getprop', 'ro.build.version.release')}; provider ${provider}`)
   adb('logcat', '-c')
-  const endpoint = await api.must<{ secret?: string }>('PUT', '/v1/webhook', { url: webhookUrl })
-  secret = endpoint.secret ?? (await api.must<{ secret: string }>('POST', '/v1/webhook/rotate-secret')).secret
+  const endpoint = await setup.must<{ secret?: string }>('PUT', '/v1/webhook', { url: webhookUrl })
+  secret = endpoint.secret ?? (await setup.must<{ secret: string }>('POST', '/v1/webhook/rotate-secret')).secret
   // CRED_DEF_ID reuses a published definition of schema smoke-sdk-biometric (publishing can outlast the
   // agent timeout, trap 44 / review M5).
-  const catalogue = process.env.CRED_DEF_ID ? { credentialDefinitionLedgerId: process.env.CRED_DEF_ID } : await publishCatalogue(api, 'smoke-sdk-biometric')
-  await api.must('PUT', `/v1/credential-definitions/${encodeURIComponent(catalogue.credentialDefinitionLedgerId)}/biometric-policy`, { mode: 'required', maxAttempts: 3 })
+  const catalogue = process.env.CRED_DEF_ID ? { credentialDefinitionLedgerId: process.env.CRED_DEF_ID } : await publishCatalogue(setup, 'smoke-sdk-biometric')
+  await setup.must('PUT', `/v1/credential-definitions/${encodeURIComponent(catalogue.credentialDefinitionLedgerId)}/biometric-policy`, { mode: 'required', maxAttempts: 3 })
 
   // 1: fresh install
   adb('shell', 'am', 'force-stop', APP)
@@ -162,7 +164,7 @@ try {
 
   // 5: gated proof
   {
-    const template = await api.must<{ id: string }>('POST', '/v1/proof-templates', {
+    const template = await setup.must<{ id: string }>('POST', '/v1/proof-templates', {
       name: 'phone biometric proof',
       groups: [{ key: 'employee', attributes: ['name'], credentials: [{ schemaName: 'smoke-sdk-biometric' }] }],
       biometricPolicy: { mode: 'required' },

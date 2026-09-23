@@ -15,10 +15,8 @@ import type { Logger as PinoLogger } from 'pino'
 
 import type { RootAgent } from '../agent/root-agent.ts'
 import type { Database } from '../db/client.ts'
-import { outbox } from '../db/schema.ts'
 import { type CorrelationKind, type PendingCorrelations, getCorrelationId, setCorrelationId } from './correlation.ts'
-
-type OutboxInsert = typeof outbox.$inferInsert
+import { type OutboxInsert, insertOutboxRow } from './outbox-writer.ts'
 
 const TENANT_CONTEXT_PREFIX = 'tenant-'
 
@@ -140,13 +138,11 @@ export function startOutboxListener(agent: RootAgent, db: Database, logger: Pino
           })
           .catch((error: unknown) => log.warn({ err: error, recordId: row.recordId }, 'could not persist correlation id on record'))
       }
-      db.insert(outbox)
-        .values(row)
-        .then(
-          () => log.debug({ tenantId: row.tenantId, recordType: row.recordType, state: row.state, threadId: row.threadId }, 'outbox row written'),
-          (error: unknown) =>
-            log.error({ err: error, tenantId: row.tenantId, recordType: row.recordType, recordId: row.recordId, state: row.state }, 'outbox write failed')
-        )
+      insertOutboxRow(db, row).then(
+        () => log.debug({ tenantId: row.tenantId, recordType: row.recordType, state: row.state, threadId: row.threadId }, 'outbox row written'),
+        (error: unknown) =>
+          log.error({ err: error, tenantId: row.tenantId, recordType: row.recordType, recordId: row.recordId, state: row.state }, 'outbox write failed')
+      )
     })
   )
   return () => {

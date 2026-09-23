@@ -147,6 +147,40 @@ services:
     networks:
       - mediator
 
+  # Phase 7 review M16: agent-service outbox lag (the platform consumer's backlog).
+  postgres-exporter-agent:
+    image: prometheuscommunity/postgres-exporter:v0.20.1
+    restart: unless-stopped
+    mem_limit: 64m
+    environment:
+      DATA_SOURCE_NAME: postgresql://monitoring_ro:${MONITORING_DB_PASSWORD:?decrypt secrets via deploy.sh}@agent-postgres:5432/agent_service?sslmode=disable
+      PG_EXPORTER_EXTEND_QUERY_PATH: /etc/postgres-exporter/queries.yml
+      PG_EXPORTER_DISABLE_DEFAULT_METRICS: 'true'
+      PG_EXPORTER_DISABLE_SETTINGS_METRICS: 'true'
+    volumes:
+      - ./monitoring/postgres-exporter-agent-queries.yml:/etc/postgres-exporter/queries.yml:ro
+    ports:
+      - '127.0.0.1:9190:9187'
+    networks:
+      - agent
+
+  # Phase 7 review M16: endorser decisions (refusals, and how close a tenant is to the daily ceiling).
+  postgres-exporter-endorser:
+    image: prometheuscommunity/postgres-exporter:v0.20.1
+    restart: unless-stopped
+    mem_limit: 64m
+    environment:
+      DATA_SOURCE_NAME: postgresql://monitoring_ro:${MONITORING_DB_PASSWORD:?decrypt secrets via deploy.sh}@agent-postgres:5432/endorser_service?sslmode=disable
+      PG_EXPORTER_EXTEND_QUERY_PATH: /etc/postgres-exporter/queries.yml
+      PG_EXPORTER_DISABLE_DEFAULT_METRICS: 'true'
+      PG_EXPORTER_DISABLE_SETTINGS_METRICS: 'true'
+    volumes:
+      - ./monitoring/postgres-exporter-endorser-queries.yml:/etc/postgres-exporter/queries.yml:ro
+    ports:
+      - '127.0.0.1:9191:9187'
+    networks:
+      - agent
+
   # Phase 6 biometric gate metrics from platform-api's biometric log (agent-postgres).
   postgres-exporter-biometric:
     image: prometheuscommunity/postgres-exporter:v0.20.1

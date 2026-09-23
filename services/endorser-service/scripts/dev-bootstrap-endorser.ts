@@ -35,6 +35,7 @@ const config = {
   POSTGRES_USER: process.env.POSTGRES_USER ?? '',
   POSTGRES_PASSWORD: process.env.POSTGRES_PASSWORD ?? '',
   DATABASE_URL: '',
+  ENDORSER_DAILY_CEILING: 0,
   INTERNAL_TOKEN: '',
   HOST: '127.0.0.1',
   PORT: 0,

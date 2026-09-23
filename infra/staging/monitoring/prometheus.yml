@@ -37,6 +37,20 @@ scrape_configs:
     static_configs:
       - targets: ['127.0.0.1:9188']
 
+  # Phase 7 review M16: agent-service outbox lag and endorser decisions.
+  - job_name: postgres-agent
+    static_configs:
+      - targets: ['127.0.0.1:9190']
+
+  - job_name: postgres-endorser
+    static_configs:
+      - targets: ['127.0.0.1:9191']
+
+  # Phase 7 review M16: the edge's own request metrics (status codes), from Caddy's admin endpoint.
+  - job_name: caddy
+    static_configs:
+      - targets: ['127.0.0.1:2019']
+
   # Phase 6 biometric gate (postgres-exporter-biometric-queries.yml).
   - job_name: postgres-biometric
     static_configs:

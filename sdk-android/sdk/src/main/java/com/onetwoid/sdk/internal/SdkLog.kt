@@ -7,7 +7,14 @@ import com.onetwoid.sdk.LogSink
 internal object SdkLog {
     @Volatile var sink: LogSink? = null
 
+    /** Set from `OneTwoIdConfig.minLogLevel`; nothing below it reaches the sink (review M14). */
+    @Volatile var minLevel: LogLevel = LogLevel.Info
+
+    /** Whether a line at this level would be delivered; also answers slf4j's `is*Enabled`. */
+    fun enabled(level: LogLevel): Boolean = sink != null && level.ordinal >= minLevel.ordinal
+
     fun log(level: LogLevel, message: String, error: Throwable? = null) {
+        if (!enabled(level)) return
         sink?.log(level, message, error)
     }
 

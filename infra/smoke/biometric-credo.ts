@@ -11,17 +11,19 @@
  *   4. gated proof: the holder presents before passing → verified/disclosed withheld → pass → released
  *   5. every biometric log has the expected sequence; biometric.check_completed webhooks arrive signed
  *
- * Env as smoke:platform-credo: PLATFORM_API, PLATFORM_API_KEY, WEBHOOK_URL, RECEIVER_PORT.
+ * Env as smoke:platform-credo: PLATFORM_API, PLATFORM_API_KEY, PLATFORM_TENANT_ID, WEBHOOK_URL, RECEIVER_PORT.
  */
 import './bindings.ts'
 
 import { DidCommCredentialState, DidCommProofState } from '@credo-ts/didcomm'
 
 import { createHolderAgent, withTimeout } from './common.ts'
-import { env, now, offerAttributes, platformClient, publishCatalogue, sleep, startReceiver } from './platform-common.ts'
+import { consoleClient, env, now, offerAttributes, platformClient, publishCatalogue, sleep, startReceiver } from './platform-common.ts'
 
 const baseUrl = env('PLATFORM_API', 'https://api.12id.naziharitsolution.com')
 const api = platformClient(baseUrl, env('PLATFORM_API_KEY'))
+// Setup routes are console only (review K1): publishing, templates, policies, the webhook endpoint.
+const setup = consoleClient()
 const webhookUrl = env('WEBHOOK_URL', 'https://smoke-issuer.12id.naziharitsolution.com/webhook')
 const runId = `bio-${Date.now()}`
 // The mock provider never looks inside the image; it must only be a JPEG.
@@ -68,12 +70,12 @@ function waitForHolderProof(h: Holder, threadId: string, state: DidCommProofStat
 
 try {
   await receiver.listening
-  const endpoint = await api.must<{ secret?: string }>('PUT', '/v1/webhook', { url: webhookUrl })
-  secret = endpoint.secret ?? (await api.must<{ secret: string }>('POST', '/v1/webhook/rotate-secret')).secret
+  const endpoint = await setup.must<{ secret?: string }>('PUT', '/v1/webhook', { url: webhookUrl })
+  secret = endpoint.secret ?? (await setup.must<{ secret: string }>('POST', '/v1/webhook/rotate-secret')).secret
 
-  const catalogue = await publishCatalogue(api, 'smoke-biometric')
+  const catalogue = await publishCatalogue(setup, 'smoke-biometric')
   // Gate this credential definition (API key route; the tenant switch was set by biometric-setup.sh).
-  await api.must('PUT', `/v1/credential-definitions/${encodeURIComponent(catalogue.credentialDefinitionLedgerId)}/biometric-policy`, { mode: 'required', minMatchScore: 90, minLivenessScore: 90, maxAttempts: 3 })
+  await setup.must('PUT', `/v1/credential-definitions/${encodeURIComponent(catalogue.credentialDefinitionLedgerId)}/biometric-policy`, { mode: 'required', minMatchScore: 90, minLivenessScore: 90, maxAttempts: 3 })
 
   const wallet = await api.must<{ id: string; walletToken: string }>('POST', '/v1/wallets', { externalId: `user-${runId}` })
   const sdk = platformClient(baseUrl, wallet.walletToken)
@@ -153,7 +155,7 @@ try {
 
   // 4. gated proof
   {
-    const template = await api.must<{ id: string }>('POST', '/v1/proof-templates', {
+    const template = await setup.must<{ id: string }>('POST', '/v1/proof-templates', {
       name: 'biometric proof',
       groups: [{ key: 'employee', attributes: ['name'], credentials: [{ schemaName: 'smoke-biometric' }] }],
       biometricPolicy: { mode: 'required', minMatchScore: 90 },

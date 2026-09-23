@@ -25,7 +25,7 @@ export interface AdminDeps {
 }
 
 const tags = ['admin', CONSOLE_ONLY_TAG]
-const tenantView = z.object({ id: z.string(), name: z.string(), status: z.string(), did: z.string().nullable(), agentTenantId: z.string(), lastError: z.string().nullable(), createdAt: z.iso.datetime() })
+const tenantView = z.object({ id: z.string(), name: z.string(), status: z.string(), did: z.string().nullable(), agentTenantId: z.string(), lastError: z.string().nullable(), rateLimitPerMin: z.number().int().nullable(), createdAt: z.iso.datetime() })
 const errorBody = z.object({ error: z.string(), reason: z.string() })
 const stateCounts = z.record(z.string(), z.number().int())
 const activeRevoked = z.object({ active: z.number().int(), revoked: z.number().int() })
@@ -52,7 +52,7 @@ async function onboard(deps: AdminDeps, tenantId: string, agentTenantId: string)
   }
 }
 
-const view = (row: typeof tenants.$inferSelect) => ({ id: row.id, name: row.name, status: row.status, did: row.did, agentTenantId: row.agentTenantId, lastError: row.lastError, createdAt: row.createdAt.toISOString() })
+const view = (row: typeof tenants.$inferSelect) => ({ id: row.id, name: row.name, status: row.status, did: row.did, agentTenantId: row.agentTenantId, lastError: row.lastError, rateLimitPerMin: row.rateLimitPerMin, createdAt: row.createdAt.toISOString() })
 
 export const adminRoutes = (deps: AdminDeps): FastifyPluginAsyncZod => async (app) => {
   app.addHook('onRequest', requireOperator(deps.adminToken, deps.consoleToken))
@@ -76,6 +76,26 @@ export const adminRoutes = (deps: AdminDeps): FastifyPluginAsyncZod => async (ap
     if (!row) throw notFound('tenant')
     return view(row)
   })
+
+  // Review M4: raise (or lower) one tenant's per-API-key limit; null returns it to the configured default.
+  app.patch(
+    '/admin/tenants/:id',
+    {
+      schema: {
+        tags,
+        summary: 'Change tenant settings',
+        description: '`rateLimitPerMin`: requests per minute per API key for this tenant (0 = no limit); null = the platform default (RATE_LIMIT_API_KEY_PER_MIN).',
+        params: z.object({ id: z.uuid() }),
+        body: z.object({ rateLimitPerMin: z.number().int().min(0).max(100_000).nullable() }),
+        response: { 200: tenantView, 404: errorBody },
+      },
+    },
+    async (request) => {
+      const [row] = await deps.db.update(tenants).set({ rateLimitPerMin: request.body.rateLimitPerMin, updatedAt: new Date() }).where(eq(tenants.id, request.params.id)).returning()
+      if (!row) throw notFound('tenant')
+      return view(row)
+    }
+  )
 
   app.post('/admin/tenants/:id/onboard', { schema: { tags, params: z.object({ id: z.uuid() }), response: { 200: tenantView, 404: errorBody } } }, async (request) => {
     const [row] = await deps.db.select().from(tenants).where(eq(tenants.id, request.params.id))

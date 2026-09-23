@@ -1,8 +1,20 @@
 import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query'
 import { type AnyRouter, createRouter, isRedirect } from '@tanstack/react-router'
 import { setupRouterSsrQueryIntegration } from '@tanstack/react-router-ssr-query'
+import { getGlobalStartContext } from '@tanstack/react-start'
 
 import { routeTree } from './routeTree.gen'
+
+/** The CSP nonce of the current request (start.ts); undefined in the browser or outside a request. */
+function requestNonce(): string | undefined {
+  try {
+    return getGlobalStartContext()?.nonce
+  } catch {
+    // Start can build the router outside the request context (redirect handling), where there is
+    // no page to render and so nothing to stamp.
+    return undefined
+  }
+}
 
 export function getRouter() {
   // A server function whose middleware finds no usable session throws a router redirect. A loader is
@@ -25,6 +37,9 @@ export function getRouter() {
   router = createRouter({
     routeTree,
     context: { queryClient },
+    // The CSP nonce of this request (start.ts): stamped on every script the router renders. Undefined
+    // in the browser, where the scripts already exist.
+    ssr: { nonce: requestNonce() },
     scrollRestoration: true,
     defaultPreload: 'intent',
     defaultPreloadStaleTime: 0,

@@ -104,6 +104,7 @@ object OneTwoId {
 }
 data class OneTwoIdConfig(val apiBaseUrl: String, val walletTokenProvider: suspend () -> String,
                           val label: String = "12id wallet", val logSink: LogSink? = null)
+  > **Phase 7 update (2026-09-22, review M14):** the config also takes `minLogLevel` (default `LogLevel.Info`), so the framework's debug lines (proof-request contents, connection records, DID documents) never reach a customer's sink unless they opt in. `initialize` refuses a non-https `apiBaseUrl` outside a debuggable build. See [`17-phase-7.md`](17-phase-7.md) M14.
 ```
 - **Models:** `Connection(id, label, state, createdAt)`, `Credential(id, connectionId, schemaName, schemaVersion, credentialDefinitionId, attributes: Map<String,String>, issuedAt, expiresAt: Instant?, isExpired)`, `CredentialOffer`, `ProofRequest(id, connectionId, name, groups)`, `ProofSelection(groupKey → credentialId)`. Errors are a sealed `OneTwoIdException`: `WalletTokenRejected` (401), `NetworkUnavailable`, `InvalidInvitation`, `MediatorUnavailable`, `LedgerUnavailable`, `NotFound`, `InvalidSelection`, `WalletKeyLost`.
 - **Wallet key:**

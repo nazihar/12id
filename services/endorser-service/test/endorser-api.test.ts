@@ -162,3 +162,56 @@ describe('POST /endorse', () => {
     await api.close()
   })
 })
+
+describe('daily ledger-write ceiling (review M3)', () => {
+  function capped(ceiling: number, writtenToday: number) {
+    const audit: AuditEntry[] = []
+    const asked: Array<{ tenantId: string; since: Date }> = []
+    const now = new Date('2026-09-22T12:00:00Z')
+    const api = buildEndorserApi({
+      logger: silent,
+      token: TOKEN,
+      endorserNym: ENDORSER,
+      bindings: memoryBindings({ 'tenant-a': TENANT_NYM }),
+      sign: async (request) => `${request}#signed`,
+      audit: {
+        record: async (entry) => void audit.push(entry),
+        ledgerWritesSince: async (tenantId, since) => {
+          asked.push({ tenantId, since })
+          return writtenToday
+        },
+      },
+      dailyLedgerWriteCeiling: ceiling,
+      now: () => now,
+    })
+    return { api, audit, asked, now }
+  }
+
+  it('refuses a schema or cred def once the tenant reached the ceiling in the last 24 h, and audits the refusal', async () => {
+    const { api, audit, asked, now } = capped(3, 3)
+    const response = await api.inject({ method: 'POST', url: '/endorse', headers: auth, payload: { kind: 'schema', request: schemaRequest, tenantId: 'tenant-a' } })
+    assert.equal(response.statusCode, 403)
+    assert.match(response.json().reason, /daily ledger-write ceiling reached: 3 .* \(limit 3\)/)
+    assert.equal(audit.at(-1)?.allowed, false)
+    assert.equal(asked[0].tenantId, 'tenant-a')
+    assert.equal(now.getTime() - asked[0].since.getTime(), 24 * 60 * 60 * 1000, 'a rolling 24 h window')
+    await api.close()
+  })
+
+  it('signs below the ceiling, never counts NYMs, and 0 turns it off', async () => {
+    const below = capped(3, 2)
+    assert.equal((await below.api.inject({ method: 'POST', url: '/endorse', headers: auth, payload: { kind: 'schema', request: schemaRequest, tenantId: 'tenant-a' } })).statusCode, 200)
+    await below.api.close()
+
+    const nymRequest = JSON.stringify({ identifier: ENDORSER, operation: { type: '1', dest: TENANT_NYM } })
+    const full = capped(3, 99)
+    assert.equal((await full.api.inject({ method: 'POST', url: '/endorse', headers: auth, payload: { kind: 'nym', request: nymRequest, tenantId: 'tenant-a' } })).statusCode, 200, 'onboarding is never blocked')
+    assert.equal(full.asked.length, 0)
+    await full.api.close()
+
+    const off = capped(0, 99)
+    assert.equal((await off.api.inject({ method: 'POST', url: '/endorse', headers: auth, payload: { kind: 'schema', request: schemaRequest, tenantId: 'tenant-a' } })).statusCode, 200)
+    assert.equal(off.asked.length, 0)
+    await off.api.close()
+  })
+})

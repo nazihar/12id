@@ -10,8 +10,8 @@ import { z } from 'zod'
 import { API_KEY_PREFIX, generateSecret, hashSecret, lookupPrefix } from '../../auth/tokens.ts'
 import type { Database } from '../../db/client.ts'
 import { apiKeys } from '../../db/schema.ts'
-import type { TenantContext } from '../auth.ts'
-import { PlatformError, notFound } from '../errors.ts'
+import { type TenantContext, requireConsolePrincipal } from '../auth.ts'
+import { notFound } from '../errors.ts'
 
 /** Routes with this tag are left out of the customer OpenAPI document (app.ts `hiddenTag`). */
 export const CONSOLE_ONLY_TAG = 'console-only'
@@ -29,11 +29,7 @@ const toApiKeyView = (row: typeof apiKeys.$inferSelect) => ({
 const tags = ['api-keys', CONSOLE_ONLY_TAG]
 
 export const consoleRoutes = (deps: { db: Database }): FastifyPluginAsyncZod => async (app) => {
-  const tenant = (request: { tenant?: TenantContext }) => {
-    const t = request.tenant as TenantContext
-    if (t.principal.kind !== 'console') throw new PlatformError(403, 'forbidden', 'API keys are managed from the console')
-    return t
-  }
+  const tenant = (request: { tenant?: TenantContext }) => requireConsolePrincipal(request.tenant as TenantContext, 'API keys are managed from the console')
 
   app.post(
     '/v1/api-keys',

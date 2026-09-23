@@ -94,14 +94,20 @@ export interface AgentClientOptions {
   baseUrl: string
   token: string
   timeoutMs?: number
+  /**
+   * Calls that wait on ledger writes: tenant onboarding and catalogue publishing. They go through
+   * the endorser and the pool and can take far longer than a normal command (trap 44, review M5).
+   */
+  ledgerTimeoutMs?: number
   fetch?: typeof fetch
 }
 
 export function createAgentClient(options: AgentClientOptions) {
   const doFetch = options.fetch ?? fetch
   const timeoutMs = options.timeoutMs ?? 30_000
+  const ledgerTimeoutMs = options.ledgerTimeoutMs ?? 90_000
 
-  async function call<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
+  async function call<T>(method: 'GET' | 'POST', path: string, body?: unknown, timeout = timeoutMs): Promise<T> {
     let response: Response
     try {
       response = await doFetch(new URL(path, options.baseUrl), {
@@ -109,7 +115,7 @@ export function createAgentClient(options: AgentClientOptions) {
         // No content-type without a body: Fastify rejects an empty JSON body outright.
         headers: { ...(body === undefined ? {} : { 'content-type': 'application/json' }), [INTERNAL_TOKEN_HEADER]: options.token },
         body: body === undefined ? undefined : JSON.stringify(body),
-        signal: AbortSignal.timeout(timeoutMs),
+        signal: AbortSignal.timeout(timeout),
       })
     } catch (error) {
       throw new AgentError(502, 'agent_unreachable', `agent-service unreachable: ${(error as Error).message}`)
@@ -126,13 +132,13 @@ export function createAgentClient(options: AgentClientOptions) {
 
   return {
     createTenant: (label: string) => call<{ tenantId: string; status: string }>('POST', '/tenants', { label }),
-    onboardTenant: (tenantId: string) => call<AgentTenant>('POST', `${t(tenantId)}/onboard`),
+    onboardTenant: (tenantId: string) => call<AgentTenant>('POST', `${t(tenantId)}/onboard`, undefined, ledgerTimeoutMs),
     getTenant: (tenantId: string) => call<AgentTenant>('GET', t(tenantId)),
 
     publishSchema: (tenantId: string, input: { name: string; version: string; attributes: string[] }) =>
-      call<AgentLedgerObject>('POST', `${t(tenantId)}/schemas`, input),
+      call<AgentLedgerObject>('POST', `${t(tenantId)}/schemas`, input, ledgerTimeoutMs),
     publishCredentialDefinition: (tenantId: string, input: { schemaObjectId: string; tag: string }) =>
-      call<AgentLedgerObject>('POST', `${t(tenantId)}/credential-definitions`, input),
+      call<AgentLedgerObject>('POST', `${t(tenantId)}/credential-definitions`, input, ledgerTimeoutMs),
     listCatalogue: (tenantId: string) => call<AgentLedgerObject[]>('GET', `${t(tenantId)}/catalogue`),
     setSchemaDeprecated: (tenantId: string, schemaObjectId: string, deprecated: boolean) =>
       call<{ status: string }>('POST', `${t(tenantId)}/schemas/${schemaObjectId}/deprecation`, { deprecated }),

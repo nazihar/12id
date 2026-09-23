@@ -1,6 +1,7 @@
 package com.onetwoid.sdk
 
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import android.util.Base64
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.DefaultLifecycleObserver
@@ -8,6 +9,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.onetwoid.sdk.internal.BiometricMapping
+import com.onetwoid.sdk.internal.checkApiBaseUrl
 import com.onetwoid.sdk.internal.CaptureModuleDto
 import com.onetwoid.sdk.internal.GenesisCache
 import com.onetwoid.sdk.internal.KeystoreKeyWrapper
@@ -110,6 +112,9 @@ public object OneTwoId {
         val appContext = context.applicationContext ?: context
         lastInit = appContext to config
         SdkLog.sink = config.logSink
+        SdkLog.minLevel = config.minLogLevel
+        // The wallet token travels on this URL; cleartext is only blocked by Android itself from API 28.
+        checkApiBaseUrl(config.apiBaseUrl, (appContext.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0)
         initMutex.withLock {
             if (session != null) return
             _state.value = WalletState.Initializing

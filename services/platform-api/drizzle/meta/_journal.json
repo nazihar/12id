@@ -36,6 +36,20 @@
       "when": 1789978493955,
       "tag": "0004_biometric_gate",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790075832789,
+      "tag": "0005_webhook_reliability",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790078207217,
+      "tag": "0006_wallet_sweep_rate_limits",
+      "breakpoints": true
     }
   ]
 }

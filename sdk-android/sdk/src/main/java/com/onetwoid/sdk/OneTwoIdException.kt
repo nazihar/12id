@@ -47,6 +47,9 @@ public sealed class OneTwoIdException(message: String, cause: Throwable? = null)
     /** The user left the capture screen. The attempt may still count. */
     public class BiometricCancelled : OneTwoIdException("the face capture was cancelled")
 
+    /** The [OneTwoIdConfig] cannot be used, e.g. a non-https `apiBaseUrl` in a release build. */
+    public class InvalidConfiguration(detail: String) : OneTwoIdException("invalid configuration: $detail")
+
     /** An unexpected framework failure. */
     public class Internal(detail: String, cause: Throwable? = null) : OneTwoIdException(detail, cause)
 }

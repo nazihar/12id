@@ -102,6 +102,8 @@ Files: `src/http/auth.ts`, `src/http/app.ts`, `src/config.ts`, `src/db/schema.ts
     - A bearer API key → as today (`requireApiKey`).
     - Otherwise `x-console-token` (constant-time via `tokenMatches` from `@12id/credo-base/internal-token.ts`) + `x-console-tenant` (uuid, must exist) + `x-console-actor` → `request.tenant`.
   - Replace the hook on the customer scope in `app.ts`, so catalogue, exchanges, templates, wallets and webhook routes serve both principals. Idempotency keeps working because it keys on `request.tenant`.
+
+  > **Phase 7 update (2026-09-22, review K1):** both principals still reach those routes, but the setup writes are now **console principal only**: catalogue publishing, templates, biometric policies and the webhook endpoint. They use the shared `requireConsolePrincipal` in `http/auth.ts`, the same guard as `/v1/api-keys` below. See [`17-phase-7.md`](17-phase-7.md) K1.
 - **Operator access:**
   - `/admin/*` accepts either `x-admin-token` (break-glass over SSH, kept) or console token + `x-console-role: operator` + actor.
   - Update `requireAdminToken` into `requireOperator`.
@@ -259,6 +261,7 @@ Screens:
   - Deploy with `EXTRA_SECRETS="agent platform"`.
 - **Caddy:**
   - `12id.naziharitsolution.com` (after the owner adds the apex A record): `import hardening`, CSP + `frame-ancestors 'none'`, `per_ip_limit console_per_ip 300`, reverse_proxy 3600.
+    > **Phase 7 update (2026-09-22, review M12):** the edge no longer sets the CSP. The console sends a per-request nonce policy (`script-src 'nonce-…' 'strict-dynamic'`, `frame-ancestors 'none'`, …) from `src/start.ts`. The router and next-themes stamp the nonce on their scripts. The staging Playwright specs fail on any violation. See [`17-phase-7.md`](17-phase-7.md) M12.
   - `api.<domain>`: block `x-console-*` headers.
   - Recreate the Caddy container after syncing the Caddyfile (Phase 3 trap 29).
 - `infra/scripts/backup-postgres.sh`: add `console`; one restore drill (restored database, a login works).
@@ -302,6 +305,7 @@ After C7 the console has one shell and one form kit, but no page that answers "h
   - *stuck* = not in `done` / `abandoned` / `declined` and `updated_at` older than 24 h (trap 25's symptom, made visible).
   - *expiring* = `state = 'done'` and `attributes->>'expiresAt' ~ '^[0-9]+$'` and `to_timestamp(...)` within `[now(), now() + 30 d]`; *expired* the same with `< now()`. The regex guard keeps a non-numeric `expiresAt` (§5.2: a free-form string attribute) from failing the whole dashboard. This is the number that makes the no-revocation model (4-init §4.7, §12.3) operable.
   - *wallets never connected* = `mediator_connection_id is null`, not revoked, older than 24 h (review M10's orphan case).
+    > **Phase 7 update (2026-09-22, review M10):** that column is only a cache of the first mediator webhook, and it is reset on every new invitation. The count now uses `wallets.connected_at`, which the wake path and the hourly sweep set from the mediator's own connections. On staging the first sweep found 4 wallets the old definition counted as never connected, and all 4 were connected. See [`17-phase-7.md`](17-phase-7.md) M10.
   - The `count(*) … group by state` SQL already in `/admin/overview` is lifted into a helper that both routes use.
   - **No agent-service call.** Catalogue counts live in agent-service and a credential-definition call can exceed the client timeout (trap 44 / review M5); the console fetches `/v1/schemas` + `/v1/credential-definitions` separately for its catalogue card.
 - **`GET /admin/stats?days=30`** under the existing `requireOperator` hook: `platform` (tenants by status, connections, credentials, proofs, wallets, API keys), `outcomes` (by state per kind), `attention` (failed tenants with `lastError`, dead deliveries, stuck exchanges, wallets never connected, tenants without a webhook endpoint), `series`, `topTenants` (top 5 by exchanges in the window) and `health` — the existing `readiness()` report (`database`, `agent`, `mediatorDatabase`, `draining`) passed in as a dep, since `/readyz` is hidden from the typed client.

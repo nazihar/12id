@@ -58,7 +58,9 @@ function fakeDeps(initial: { credentials?: FakeRecord[]; proofs?: FakeRecord[]; 
     agent: { modules: { tenants: { withTenantAgent: async (_: unknown, fn: (t: unknown) => Promise<unknown>) => fn(tenantAgent) } } },
     db: {
       select: () => ({ from: () => ({ where: async () => [{ status: 'ready', label: 'x' }] }) }),
-      insert: () => ({ values: async (row: unknown) => void outboxRows.push(row) }),
+      // Outbox rows are written inside a transaction that takes the outbox lock (review M7).
+      transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
+        fn({ execute: async () => ({ rows: [] }), insert: () => ({ values: async (row: unknown) => void outboxRows.push(row) }) }),
     },
     didcommEndpoint: 'https://agent.test',
     logger: silent,
