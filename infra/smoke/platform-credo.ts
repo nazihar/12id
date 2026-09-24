@@ -109,7 +109,8 @@ try {
   console.log(`  [${now()}] wallet.sync_requested x${wakes.length} (debounce allows at most ${elapsedWindows})`)
 
   const badSignatures = receiver.events.filter((e) => !e.signatureValid).length
-  const deliveries = await api.must<Array<{ status: string }>>('GET', '/v1/webhook/deliveries?limit=200')
+  // The newest 100 deliveries cover this run's events (Phase 4 C9 list envelope).
+  const deliveries = (await api.must<{ items: Array<{ status: string }> }>('GET', '/v1/webhook/deliveries?pageSize=100')).items
   const undelivered = deliveries.filter((d) => d.status !== 'delivered').length
 
   console.log('\n=== smoke:platform-credo results ===')

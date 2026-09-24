@@ -34,7 +34,7 @@ function ConnectionInvitationBody({ organizationId, orgSlug, onDone }: { organiz
   const queryClient = useQueryClient()
   const create = useMutation({
     mutationFn: (input: ConnectionInvitationForm) => createPortalInvitation({ data: { organizationId, ...toConnectionInvitationInput(connectionInvitationForm.parse(input)) } }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: portalKey(orgSlug, 'connections') }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: portalKey(orgSlug, 'exchanges') }),
   })
   const form = useAppForm({
     defaultValues: { alias: '', multiUse: false } as ConnectionInvitationForm,

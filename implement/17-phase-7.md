@@ -51,7 +51,7 @@ Severity is exploitability × impact against the **production** threat model (cu
 | M18 | Med | mediator | **Done 2026-09-22.** Credo `drizzle-storage` 0.6.0 creates **no secondary indexes**: every inbound message (each wallet's 10 s poll) sequentially scans `Did` and `DidcommConnection`; the pickup queue's `recipient_dids` branch is unindexed too — the mediator's scaling cliff | 0.5 d |
 | L1 | Low | edge | `X-Powered-By: Express` on agent + mediator; HSTS without `includeSubDomains`/`preload`; `Server: Caddy` on genesis 404s | 1 h |
 | L2 | Low | edge | Grafana and the von-network browser are public login/info surfaces | 1 h |
-| L3 | Low | platform-api | List routes cap at 200 with no cursor; no `(tenant_id, created_at)` index on the three mirror tables | 0.5 d |
+| L3 | Low | platform-api | **Done 2026-09-24 (Phase 4 C9).** List routes cap at 200 with no cursor; no `(tenant_id, created_at)` index on the three mirror tables | 0.5 d |
 | L4 | Low | platform-api | Offer `attributes` unbounded in count/key/value size inside the 1 MB body; propagates to agent, outbox, webhooks | 1 h |
 | L5 | Low | platform-api | `POST /v1/webhook/deliveries/:id/retry` re-sends already-delivered events | 1 h |
 | L6 | Low | mediator | The open multi-use startup invitation is still created and printed to logs | 2 h |
@@ -244,7 +244,7 @@ Severity is exploitability × impact against the **production** threat model (cu
 - **Not run:** checking on the phone that the SDK onboards again after a `never_connected` revocation.
 
 ### L3 · Low · Pagination and indexes
-`exchanges.ts` list routes: `limit ≤ 200`, ordered by `createdAt desc`, no cursor — a tenant with more than 200 connections cannot list the rest. Queries filter `(tenant_id, state)` and sort by `created_at`; only the `(tenant_id, record_id)` PK and `(tenant_id, connection_id)` indexes exist (`db/schema.ts:73,89,106`). Fix: `?after=<createdAt,recordId>` cursor + index `(tenant_id, created_at desc)` on the three mirror tables. *Index half planned in Phase 4 C8 (`11-phase-4.md` §C8, migration `0003_stats_indexes`: `(tenant_id, created_at desc)` and `(tenant_id, state)` on all three tables, needed by the dashboard aggregates); the cursor half stays here.*
+`exchanges.ts` list routes: `limit ≤ 200`, ordered by `createdAt desc`, no cursor — a tenant with more than 200 connections cannot list the rest. Queries filter `(tenant_id, state)` and sort by `created_at`; only the `(tenant_id, record_id)` PK and `(tenant_id, connection_id)` indexes exist (`db/schema.ts:73,89,106`). Fix: `?after=<createdAt,recordId>` cursor + index `(tenant_id, created_at desc)` on the three mirror tables. **Done by Phase 4 C9, on staging 2026-09-24 (`11-phase-4.md` §C9):** page numbers with a total instead of a cursor (owner decision), the envelope on every list route, and the remaining list indexes in `0007_list_indexes` + `0008_list_order_indexes` (`EXPLAIN` in `12-phase-4-findings.md` §C9). *Index half planned in Phase 4 C8 (`11-phase-4.md` §C8, migration `0003_stats_indexes`: `(tenant_id, created_at desc)` and `(tenant_id, state)` on all three tables, needed by the dashboard aggregates); the cursor half stays here.*
 
 ### L4 · Low · Unbounded attribute record
 `exchanges.ts:80` `attributes: z.record(z.string(), z.string())` — bounded only by the 1 MB `bodyLimit`; the schema route itself caps at 125 attribute names of 100 chars (`catalogue.ts:68`). Fix: `.max(125)` keys, 100-char names, 4 KB values; the same on agent-service `command-routes.ts:139`.
@@ -721,7 +721,7 @@ Two cheap adjacent wins while in here: `GET /v1/ledger` returns static, env-deri
 
 **Owner decisions (not code):** M16 confirm alert e-mail delivery; L2 whether Grafana and the ledger browser exist in production at all; L8 rotate the `.staging` credentials; §12.1 ledger topology, a clean production host, TAA (bucket C).
 
-**Defer to their phases:** M15 with 5b.1 (the wrapper rebuild changes the size budget); L9, M1's concurrency switch and M2's numbers with the Phase 8 load tests; L3, L10, L11 when those surfaces are next touched.
+**Defer to their phases:** M15 with 5b.1 (the wrapper rebuild changes the size budget); L9, M1's concurrency switch and M2's numbers with the Phase 8 load tests; L10, L11 when those surfaces are next touched; L3 in Phase 4 C9 (2026-09-24).
 
 **Explicitly not doing:** sharing the mediator's Valkey with the other services, or adding Redis anywhere (§8). Build M4's rate limiter in-process behind a small store interface so it can move to Redis the day platform-api runs a second replica.
 

@@ -64,6 +64,8 @@ export const ledgerObjects = pgTable('ledger_objects', {
   uniqueIndex('ledger_objects_identity_unique').on(table.tenantId, table.kind, table.name, table.version, table.tag),
   uniqueIndex('ledger_objects_qualified_unique').on(table.qualifiedId),
   uniqueIndex('ledger_objects_unqualified_unique').on(table.unqualifiedId),
+  // The console's paged catalogue lists (Phase 4 C9).
+  index('ledger_objects_tenant_kind_created_idx').on(table.tenantId, table.kind, table.createdAt.desc()),
 ])
 
 export const OUTBOX_RECORD_TYPES = ['connection', 'credential', 'proof'] as const

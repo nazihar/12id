@@ -8,9 +8,10 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { z } from 'zod'
 
-import type { AgentClient, AgentLedgerObject } from '../../agent-client.ts'
+import { type AgentClient, type AgentLedgerObject, LEDGER_OBJECT_STATUSES } from '../../agent-client.ts'
 import { assertTenantReady, type TenantContext, requireConsolePrincipal } from '../auth.ts'
 import { notFound } from '../errors.ts'
+import { pageOf, pageQuery, searchQuery } from '../list.ts'
 import { CONSOLE_ONLY_TAG } from './console.ts'
 
 export interface CatalogueDeps {
@@ -18,6 +19,8 @@ export interface CatalogueDeps {
 }
 
 const errorBody = z.object({ error: z.string(), reason: z.string() })
+const catalogueListQuery = pageQuery.extend(searchQuery.shape).extend({ status: z.enum(LEDGER_OBJECT_STATUSES).optional() })
+const listDescription = 'Newest first, paged with `page` and `pageSize`.'
 
 export const schemaView = z.object({
   id: z.string(),
@@ -78,10 +81,14 @@ export const catalogueRoutes = (deps: CatalogueDeps): FastifyPluginAsyncZod => a
     async (request, reply) => reply.code(201).send(toSchemaView(await deps.agent.publishSchema(publisher(request).agentTenantId, request.body)))
   )
 
-  app.get('/v1/schemas', { schema: { tags: ['catalogue'], summary: 'List schemas', response: { 200: z.array(schemaView) } } }, async (request) => {
-    const catalogue = await deps.agent.listCatalogue(tenant(request).agentTenantId)
-    return catalogue.filter((o) => o.kind === 'schema').map(toSchemaView)
-  })
+  app.get(
+    '/v1/schemas',
+    { schema: { tags: ['catalogue'], summary: 'List schemas', description: `${listDescription} \`q\` matches the schema name.`, querystring: catalogueListQuery, response: { 200: pageOf(schemaView) } } },
+    async (request) => {
+      const page = await deps.agent.listCataloguePage(tenant(request).agentTenantId, { kind: 'schema', ...request.query })
+      return { ...page, items: page.items.map(toSchemaView) }
+    }
+  )
 
   app.post(
     '/v1/schemas/:id/deprecation',
@@ -113,8 +120,14 @@ export const catalogueRoutes = (deps: CatalogueDeps): FastifyPluginAsyncZod => a
       reply.code(201).send(toCredentialDefinitionView(await deps.agent.publishCredentialDefinition(publisher(request).agentTenantId, { schemaObjectId: request.body.schemaId, tag: request.body.tag })))
   )
 
-  app.get('/v1/credential-definitions', { schema: { tags: ['catalogue'], summary: 'List credential definitions', response: { 200: z.array(credentialDefinitionView) } } }, async (request) => {
-    const catalogue = await deps.agent.listCatalogue(tenant(request).agentTenantId)
-    return catalogue.filter((o) => o.kind === 'credential_definition').map(toCredentialDefinitionView)
-  })
+  app.get(
+    '/v1/credential-definitions',
+    {
+      schema: { tags: ['catalogue'], summary: 'List credential definitions', description: `${listDescription} \`q\` matches the schema name or the tag.`, querystring: catalogueListQuery, response: { 200: pageOf(credentialDefinitionView) } },
+    },
+    async (request) => {
+      const page = await deps.agent.listCataloguePage(tenant(request).agentTenantId, { kind: 'credential_definition', ...request.query })
+      return { ...page, items: page.items.map(toCredentialDefinitionView) }
+    }
+  )
 }

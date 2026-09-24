@@ -7,27 +7,38 @@ import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { z } from 'zod'
 
-import { inviteOperatorInput } from '@/features/operators/operators.schemas'
+import { type SQL, and, count, desc, eq, ilike, isNull, or } from 'drizzle-orm'
+
+import { inviteOperatorInput, operatorSearch } from '@/features/operators/operators.schemas'
+import { likeContains, pageParams } from '@/lib/list-search'
 import { OPERATOR_ROLE } from '@/lib/permissions'
 import { auth } from '@/server/auth.server'
+import { consoleDb } from '@/server/db.server'
+import { user } from '@/server/db/auth-schema'
 import { operatorMiddleware } from '@/server/middleware'
 
 const userInput = z.object({ userId: z.string().min(1).max(100) })
 
+/** One page of operator accounts, newest first (Phase 4 C9): search by name or email, filter by status. */
 export const listOperators = createServerFn({ method: 'GET' })
   .middleware([operatorMiddleware])
-  .handler(async () => {
-    const result = await auth.api.listUsers({
-      headers: getRequestHeaders(),
-      query: { filterField: 'role', filterValue: OPERATOR_ROLE, limit: 200, sortBy: 'createdAt', sortDirection: 'desc' },
-    })
-    return result.users.map((operator) => ({
-      id: operator.id,
-      email: operator.email,
-      name: operator.name,
-      banned: Boolean(operator.banned),
-      createdAt: new Date(operator.createdAt).toISOString(),
-    }))
+  .validator(operatorSearch)
+  .handler(async ({ data }) => {
+    const { db } = consoleDb()
+    const { page, pageSize, q } = pageParams(data)
+    const filters: SQL[] = [eq(user.role, OPERATOR_ROLE)]
+    if (data.status) filters.push(data.status === 'banned' ? eq(user.banned, true) : or(isNull(user.banned), eq(user.banned, false))!)
+    if (q) {
+      const pattern = likeContains(q)
+      filters.push(or(ilike(user.email, pattern), ilike(user.name, pattern))!)
+    }
+    const where = and(...filters)
+    const [rows, [{ total }]] = await Promise.all([
+      db.select({ id: user.id, email: user.email, name: user.name, banned: user.banned, createdAt: user.createdAt }).from(user).where(where).orderBy(desc(user.createdAt), desc(user.id)).limit(pageSize).offset((page - 1) * pageSize),
+      db.select({ total: count() }).from(user).where(where),
+    ])
+    const items = rows.map((operator) => ({ ...operator, banned: Boolean(operator.banned), createdAt: operator.createdAt.toISOString() }))
+    return { items, total, page, pageSize }
   })
 
 export const inviteOperator = createServerFn({ method: 'POST' })

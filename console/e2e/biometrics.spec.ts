@@ -129,8 +129,9 @@ test('owners configure the biometric gate and audit it per exchange; operators s
   await expect(owner.getByText('Face check policy saved.')).toBeVisible()
   await expect(owner.getByRole('row', { name: /Badge check/ })).toContainText('required')
 
-  // Exchanges: the Biometric column and the log.
+  // Exchanges: the Biometric column and the log, on the credential exchanges tab (C9).
   await tab(owner, 'Exchanges').click()
+  await owner.getByRole('tab', { name: 'Credential exchanges' }).click()
   await expect(owner.getByTestId('biometric-cell').first()).toContainText('passed')
   await expect(owner.getByTestId('biometric-cell').first()).toContainText('match 99.0')
   await owner.getByRole('button', { name: 'Biometric log' }).first().click()
@@ -148,7 +149,7 @@ test('owners configure the biometric gate and audit it per exchange; operators s
   await expect(page.getByText('On; required only where a definition or template says so.')).toBeVisible()
   await expect(page.getByText('Minimum match 92')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Configure provider' })).toHaveCount(0)
-  await page.goto(`/ops/tenants/${tenantId}/exchanges`)
+  await page.goto(`/ops/tenants/${tenantId}/exchanges?tab=credentials`)
   await page.getByRole('button', { name: 'Biometric log' }).first().click()
   await expect(page.getByTestId('biometric-log')).toContainText('mock-session-1')
 })

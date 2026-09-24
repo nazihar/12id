@@ -1,17 +1,22 @@
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 
+import { useListPending } from '@/components/data-table/use-list-pending'
 import { RouteError } from '@/components/route-error'
 import { PageHeader } from '@/components/page-header'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { type DeliverySearch, deliverySearch } from '@/features/tenant-data/list.schemas'
 import { DeliveriesPanel } from '@/features/tenant-data/panels'
 import { getWebhookDelivery, retryWebhookDelivery } from '@/features/tenant-data/tenant-data.functions'
 import { webhookDeliveriesQuery, webhookEndpointQuery } from '@/features/tenant-data/tenant-data.queries'
 import { formatDateTime } from '@/lib/format'
+import { parseListSearch, searchPatcher } from '@/lib/list-search'
 
 export const Route = createFileRoute('/_authed/ops/tenants/$tenantId/webhooks')({
-  loader: ({ context, params }) =>
-    Promise.all([context.queryClient.ensureQueryData(webhookEndpointQuery(params.tenantId)), context.queryClient.ensureQueryData(webhookDeliveriesQuery(params.tenantId))]),
+  validateSearch: parseListSearch(deliverySearch),
+  loaderDeps: ({ search }) => search,
+  loader: ({ context, params, deps }) =>
+    Promise.all([context.queryClient.ensureQueryData(webhookEndpointQuery(params.tenantId)), context.queryClient.ensureQueryData(webhookDeliveriesQuery(params.tenantId, deps))]),
   errorComponent: RouteError,
   component: WebhooksPage,
 })
@@ -19,6 +24,10 @@ export const Route = createFileRoute('/_authed/ops/tenants/$tenantId/webhooks')(
 function WebhooksPage() {
   const { tenantId } = Route.useParams()
   const { data: endpoint } = useSuspenseQuery(webhookEndpointQuery(tenantId))
+  const search = Route.useSearch()
+  const onSearch = searchPatcher<DeliverySearch>(Route.useNavigate())
+  const fetching = useListPending()
+  const { data: deliveries } = useSuspenseQuery(webhookDeliveriesQuery(tenantId, search))
   return (
     <div className="space-y-6">
       <PageHeader title="Webhooks" />
@@ -43,7 +52,10 @@ function WebhooksPage() {
         </CardContent>
       </Card>
       <DeliveriesPanel
-        queryFor={(status) => webhookDeliveriesQuery(tenantId, status)}
+        data={deliveries}
+        search={search}
+        onSearch={onSearch}
+        fetching={fetching}
         invalidateKey={['ops', 'tenant', tenantId, 'webhook-deliveries']}
         loadBody={(deliveryId) => getWebhookDelivery({ data: { tenantId, deliveryId } })}
         retryDelivery={(deliveryId) => retryWebhookDelivery({ data: { tenantId, deliveryId } })}

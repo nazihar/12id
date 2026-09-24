@@ -9,10 +9,14 @@ import { RouteError } from '@/components/route-error'
 import { StateBadge } from '@/components/state-badge'
 import { CreateTenantDialog } from '@/features/tenants/create-tenant-dialog'
 import type { getTenantOverview } from '@/features/tenants/tenants.functions'
+import { SelectFilter } from '@/components/data-table/list-toolbar'
+import { useListPending } from '@/components/data-table/use-list-pending'
 import { tenantOverviewQuery } from '@/features/tenants/tenants.queries'
+import { type TenantListSearch, tenantListSearch, tenantStatusOptions } from '@/features/tenants/tenants.schemas'
 import { formatDateTime } from '@/lib/format'
+import { isFiltered, pagingFor, resetFor, parseListSearch, searchPatcher } from '@/lib/list-search'
 
-type TenantRow = Awaited<ReturnType<typeof getTenantOverview>>[number]
+type TenantRow = Awaited<ReturnType<typeof getTenantOverview>>['items'][number]
 
 const column = createColumnHelper<DataTableFeatures, TenantRow>()
 const sum = (counts: Record<string, number>) => Object.values(counts).reduce((total, n) => total + n, 0)
@@ -36,17 +40,32 @@ const columns = column.columns([
 ])
 
 export const Route = createFileRoute('/_authed/ops/tenants/')({
-  loader: ({ context }) => context.queryClient.ensureQueryData(tenantOverviewQuery()),
+  validateSearch: parseListSearch(tenantListSearch),
+  loaderDeps: ({ search }) => search,
+  loader: ({ context, deps }) => context.queryClient.ensureQueryData(tenantOverviewQuery(deps)),
   errorComponent: RouteError,
   component: TenantsPage,
 })
 
 function TenantsPage() {
-  const { data: tenants } = useSuspenseQuery(tenantOverviewQuery())
+  const search = Route.useSearch()
+  const onSearch = searchPatcher<TenantListSearch>(Route.useNavigate())
+  const fetching = useListPending()
+  const { data: tenants } = useSuspenseQuery(tenantOverviewQuery(search))
   return (
     <section className="space-y-4">
-      <PageHeader title="Tenants" description="Every customer tenant on the platform with its onboarding state and activity." actions={<CreateTenantDialog />} />
-      <DataTable columns={columns} data={tenants} searchPlaceholder="Search tenants" emptyMessage="No tenants yet." testId="tenants-table" />
+      <PageHeader title="Tenants" description="Every customer tenant on the platform with its onboarding state and activity, newest first." actions={<CreateTenantDialog />} />
+      <DataTable
+        columns={columns}
+        data={tenants.items}
+        paging={pagingFor(tenants, onSearch)}
+        onReset={resetFor(search, onSearch)}
+        search={{ value: search.q, placeholder: 'Search tenant name', onChange: (q) => onSearch({ q }) }}
+        toolbar={<SelectFilter label="Status" options={tenantStatusOptions} value={search.status} onChange={(status) => onSearch({ status })} />}
+        fetching={fetching}
+        emptyMessage={isFiltered(search) ? 'No tenants match.' : 'No tenants yet.'}
+        testId="tenants-table"
+      />
     </section>
   )
 }

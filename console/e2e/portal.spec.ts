@@ -116,7 +116,10 @@ test('owners run their tenant, members are limited by role and organization', as
   await owner.getByRole('button', { name: 'Invite member' }).click()
   await owner.getByLabel('Email', { exact: true }).fill(memberEmail)
   await owner.getByRole('button', { name: 'Send invitation' }).click()
+  // Members and pending invitations are two tabs (C9).
+  await owner.getByRole('tab', { name: 'Pending invitations' }).click()
   await expect(owner.getByTestId('invitations-table')).toContainText(memberEmail)
+  await owner.getByRole('tab', { name: 'Members', exact: true }).click()
 
   // Member: account from the invitation, read-only.
   const member = await newPage(browser)

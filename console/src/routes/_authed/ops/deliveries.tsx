@@ -11,10 +11,15 @@ import { RouteError } from '@/components/route-error'
 import { RowAction, RowActions } from '@/components/row-action'
 import type { listDeliveriesAcrossTenants } from '@/features/ops/ops.functions'
 import { deliveriesAcrossTenantsQuery } from '@/features/ops/ops.queries'
+import { type OpsDeliverySearch, opsDeliverySearch } from '@/features/ops/ops.schemas'
+import { eventTypeOptions } from '@/features/tenant-data/list.schemas'
 import { retryWebhookDelivery } from '@/features/tenant-data/tenant-data.functions'
+import { DateRangeFilter, SelectFilter } from '@/components/data-table/list-toolbar'
+import { useListPending } from '@/components/data-table/use-list-pending'
 import { formatDateTime } from '@/lib/format'
+import { isFiltered, pagingFor, resetFor, parseListSearch, searchPatcher } from '@/lib/list-search'
 
-type DeliveryRow = Awaited<ReturnType<typeof listDeliveriesAcrossTenants>>[number]
+type DeliveryRow = Awaited<ReturnType<typeof listDeliveriesAcrossTenants>>['items'][number]
 
 const column = createColumnHelper<DataTableFeatures, DeliveryRow>()
 const columns = column.columns([
@@ -34,17 +39,35 @@ const columns = column.columns([
 ])
 
 export const Route = createFileRoute('/_authed/ops/deliveries')({
-  loader: ({ context }) => context.queryClient.ensureQueryData(deliveriesAcrossTenantsQuery()),
+  validateSearch: parseListSearch(opsDeliverySearch.omit({ status: true })),
+  loaderDeps: ({ search }) => search,
+  loader: ({ context, deps }) => context.queryClient.ensureQueryData(deliveriesAcrossTenantsQuery(deps)),
   errorComponent: RouteError,
   component: DeadDeliveriesPage,
 })
 
 function DeadDeliveriesPage() {
-  const { data } = useSuspenseQuery(deliveriesAcrossTenantsQuery())
+  const search = Route.useSearch()
+  const onSearch = searchPatcher<OpsDeliverySearch>(Route.useNavigate())
+  const { data } = useSuspenseQuery(deliveriesAcrossTenantsQuery(search))
   return (
     <section className="space-y-4">
-      <PageHeader title="Dead webhook deliveries" description="Deliveries that exhausted their retries, across all tenants. Retrying queues one more attempt." />
-      <DataTable columns={columns} data={data} searchPlaceholder="Search events or errors" emptyMessage="No dead deliveries." />
+      <PageHeader title="Dead webhook deliveries" description="Deliveries that exhausted their retries, across all tenants, newest first. Retrying queues one more attempt." />
+      <DataTable
+        columns={columns}
+        data={data.items}
+        paging={pagingFor(data, onSearch)}
+        onReset={resetFor(search, onSearch)}
+        toolbar={
+          <>
+            <SelectFilter label="Event" options={eventTypeOptions} value={search.eventType} onChange={(eventType) => onSearch({ eventType })} />
+            <DateRangeFilter from={search.from} to={search.to} onChange={(range) => onSearch(range)} />
+          </>
+        }
+        fetching={useListPending()}
+        emptyMessage={isFiltered(search) ? 'No dead deliveries match.' : 'No dead deliveries.'}
+        testId="ops-deliveries-table"
+      />
     </section>
   )
 }

@@ -2,7 +2,7 @@
  * Proof template CRUD (P4). Validation is static here; catalogue resolution happens at request time.
  * Reads take an API key or the console; writes are console only (review K1).
  */
-import { and, desc, eq } from 'drizzle-orm'
+import { type SQL, and, desc, eq } from 'drizzle-orm'
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { z } from 'zod'
 
@@ -12,6 +12,7 @@ import { biometricOverride } from '../../biometric/policy.ts'
 import { templateDefinition, validateTemplate } from '../../templates.ts'
 import { type TenantContext, requireConsolePrincipal } from '../auth.ts'
 import { notFound } from '../errors.ts'
+import { containsI, listPage, pageOf, pageQuery, searchQuery } from '../list.ts'
 import { CONSOLE_ONLY_TAG } from './console.ts'
 
 const errorBody = z.object({ error: z.string(), reason: z.string() })
@@ -58,10 +59,26 @@ export const proofTemplateRoutes = (deps: { db: Database }): FastifyPluginAsyncZ
     }
   )
 
-  app.get('/v1/proof-templates', { schema: { tags: ['proofs'], summary: 'List proof templates', response: { 200: z.array(templateView) } } }, async (request) => {
-    const rows = await deps.db.select().from(proofTemplates).where(eq(proofTemplates.tenantId, tenant(request).id)).orderBy(desc(proofTemplates.createdAt))
-    return rows.map(view)
-  })
+  app.get(
+    '/v1/proof-templates',
+    {
+      schema: {
+        tags: ['proofs'],
+        summary: 'List proof templates',
+        description: 'Newest first (`createdAt` descending), paged with `page` and `pageSize`. `q` matches the name.',
+        querystring: pageQuery.extend(searchQuery.shape),
+        response: { 200: pageOf(templateView) },
+      },
+    },
+    async (request) => {
+      const filters: SQL[] = [eq(proofTemplates.tenantId, tenant(request).id)]
+      if (request.query.q) filters.push(containsI(proofTemplates.name, request.query.q))
+      const page = await listPage(deps.db, { table: proofTemplates, where: filters, ...request.query }, (where, limit, offset) =>
+        deps.db.select().from(proofTemplates).where(where).orderBy(desc(proofTemplates.createdAt), desc(proofTemplates.id)).limit(limit).offset(offset)
+      )
+      return { ...page, items: page.items.map(view) }
+    }
+  )
 
   app.get('/v1/proof-templates/:id', { schema: { tags: ['proofs'], summary: 'Get a proof template', params: z.object({ id: z.uuid() }), response: { 200: templateView, 404: errorBody } } }, async (request) => {
     const [row] = await deps.db.select().from(proofTemplates).where(and(eq(proofTemplates.tenantId, tenant(request).id), eq(proofTemplates.id, request.params.id)))

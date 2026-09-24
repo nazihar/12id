@@ -3,7 +3,7 @@
  * key that could mint or revoke API keys would turn one leaked key into many. The plaintext key
  * exists only in the creation response, which is never stored for idempotency replays.
  */
-import { and, desc, eq, isNull } from 'drizzle-orm'
+import { type SQL, and, desc, eq, isNotNull, isNull, or } from 'drizzle-orm'
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { z } from 'zod'
 
@@ -12,6 +12,7 @@ import type { Database } from '../../db/client.ts'
 import { apiKeys } from '../../db/schema.ts'
 import { type TenantContext, requireConsolePrincipal } from '../auth.ts'
 import { notFound } from '../errors.ts'
+import { containsI, listPage, pageOf, pageQuery, searchQuery } from '../list.ts'
 
 /** Routes with this tag are left out of the customer OpenAPI document (app.ts `hiddenTag`). */
 export const CONSOLE_ONLY_TAG = 'console-only'
@@ -45,10 +46,28 @@ export const consoleRoutes = (deps: { db: Database }): FastifyPluginAsyncZod => 
     }
   )
 
-  app.get('/v1/api-keys', { schema: { tags, summary: 'List API keys', response: { 200: z.array(apiKeyView), 403: errorBody } } }, async (request) => {
-    const rows = await deps.db.select().from(apiKeys).where(eq(apiKeys.tenantId, tenant(request).id)).orderBy(desc(apiKeys.createdAt))
-    return rows.map(toApiKeyView)
-  })
+  app.get(
+    '/v1/api-keys',
+    {
+      schema: {
+        tags,
+        summary: 'List API keys',
+        description: 'Newest first, paged. `q` matches the label or the key prefix.',
+        querystring: pageQuery.extend(searchQuery.shape).extend({ status: z.enum(['active', 'revoked']).optional() }),
+        response: { 200: pageOf(apiKeyView), 403: errorBody },
+      },
+    },
+    async (request) => {
+      const { q, status } = request.query
+      const filters: SQL[] = [eq(apiKeys.tenantId, tenant(request).id)]
+      if (q) filters.push(or(containsI(apiKeys.label, q), containsI(apiKeys.prefix, q))!)
+      if (status) filters.push(status === 'active' ? isNull(apiKeys.revokedAt) : isNotNull(apiKeys.revokedAt))
+      const page = await listPage(deps.db, { table: apiKeys, where: filters, ...request.query }, (where, limit, offset) =>
+        deps.db.select().from(apiKeys).where(where).orderBy(desc(apiKeys.createdAt), desc(apiKeys.id)).limit(limit).offset(offset)
+      )
+      return { ...page, items: page.items.map(toApiKeyView) }
+    }
+  )
 
   app.delete('/v1/api-keys/:id', { schema: { tags, summary: 'Revoke an API key', params: z.object({ id: z.uuid() }), response: { 200: apiKeyView, 403: errorBody, 404: errorBody } } }, async (request) => {
     const [row] = await deps.db

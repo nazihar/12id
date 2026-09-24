@@ -35,7 +35,7 @@ export const apiKeys = pgTable('api_keys', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
-}, (table) => [uniqueIndex('api_keys_hash_unique').on(table.keyHash), index('api_keys_prefix_idx').on(table.prefix)])
+}, (table) => [uniqueIndex('api_keys_hash_unique').on(table.keyHash), index('api_keys_prefix_idx').on(table.prefix), index('api_keys_tenant_created_idx').on(table.tenantId, table.createdAt.desc(), table.id.desc())])
 
 /**
  * One wallet per SDK installation. The token (`12id_wt_<random>`) is handed to the host app by
@@ -69,7 +69,9 @@ export const wallets = pgTable('wallets', {
   uniqueIndex('wallets_token_unique').on(table.tokenHash),
   uniqueIndex('wallets_oob_unique').on(table.mediatorOobId),
   uniqueIndex('wallets_mediator_connection_unique').on(table.mediatorConnectionId),
-  index('wallets_tenant_idx').on(table.tenantId),
+  // Console lists (Phase 4 C9): newest first per tenant, external-id contains search (pg_trgm).
+  index('wallets_tenant_created_idx').on(table.tenantId, table.createdAt.desc(), table.id.desc()),
+  index('wallets_external_id_trgm_idx').using('gin', table.externalId.op('gin_trgm_ops')),
 ])
 
 export const connections = pgTable('connections', {
@@ -86,9 +88,13 @@ export const connections = pgTable('connections', {
 }, (table) => [
   primaryKey({ columns: [table.tenantId, table.recordId] }),
   index('connections_invitation_idx').on(table.tenantId, table.invitationId),
-  // List sort and the dashboard's daily series / state counts (Phase 4 C8; review L3).
-  index('connections_tenant_created_idx').on(table.tenantId, table.createdAt.desc()),
-  index('connections_tenant_state_idx').on(table.tenantId, table.state),
+  // List sort and the dashboard's daily series / state counts (Phase 4 C8; review L3). The primary
+  // key closes the index so the fixed list order (C9) is read straight from it, no sort.
+  index('connections_tenant_created_idx').on(table.tenantId, table.createdAt.desc(), table.recordId.desc()),
+  // State filter with the fixed list order; external-id contains search (Phase 4 C9).
+  index('connections_tenant_state_created_idx').on(table.tenantId, table.state, table.createdAt.desc(), table.recordId.desc()),
+  index('connections_external_id_trgm_idx').using('gin', table.externalId.op('gin_trgm_ops')),
+  index('connections_their_label_trgm_idx').using('gin', table.theirLabel.op('gin_trgm_ops')),
 ])
 
 export const credentials = pgTable('credentials', {
@@ -108,8 +114,10 @@ export const credentials = pgTable('credentials', {
 }, (table) => [
   primaryKey({ columns: [table.tenantId, table.recordId] }),
   index('credentials_connection_idx').on(table.tenantId, table.connectionId),
-  index('credentials_tenant_created_idx').on(table.tenantId, table.createdAt.desc()),
-  index('credentials_tenant_state_idx').on(table.tenantId, table.state),
+  index('credentials_tenant_created_idx').on(table.tenantId, table.createdAt.desc(), table.recordId.desc()),
+  // State filter with the fixed list order; external-id contains search (Phase 4 C9).
+  index('credentials_tenant_state_created_idx').on(table.tenantId, table.state, table.createdAt.desc(), table.recordId.desc()),
+  index('credentials_external_id_trgm_idx').using('gin', table.externalId.op('gin_trgm_ops')),
 ])
 
 export const proofs = pgTable('proofs', {
@@ -130,8 +138,10 @@ export const proofs = pgTable('proofs', {
 }, (table) => [
   primaryKey({ columns: [table.tenantId, table.recordId] }),
   index('proofs_connection_idx').on(table.tenantId, table.connectionId),
-  index('proofs_tenant_created_idx').on(table.tenantId, table.createdAt.desc()),
-  index('proofs_tenant_state_idx').on(table.tenantId, table.state),
+  index('proofs_tenant_created_idx').on(table.tenantId, table.createdAt.desc(), table.recordId.desc()),
+  // State filter with the fixed list order; external-id contains search (Phase 4 C9).
+  index('proofs_tenant_state_created_idx').on(table.tenantId, table.state, table.createdAt.desc(), table.recordId.desc()),
+  index('proofs_external_id_trgm_idx').using('gin', table.externalId.op('gin_trgm_ops')),
 ])
 
 export const proofTemplates = pgTable('proof_templates', {
@@ -144,7 +154,7 @@ export const proofTemplates = pgTable('proof_templates', {
   biometricPolicy: jsonb('biometric_policy').$type<Record<string, unknown>>(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-}, (table) => [index('proof_templates_tenant_idx').on(table.tenantId)])
+}, (table) => [index('proof_templates_tenant_created_idx').on(table.tenantId, table.createdAt.desc(), table.id.desc())])
 
 /** One webhook endpoint per tenant in v1. The secret must stay in plaintext: it signs payloads. */
 export const webhookEndpoints = pgTable('webhook_endpoints', {
@@ -184,7 +194,9 @@ export const webhookDeliveries = pgTable('webhook_deliveries', {
   deliveredAt: timestamp('delivered_at', { withTimezone: true }),
 }, (table) => [
   index('webhook_deliveries_due_idx').on(table.nextAttemptAt).where(sql`${table.status} in ('pending', 'sending')`),
-  index('webhook_deliveries_tenant_idx').on(table.tenantId, table.createdAt),
+  // Delivery lists, newest first (Phase 4 C9): per tenant, and the operator's cross-tenant dead letters.
+  index('webhook_deliveries_tenant_created_idx').on(table.tenantId, table.createdAt.desc(), table.id.desc()),
+  index('webhook_deliveries_dead_created_idx').on(table.createdAt.desc()).where(sql`${table.status} = 'dead'`),
   // Outbox events carry an id derived from the outbox row, so a replayed row enqueues nothing (review M6).
   uniqueIndex('webhook_deliveries_event_unique').on(table.eventId),
 ])
@@ -226,7 +238,7 @@ export const consoleAudit = pgTable('console_audit', {
   route: text('route').notNull(),
   statusCode: integer('status_code').notNull(),
   requestId: text('request_id').notNull(),
-}, (table) => [index('console_audit_at_idx').on(table.at), index('console_audit_tenant_idx').on(table.tenantId, table.at)])
+}, (table) => [index('console_audit_at_idx').on(table.at), index('console_audit_tenant_idx').on(table.tenantId, table.at), index('console_audit_actor_idx').on(table.actor, table.at.desc())])
 
 // --- Biometric gate (Phase 6, implement/15-phase-6-biometric.md B3) ------------------------
 // Vendor configuration and images live in biometric-service; these tables hold policy, the gate

@@ -23,7 +23,7 @@ export function ThemeToggle() {
           </Button>
         }
       />
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent align="end" className="w-auto">
         <DropdownMenuRadioGroup value={theme} onValueChange={(value) => setTheme(value)}>
           {THEMES.map((option) => (
             <DropdownMenuRadioItem key={option.value} value={option.value}>

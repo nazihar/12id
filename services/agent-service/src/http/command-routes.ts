@@ -6,11 +6,11 @@ import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 
-import { tenants } from '../db/schema.ts'
+import { LEDGER_OBJECT_KINDS, LEDGER_OBJECT_STATUSES, tenants } from '../db/schema.ts'
 
 import { type CatalogueDeps, publishCredentialDefinition, publishSchema } from '../ledger/catalogue.ts'
 import { schemaInput } from '../ledger/schema-input.ts'
-import { listCatalogue, setSchemaDeprecated } from '../ledger/deprecation.ts'
+import { listCatalogue, listCataloguePage, setSchemaDeprecated } from '../ledger/deprecation.ts'
 import { reconcileOnce } from '../exchanges/reconcile.ts'
 import { ExchangeInputError } from '../exchanges/builders.ts'
 import {
@@ -54,6 +54,7 @@ const ledgerObjectView = z.object({
   unqualifiedId: z.string().nullable(),
   lastError: z.string().nullable(),
 })
+const catalogueItemView = ledgerObjectView.extend({ schemaObjectId: z.string().nullable(), attributes: z.array(z.string()).nullable() })
 
 export const commandRoutes = (deps: CommandDeps): FastifyPluginAsyncZod => async (app) => {
   // Map domain errors to status codes; everything else stays a generic 500 (internalApiErrorHandler).
@@ -101,8 +102,27 @@ export const commandRoutes = (deps: CommandDeps): FastifyPluginAsyncZod => async
     async (request) => publishCredentialDefinition(deps.catalogue, request.params.tenantId, request.body.schemaObjectId, request.body.tag)
   )
 
-  app.get('/tenants/:tenantId/catalogue', { schema: { params: tenantParams, response: { 200: z.array(ledgerObjectView.extend({ schemaObjectId: z.string().nullable(), attributes: z.array(z.string()).nullable() })) } } }, async (request) =>
+  app.get('/tenants/:tenantId/catalogue', { schema: { params: tenantParams, response: { 200: z.array(catalogueItemView) } } }, async (request) =>
     listCatalogue(deps.catalogue.db, request.params.tenantId)
+  )
+
+  // One kind, paged, newest first (Phase 4 C9). The unpaged route above stays for lookups that need everything.
+  app.get(
+    '/tenants/:tenantId/catalogue/page',
+    {
+      schema: {
+        params: tenantParams,
+        querystring: z.object({
+          kind: z.enum(LEDGER_OBJECT_KINDS),
+          status: z.enum(LEDGER_OBJECT_STATUSES).optional(),
+          q: z.string().trim().min(1).max(100).optional(),
+          page: z.coerce.number().int().min(1).max(100_000).default(1),
+          pageSize: z.coerce.number().int().min(1).max(100).default(25),
+        }),
+        response: { 200: z.object({ items: z.array(catalogueItemView), total: z.number().int(), page: z.number().int(), pageSize: z.number().int() }) },
+      },
+    },
+    async (request) => listCataloguePage(deps.catalogue.db, request.params.tenantId, request.query)
   )
 
   app.post(

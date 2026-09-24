@@ -7,33 +7,24 @@ import { getRequestHeaders } from '@tanstack/react-start/server'
 import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
 
-import { inviteMemberInput, tenantRole } from '@/features/portal/members.schemas'
+import { inviteMemberInput, memberSearch, tenantRole } from '@/features/portal/members.schemas'
 import { auth } from '@/server/auth.server'
 import { consoleDb } from '@/server/db.server'
 import { invitation, member, user } from '@/server/db/auth-schema'
+import { listOrganizationInvitations, listOrganizationMembers } from '@/server/members.server'
 import { tenantMiddleware } from '@/server/middleware'
 
 import { assertSameOrganization, organizationInput } from './organization-input'
 
+/** One page of members or of pending invitations (`tab`), newest first (Phase 4 C9). */
 export const listMembers = createServerFn({ method: 'GET' })
   .middleware([tenantMiddleware()])
-  .handler(async ({ context }) => {
-    const { db } = consoleDb()
+  .validator(memberSearch)
+  .handler(async ({ context, data }) => {
     const organizationId = context.organization.id
-    const members = await db
-      .select({ id: member.id, userId: user.id, name: user.name, email: user.email, role: member.role, since: member.createdAt, twoFactorEnabled: user.twoFactorEnabled })
-      .from(member)
-      .innerJoin(user, eq(user.id, member.userId))
-      .where(eq(member.organizationId, organizationId))
-    const invitations = await db
-      .select({ id: invitation.id, email: invitation.email, role: invitation.role, expiresAt: invitation.expiresAt, createdAt: invitation.createdAt })
-      .from(invitation)
-      .where(and(eq(invitation.organizationId, organizationId), eq(invitation.status, 'pending')))
-    const now = Date.now()
-    return {
-      members: members.map((m) => ({ ...m, since: m.since.toISOString(), twoFactorEnabled: Boolean(m.twoFactorEnabled), isYou: m.userId === context.session.user.id })),
-      invitations: invitations.map((i) => ({ ...i, role: i.role ?? 'member', expired: i.expiresAt.getTime() < now, expiresAt: i.expiresAt.toISOString(), createdAt: i.createdAt.toISOString() })),
-    }
+    if (data.tab === 'invitations') return { tab: 'invitations' as const, page: await listOrganizationInvitations(organizationId, data) }
+    const page = await listOrganizationMembers(organizationId, data)
+    return { tab: 'members' as const, page: { ...page, items: page.items.map((m) => ({ ...m, isYou: m.userId === context.session.user.id })) } }
   })
 
 export const inviteMember = createServerFn({ method: 'POST' })

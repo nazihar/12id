@@ -5,7 +5,8 @@
  *
  * Ids exposed here are the agent's Credo record ids, always scoped by tenant.
  */
-import { and, desc, eq } from 'drizzle-orm'
+import { type SQL, and, desc, eq, inArray, or } from 'drizzle-orm'
+import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { z } from 'zod'
 
@@ -18,6 +19,7 @@ import { connections, credentials, proofTemplates, proofs } from '../../db/schem
 import { expandTemplate, templateDefinition } from '../../templates.ts'
 import { connectionView, credentialView, proofView, toConnectionView, toCredentialView, toProofView } from '../../views.ts'
 import { assertTenantReady, type TenantContext } from '../auth.ts'
+import { containsI, createdBetween, createdRange, listPage, many, oneOrMany, pageOf, pageQuery, searchQuery } from '../list.ts'
 import { badRequest, notFound } from '../errors.ts'
 import { resolveCredentialDefinition } from './catalogue.ts'
 
@@ -32,6 +34,25 @@ export interface ExchangeDeps {
 const errorBody = z.object({ error: z.string(), reason: z.string() })
 const externalId = z.string().min(1).max(200).optional()
 const recordId = z.string().min(1).max(100)
+
+/** List filters shared by the three exchange kinds (Phase 4 C9). `q` and `externalId` are contains matches. */
+const exchangeListQuery = pageQuery.extend(createdRange.shape).extend(searchQuery.shape).extend({
+  state: oneOrMany(z.string().min(1).max(50)).describe('One or more states; repeat the parameter for several.'),
+  externalId: z.string().trim().min(1).max(200).optional().describe('Case-insensitive contains match on the external id.'),
+})
+type ExchangeListQuery = z.infer<typeof exchangeListQuery>
+const listDescription = 'Newest first (`createdAt` descending), paged with `page` and `pageSize`.'
+type ExchangeTable = typeof connections | typeof credentials | typeof proofs
+
+function exchangeFilters(table: ExchangeTable, tenantId: string, query: ExchangeListQuery, searchColumns: AnyPgColumn[]): SQL[] {
+  const filters: SQL[] = [eq(table.tenantId, tenantId), ...createdBetween(table.createdAt, query)]
+  const states = many(query.state)
+  if (states.length) filters.push(inArray(table.state, states))
+  if (query.externalId) filters.push(containsI(table.externalId, query.externalId))
+  const q = query.q
+  if (q) filters.push(or(...searchColumns.map((col) => containsI(col, q)))!)
+  return filters
+}
 
 /** Phase 6: the tenant's reference face image for a biometric-gated exchange. Used once, never returned. */
 const biometricInput = z
@@ -69,14 +90,23 @@ export const exchangeRoutes = (deps: ExchangeDeps): FastifyPluginAsyncZod => asy
 
   app.get(
     '/v1/connections',
-    { schema: { tags: ['connections'], summary: 'List connections', querystring: z.object({ invitationId: z.string().optional(), state: z.string().optional(), limit: z.coerce.number().int().min(1).max(200).default(50) }), response: { 200: z.array(connectionView) } } },
+    {
+      schema: {
+        tags: ['connections'],
+        summary: 'List connections',
+        description: `${listDescription} \`q\` matches the external id or the holder's label.`,
+        querystring: exchangeListQuery.extend({ invitationId: z.string().optional() }),
+        response: { 200: pageOf(connectionView) },
+      },
+    },
     async (request) => {
       const t = tenant(request)
-      const filters = [eq(connections.tenantId, t.id)]
+      const filters = exchangeFilters(connections, t.id, request.query, [connections.externalId, connections.theirLabel])
       if (request.query.invitationId) filters.push(eq(connections.invitationId, request.query.invitationId))
-      if (request.query.state) filters.push(eq(connections.state, request.query.state))
-      const rows = await deps.db.select().from(connections).where(and(...filters)).orderBy(desc(connections.createdAt)).limit(request.query.limit)
-      return rows.map(toConnectionView)
+      const page = await listPage(deps.db, { table: connections, where: filters, ...request.query }, (where, limit, offset) =>
+        deps.db.select().from(connections).where(where).orderBy(desc(connections.createdAt), desc(connections.recordId)).limit(limit).offset(offset)
+      )
+      return { ...page, items: page.items.map(toConnectionView) }
     }
   )
 
@@ -129,15 +159,24 @@ export const exchangeRoutes = (deps: ExchangeDeps): FastifyPluginAsyncZod => asy
 
   app.get(
     '/v1/credentials',
-    { schema: { tags: ['credentials'], summary: 'List credential exchanges', querystring: z.object({ connectionId: z.string().optional(), state: z.string().optional(), limit: z.coerce.number().int().min(1).max(200).default(50) }), response: { 200: z.array(credentialView) } } },
+    {
+      schema: {
+        tags: ['credentials'],
+        summary: 'List credential exchanges',
+        description: `${listDescription} \`q\` matches the external id.`,
+        querystring: exchangeListQuery.extend({ connectionId: z.string().optional() }),
+        response: { 200: pageOf(credentialView) },
+      },
+    },
     async (request) => {
       const t = tenant(request)
-      const filters = [eq(credentials.tenantId, t.id)]
+      const filters = exchangeFilters(credentials, t.id, request.query, [credentials.externalId])
       if (request.query.connectionId) filters.push(eq(credentials.connectionId, request.query.connectionId))
-      if (request.query.state) filters.push(eq(credentials.state, request.query.state))
-      const rows = await deps.db.select().from(credentials).where(and(...filters)).orderBy(desc(credentials.createdAt)).limit(request.query.limit)
-      const gates = await gatesFor(deps.db, t.id, 'credential', rows.map((r) => r.recordId))
-      return rows.map((r) => toCredentialView(r, gates.get(r.recordId)))
+      const page = await listPage(deps.db, { table: credentials, where: filters, ...request.query }, (where, limit, offset) =>
+        deps.db.select().from(credentials).where(where).orderBy(desc(credentials.createdAt), desc(credentials.recordId)).limit(limit).offset(offset)
+      )
+      const gates = await gatesFor(deps.db, t.id, 'credential', page.items.map((r) => r.recordId))
+      return { ...page, items: page.items.map((r) => toCredentialView(r, gates.get(r.recordId))) }
     }
   )
 
@@ -194,15 +233,24 @@ export const exchangeRoutes = (deps: ExchangeDeps): FastifyPluginAsyncZod => asy
 
   app.get(
     '/v1/proofs',
-    { schema: { tags: ['proofs'], summary: 'List proof exchanges', querystring: z.object({ connectionId: z.string().optional(), state: z.string().optional(), limit: z.coerce.number().int().min(1).max(200).default(50) }), response: { 200: z.array(proofView) } } },
+    {
+      schema: {
+        tags: ['proofs'],
+        summary: 'List proof exchanges',
+        description: `${listDescription} \`q\` matches the external id.`,
+        querystring: exchangeListQuery.extend({ connectionId: z.string().optional() }),
+        response: { 200: pageOf(proofView) },
+      },
+    },
     async (request) => {
       const t = tenant(request)
-      const filters = [eq(proofs.tenantId, t.id)]
+      const filters = exchangeFilters(proofs, t.id, request.query, [proofs.externalId])
       if (request.query.connectionId) filters.push(eq(proofs.connectionId, request.query.connectionId))
-      if (request.query.state) filters.push(eq(proofs.state, request.query.state))
-      const rows = await deps.db.select().from(proofs).where(and(...filters)).orderBy(desc(proofs.createdAt)).limit(request.query.limit)
-      const gates = await gatesFor(deps.db, t.id, 'proof', rows.map((r) => r.recordId))
-      return rows.map((r) => toProofView(r, gates.get(r.recordId)))
+      const page = await listPage(deps.db, { table: proofs, where: filters, ...request.query }, (where, limit, offset) =>
+        deps.db.select().from(proofs).where(where).orderBy(desc(proofs.createdAt), desc(proofs.recordId)).limit(limit).offset(offset)
+      )
+      const gates = await gatesFor(deps.db, t.id, 'proof', page.items.map((r) => r.recordId))
+      return { ...page, items: page.items.map((r) => toProofView(r, gates.get(r.recordId))) }
     }
   )
 

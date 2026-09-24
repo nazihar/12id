@@ -8,11 +8,13 @@
  */
 import { createServerFn } from '@tanstack/react-start'
 import { eq } from 'drizzle-orm'
+import { memberSearch } from '@/features/portal/members.schemas'
 import { createTenantOrganizationInput, tenantInput } from '@/features/tenants/tenants.schemas'
 import { OPERATOR_ROLE, hasPlatformRole } from '@/lib/permissions'
 import { auth } from '@/server/auth.server'
 import { consoleDb } from '@/server/db.server'
 import { member, organization, user } from '@/server/db/auth-schema'
+import { listOrganizationMembers } from '@/server/members.server'
 import { operatorMiddleware } from '@/server/middleware'
 import { platformFor, unwrap } from '@/server/platform.server'
 
@@ -26,19 +28,15 @@ function slugFor(name: string, tenantId: string) {
   return `${base || 'tenant'}-${tenantId.slice(0, 8)}`
 }
 
+/** The tenant's console organization with one page of its members (Phase 4 C9), or null. */
 export const getTenantOrganization = createServerFn({ method: 'GET' })
   .middleware([operatorMiddleware])
-  .validator(tenantInput)
+  .validator(tenantInput.extend(memberSearch.omit({ tab: true }).shape))
   .handler(async ({ data }) => {
     const { db } = consoleDb()
     const [org] = await db.select({ id: organization.id, name: organization.name, slug: organization.slug }).from(organization).where(eq(organization.platformTenantId, data.tenantId))
     if (!org) return null
-    const members = await db
-      .select({ userId: user.id, email: user.email, name: user.name, role: member.role, since: member.createdAt, twoFactorEnabled: user.twoFactorEnabled })
-      .from(member)
-      .innerJoin(user, eq(user.id, member.userId))
-      .where(eq(member.organizationId, org.id))
-    return { ...org, members: members.map((m) => ({ ...m, since: m.since.toISOString(), twoFactorEnabled: Boolean(m.twoFactorEnabled) })) }
+    return { ...org, members: await listOrganizationMembers(org.id, data) }
   })
 
 export const createTenantOrganization = createServerFn({ method: 'POST' })

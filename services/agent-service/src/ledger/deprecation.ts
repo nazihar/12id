@@ -3,7 +3,7 @@
  * version blocks new offers on its cred defs; proofs keep accepting them (the platform's templates
  * list several cred def ids per logical credential type).
  */
-import { and, eq, inArray } from 'drizzle-orm'
+import { type SQL, and, count, desc, eq, ilike, inArray, or } from 'drizzle-orm'
 
 import type { Database } from '../db/client.ts'
 import { ledgerObjects } from '../db/schema.ts'
@@ -26,4 +26,29 @@ export async function setSchemaDeprecated(db: Database, tenantId: string, schema
 
 export async function listCatalogue(db: Database, tenantId: string) {
   return db.select().from(ledgerObjects).where(eq(ledgerObjects.tenantId, tenantId)).orderBy(ledgerObjects.createdAt)
+}
+
+export interface CataloguePageQuery {
+  kind: (typeof ledgerObjects.kind.enumValues)[number]
+  status?: (typeof ledgerObjects.status.enumValues)[number]
+  q?: string
+  page: number
+  pageSize: number
+}
+
+/** One page of one kind, newest first, for the console's catalogue lists (Phase 4 C9). */
+export async function listCataloguePage(db: Database, tenantId: string, query: CataloguePageQuery) {
+  const filters: SQL[] = [eq(ledgerObjects.tenantId, tenantId), eq(ledgerObjects.kind, query.kind)]
+  if (query.status) filters.push(eq(ledgerObjects.status, query.status))
+  if (query.q) {
+    // LIKE wildcards in the search term are literal.
+    const pattern = `%${query.q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`
+    filters.push(or(ilike(ledgerObjects.name, pattern), ilike(ledgerObjects.tag, pattern))!)
+  }
+  const where = and(...filters)
+  const [items, [{ total }]] = await Promise.all([
+    db.select().from(ledgerObjects).where(where).orderBy(desc(ledgerObjects.createdAt), desc(ledgerObjects.id)).limit(query.pageSize).offset((query.page - 1) * query.pageSize),
+    db.select({ total: count() }).from(ledgerObjects).where(where),
+  ])
+  return { items, total, page: query.page, pageSize: query.pageSize }
 }

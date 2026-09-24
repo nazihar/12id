@@ -4,7 +4,7 @@
  *   - the app / SDK (wallet token) fetches its mediator invitation and its own status.
  * Wallet endpoints are registered in two scopes by app.ts because the credentials differ.
  */
-import { and, desc, eq, isNull } from 'drizzle-orm'
+import { type SQL, and, desc, eq, isNotNull, isNull } from 'drizzle-orm'
 import type { preHandlerAsyncHookHandler } from 'fastify'
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { z } from 'zod'
@@ -16,6 +16,7 @@ import type { MediatorClient } from '../../mediator-client.ts'
 import { toWalletView, walletView } from '../../views.ts'
 import type { TenantContext, WalletContext } from '../auth.ts'
 import { notFound } from '../errors.ts'
+import { containsI, createdBetween, createdRange, listPage, pageOf, pageQuery, searchQuery } from '../list.ts'
 
 const errorBody = z.object({ error: z.string(), reason: z.string() })
 
@@ -62,10 +63,28 @@ export const walletCustomerRoutes = (deps: { db: Database }): FastifyPluginAsync
     }
   )
 
-  app.get('/v1/wallets', { schema: { tags: ['wallets'], summary: 'List wallets', querystring: z.object({ limit: z.coerce.number().int().min(1).max(200).default(50) }), response: { 200: z.array(walletView) } } }, async (request) => {
-    const rows = await deps.db.select().from(wallets).where(eq(wallets.tenantId, tenant(request).id)).orderBy(desc(wallets.createdAt)).limit(request.query.limit)
-    return rows.map(toWalletView)
-  })
+  app.get(
+    '/v1/wallets',
+    {
+      schema: {
+        tags: ['wallets'],
+        summary: 'List wallets',
+        description: 'Newest first (`createdAt` descending), paged with `page` and `pageSize`. `q` matches the external id.',
+        querystring: pageQuery.extend(createdRange.shape).extend(searchQuery.shape).extend({ status: z.enum(['active', 'revoked']).optional() }),
+        response: { 200: pageOf(walletView) },
+      },
+    },
+    async (request) => {
+      const { q, status } = request.query
+      const filters: SQL[] = [eq(wallets.tenantId, tenant(request).id), ...createdBetween(wallets.createdAt, request.query)]
+      if (q) filters.push(containsI(wallets.externalId, q))
+      if (status) filters.push(status === 'active' ? isNull(wallets.revokedAt) : isNotNull(wallets.revokedAt))
+      const page = await listPage(deps.db, { table: wallets, where: filters, ...request.query }, (where, limit, offset) =>
+        deps.db.select().from(wallets).where(where).orderBy(desc(wallets.createdAt), desc(wallets.id)).limit(limit).offset(offset)
+      )
+      return { ...page, items: page.items.map(toWalletView) }
+    }
+  )
 
   app.get('/v1/wallets/:id', { schema: { tags: ['wallets'], summary: 'Get a wallet', params: z.object({ id: z.uuid() }), response: { 200: walletView, 404: errorBody } } }, async (request) => {
     const [row] = await deps.db.select().from(wallets).where(and(eq(wallets.tenantId, tenant(request).id), eq(wallets.id, request.params.id)))

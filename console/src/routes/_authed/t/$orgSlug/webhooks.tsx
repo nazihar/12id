@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { PageHeader } from '@/components/page-header'
+import { useListPending } from '@/components/data-table/use-list-pending'
 import { RouteError } from '@/components/route-error'
 import { SecretOnceDialog } from '@/components/secret-once-dialog'
 import { Badge } from '@/components/ui/badge'
@@ -14,13 +15,18 @@ import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle }
 import { deletePortalWebhook, getPortalDelivery, retryPortalDelivery, rotatePortalWebhookSecret } from '@/features/portal/portal-data.functions'
 import { portalDeliveriesQuery, portalKey, portalWebhookQuery } from '@/features/portal/portal.queries'
 import { WebhookEndpointDialog } from '@/features/portal/webhook-endpoint-dialog'
+import { type DeliverySearch, deliverySearch } from '@/features/tenant-data/list.schemas'
 import { DeliveriesPanel } from '@/features/tenant-data/panels'
 import type { WebhookEndpoint } from '@/features/tenant-data/types'
 import { formatDateTime } from '@/lib/format'
+import { parseListSearch, searchPatcher } from '@/lib/list-search'
 import { tenantCan } from '@/lib/permissions'
 
 export const Route = createFileRoute('/_authed/t/$orgSlug/webhooks')({
-  loader: ({ context, params }) => context.queryClient.ensureQueryData(portalWebhookQuery(params.orgSlug)),
+  validateSearch: parseListSearch(deliverySearch),
+  loaderDeps: ({ search }) => search,
+  loader: ({ context, params, deps }) =>
+    Promise.all([context.queryClient.ensureQueryData(portalWebhookQuery(params.orgSlug)), context.queryClient.ensureQueryData(portalDeliveriesQuery(params.orgSlug, deps))]),
   errorComponent: RouteError,
   component: PortalWebhooksPage,
 })
@@ -29,6 +35,10 @@ function PortalWebhooksPage() {
   const { orgSlug } = Route.useParams()
   const { organization } = Route.useRouteContext()
   const { data: endpoint } = useSuspenseQuery(portalWebhookQuery(orgSlug))
+  const search = Route.useSearch()
+  const onSearch = searchPatcher<DeliverySearch>(Route.useNavigate())
+  const fetching = useListPending()
+  const { data: deliveries } = useSuspenseQuery(portalDeliveriesQuery(orgSlug, search))
   const canUpdate = tenantCan(organization.role, { webhook: ['update'] })
   const canRotate = tenantCan(organization.role, { webhook: ['rotate'] })
   const canRetry = tenantCan(organization.role, { webhook: ['retry'] })
@@ -41,7 +51,10 @@ function PortalWebhooksPage() {
         <EndpointCard endpoint={endpoint} organizationId={organizationId} orgSlug={orgSlug} canUpdate={canUpdate} canRotate={canRotate} />
       </section>
       <DeliveriesPanel
-        queryFor={(status) => portalDeliveriesQuery(orgSlug, status)}
+        data={deliveries}
+        search={search}
+        onSearch={onSearch}
+        fetching={fetching}
         invalidateKey={portalKey(orgSlug, 'webhook-deliveries')}
         loadBody={(deliveryId) => getPortalDelivery({ data: { deliveryId } })}
         retryDelivery={canRetry ? (deliveryId) => retryPortalDelivery({ data: { organizationId, deliveryId } }) : undefined}

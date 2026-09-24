@@ -14,12 +14,17 @@ import { Button, buttonVariants } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { deletePortalTemplate } from '@/features/portal/portal-data.functions'
 import { portalKey, portalTemplatesQuery } from '@/features/portal/portal.queries'
+import { useListPending } from '@/components/data-table/use-list-pending'
+import { type TemplateSearch, templateSearch } from '@/features/tenant-data/list.schemas'
 import type { TemplateRow } from '@/features/tenant-data/types'
+import { isFiltered, pagingFor, resetFor, parseListSearch, searchPatcher } from '@/lib/list-search'
 import { formatDateTime } from '@/lib/format'
 import { tenantCan } from '@/lib/permissions'
 
 export const Route = createFileRoute('/_authed/t/$orgSlug/templates/')({
-  loader: ({ context, params }) => context.queryClient.ensureQueryData(portalTemplatesQuery(params.orgSlug)),
+  validateSearch: parseListSearch(templateSearch),
+  loaderDeps: ({ search }) => search,
+  loader: ({ context, params, deps }) => context.queryClient.ensureQueryData(portalTemplatesQuery(params.orgSlug, deps)),
   errorComponent: RouteError,
   component: PortalTemplatesPage,
 })
@@ -39,7 +44,10 @@ function summarize(definition: TemplateRow['definition']) {
 function PortalTemplatesPage() {
   const { orgSlug } = Route.useParams()
   const { organization } = Route.useRouteContext()
-  const { data: templates } = useSuspenseQuery(portalTemplatesQuery(orgSlug))
+  const search = Route.useSearch()
+  const onSearch = searchPatcher<TemplateSearch>(Route.useNavigate())
+  const fetching = useListPending()
+  const { data: templates } = useSuspenseQuery(portalTemplatesQuery(orgSlug, search))
   const queryClient = useQueryClient()
   const canCreate = tenantCan(organization.role, { template: ['create'] })
   const canUpdate = tenantCan(organization.role, { template: ['update'] })
@@ -109,7 +117,16 @@ function PortalTemplatesPage() {
           )
         }
       />
-      <DataTable columns={columns} data={templates} searchPlaceholder="Search templates" emptyMessage="No proof templates." testId="templates-table" />
+      <DataTable
+        columns={columns}
+        data={templates.items}
+        paging={pagingFor(templates, onSearch)}
+        onReset={resetFor(search, onSearch)}
+        search={{ value: search.q, placeholder: 'Search template name', onChange: (q) => onSearch({ q }) }}
+        fetching={fetching}
+        emptyMessage={isFiltered(search) ? 'No proof templates match.' : 'No proof templates.'}
+        testId="templates-table"
+      />
     </section>
   )
 }

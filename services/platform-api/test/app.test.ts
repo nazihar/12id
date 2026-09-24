@@ -82,16 +82,16 @@ describe('platform-api HTTP', { skip: db ? false : 'no test database' }, () => {
     assert.equal((await app.inject({ method: 'GET', url: '/v1/connections', headers: { authorization: `Bearer ${apiKey}x` } })).statusCode, 401)
     const ok = await app.inject({ method: 'GET', url: '/v1/connections', headers: { authorization: `Bearer ${apiKey}` } })
     assert.equal(ok.statusCode, 200)
-    assert.deepEqual(ok.json(), [])
+    assert.deepEqual(ok.json(), { items: [], total: 0, page: 1, pageSize: 25 })
   })
 
   it('lists the catalogue with both identifier forms', async () => {
     const schemas = await app.inject({ method: 'GET', url: '/v1/schemas', headers: { authorization: `Bearer ${apiKey}` } })
-    assert.equal(schemas.json().length, 2)
-    assert.equal(schemas.json()[0].schemaId, 'ABC:2:employee-badge:1.0')
+    assert.equal(schemas.json().total, 2)
+    assert.equal(schemas.json().items[0].schemaId, 'ABC:2:employee-badge:1.0')
     const defs = await app.inject({ method: 'GET', url: '/v1/credential-definitions', headers: { authorization: `Bearer ${apiKey}` } })
-    assert.equal(defs.json()[1].credentialDefinitionId, 'ABC:3:CL:12:default')
-    assert.equal(defs.json()[1].qualifiedId, 'q2')
+    assert.equal(defs.json().items[1].credentialDefinitionId, 'ABC:3:CL:12:default')
+    assert.equal(defs.json().items[1].qualifiedId, 'q2')
   })
 
   it('offers a credential: mirror row is readable immediately, ledger id or catalogue id accepted', async () => {
@@ -284,6 +284,9 @@ describe('platform-api HTTP', { skip: db ? false : 'no test database' }, () => {
   it('answers server errors generically and passes agent 4xx reasons through', async () => {
     const failing = fakeAgent({
       listCatalogue: async () => {
+        throw new Error('Failed query: select secret from ...')
+      },
+      listCataloguePage: async () => {
         throw new Error('Failed query: select secret from ...')
       },
       createInvitation: async () => {

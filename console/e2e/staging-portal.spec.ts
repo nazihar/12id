@@ -88,6 +88,8 @@ test('staging: tenant owner works through the portal', async ({ browser, page, c
   await tab(owner, 'Catalogue').click()
   await expect(owner).toHaveURL(/\/catalogue/)
   await expect(owner.getByTestId('schemas-table')).toContainText('smoke-badge')
+  // Schemas and credential definitions are two tabs (C9).
+  await owner.getByRole('tab', { name: 'Credential definitions' }).click()
   await expect(owner.getByTestId('definitions-table')).toContainText('smoke-badge')
   await expect(owner.getByRole('button', { name: 'Publish a schema' })).toBeVisible()
 
@@ -121,7 +123,7 @@ test('staging: tenant owner works through the portal', async ({ browser, page, c
   await owner.getByRole('button', { name: 'Done' }).click()
 
   await tab(owner, 'Wallets').click()
-  await expect(owner.getByRole('table').first()).toBeVisible()
+  await expect(owner.getByTestId('wallets-table')).toBeVisible()
 
   await tab(owner, 'Webhooks').click()
   await expect(owner.getByTestId('deliveries-table')).toBeVisible()

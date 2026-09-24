@@ -3,7 +3,7 @@
  * callbacks, so the same UI runs over operator server functions (tenant named per call) and portal
  * server functions (tenant from the active organization).
  */
-import { type QueryKey, type UseQueryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { type QueryKey, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createColumnHelper } from '@tanstack/react-table'
 import { EyeIcon, KeyRoundIcon, RotateCwIcon, ScanFaceIcon } from 'lucide-react'
 import { useMemo, useState } from 'react'
@@ -11,15 +11,38 @@ import { toast } from 'sonner'
 
 import { DataTable } from '@/components/data-table/data-table'
 import type { DataTableFeatures } from '@/components/data-table/data-table-features'
+import { DateRangeFilter, MultiFilter, SelectFilter } from '@/components/data-table/list-toolbar'
 import { PageHeader } from '@/components/page-header'
 import { RowAction, RowActions } from '@/components/row-action'
 import { StateBadge } from '@/components/state-badge'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { formatDateTime } from '@/lib/format'
+import { type Page, type PageSize, isFiltered, pagingFor, resetFor } from '@/lib/list-search'
 
 import { CreateApiKeyDialog } from './create-api-key-dialog'
-import type { ApiKeyRow, BiometricLog, BiometricLogEvent, ConnectionRow, CredentialRow, DeliveryDetail, DeliveryRow, DeliveryStatus, ExchangeKind, ProofRow, WalletRow } from './types'
+import {
+  type ApiKeySearch,
+  type DeliverySearch,
+  EXCHANGE_STATES,
+  EXCHANGE_TABS,
+  type ExchangeSearch,
+  type ExchangeTab,
+  type WalletSearch,
+  activeRevokedOptions,
+  deliveryStatusOptions,
+  eventTypeOptions,
+  stateOptions,
+} from './list.schemas'
+import type { ApiKeyRow, BiometricLog, BiometricLogEvent, ConnectionRow, CredentialRow, DeliveryDetail, DeliveryRow, ExchangeKind, ProofRow, WalletRow } from './types'
+
+/** A server-paged list: one page, its URL search, and a way to change that search. */
+export interface ListProps<TData, TSearch> {
+  data: TData
+  search: TSearch
+  onSearch: (patch: Partial<TSearch> & { page?: number; pageSize?: PageSize }) => void
+  fetching?: boolean
+}
 
 const mono = (value: string | null) => <span className="font-mono text-xs">{value ?? '—'}</span>
 
@@ -52,10 +75,10 @@ function BiometricCell({ biometric }: { biometric: Biometric }) {
 const credentialColumn = createColumnHelper<DataTableFeatures, CredentialRow>()
 function credentialColumnsWith(onLog?: (id: string) => void) {
   return credentialColumn.columns([
+    credentialColumn.accessor('externalId', { header: 'External id', cell: ({ getValue }) => mono(getValue()) }),
     credentialColumn.accessor('state', { header: 'State', cell: ({ getValue }) => <StateBadge state={getValue()} /> }),
     credentialColumn.accessor('biometric', { header: 'Biometric', cell: ({ getValue }) => <BiometricCell biometric={getValue()} /> }),
     credentialColumn.accessor('credentialDefinitionId', { header: 'Credential definition', cell: ({ getValue }) => mono(getValue()) }),
-    credentialColumn.accessor('externalId', { header: 'External id', cell: ({ getValue }) => mono(getValue()) }),
     credentialColumn.accessor('errorMessage', { header: 'Error', cell: ({ getValue }) => getValue() ?? '' }),
     credentialColumn.accessor('updatedAt', { header: 'Updated', cell: ({ getValue }) => formatDateTime(getValue()) }),
     credentialColumn.display({
@@ -69,12 +92,12 @@ function credentialColumnsWith(onLog?: (id: string) => void) {
 const proofColumn = createColumnHelper<DataTableFeatures, ProofRow>()
 function proofColumnsWith(onLog?: (id: string) => void) {
   return proofColumn.columns([
+    proofColumn.accessor('externalId', { header: 'External id', cell: ({ getValue }) => mono(getValue()) }),
     proofColumn.accessor('state', { header: 'State', cell: ({ getValue }) => <StateBadge state={getValue()} /> }),
     proofColumn.accessor('biometric', { header: 'Biometric', cell: ({ getValue }) => <BiometricCell biometric={getValue()} /> }),
     proofColumn.accessor('verified', { header: 'Verified', cell: ({ getValue }) => (getValue() === null ? '—' : getValue() ? 'yes' : 'no') }),
     // Attribute names only: disclosed values are personal data.
     proofColumn.accessor((row) => Object.entries(row.disclosed ?? {}).map(([group, values]) => `${group}: ${Object.keys(values).join(', ')}`).join(' · '), { id: 'disclosed', header: 'Disclosed attributes' }),
-    proofColumn.accessor('externalId', { header: 'External id', cell: ({ getValue }) => mono(getValue()) }),
     proofColumn.accessor('updatedAt', { header: 'Updated', cell: ({ getValue }) => formatDateTime(getValue()) }),
     proofColumn.display({
       id: 'actions',
@@ -84,34 +107,55 @@ function proofColumnsWith(onLog?: (id: string) => void) {
   ])
 }
 
-export function ExchangeTables({
-  connections,
-  credentials,
-  proofs,
-  loadBiometricLog,
-}: {
-  connections: ConnectionRow[]
-  credentials: CredentialRow[]
-  proofs: ProofRow[]
-  loadBiometricLog?: BiometricLogLoader
-}) {
+/** One page of the exchange kind the tab names, as the list server function returns it. */
+export type ExchangePage = { tab: 'connections'; page: Page<ConnectionRow> } | { tab: 'credentials'; page: Page<CredentialRow> } | { tab: 'proofs'; page: Page<ProofRow> }
+
+const TAB_LABELS: Record<ExchangeTab, string> = { connections: 'Connections', credentials: 'Credential exchanges', proofs: 'Proof exchanges' }
+
+/**
+ * Connections, credential exchanges and proof exchanges as three tabs (Phase 4 C9), each paged on
+ * the server with its own external-id search, state filter and created-date range in the URL.
+ */
+export function ExchangeLists({ data, search, onSearch, fetching, loadBiometricLog }: ListProps<ExchangePage, ExchangeSearch> & { loadBiometricLog?: BiometricLogLoader }) {
   const [viewing, setViewing] = useState<{ kind: ExchangeKind; id: string } | null>(null)
   const credentialColumns = useMemo(() => credentialColumnsWith(loadBiometricLog ? (id) => setViewing({ kind: 'credential', id }) : undefined), [loadBiometricLog])
   const proofColumns = useMemo(() => proofColumnsWith(loadBiometricLog ? (id) => setViewing({ kind: 'proof', id }) : undefined), [loadBiometricLog])
+  const tab = search.tab ?? 'connections'
+  // While another tab loads, the previous tab's rows must not render under the new tab's columns.
+  const loading = data.tab !== tab
+  const empty = (noun: string) => (isFiltered(search) ? `No ${noun} match.` : `No ${noun}.`)
+  const common = {
+    paging: pagingFor(data.page, onSearch),
+    onReset: resetFor(search, onSearch),
+    search: { value: search.q, placeholder: tab === 'connections' ? 'Search external id or holder label' : 'Search external id', onChange: (q: string | undefined) => onSearch({ q }) },
+    fetching,
+    toolbar: (
+      <>
+        <MultiFilter label="State" options={stateOptions(EXCHANGE_STATES[tab])} value={search.state} onChange={(state) => onSearch({ state })} testId="state-filter" />
+        <DateRangeFilter from={search.from} to={search.to} onChange={(range) => onSearch(range)} />
+      </>
+    ),
+  }
   return (
-    <div className="space-y-8">
-      <section className="space-y-3">
-        <PageHeader level={2} title="Connections" />
-        <DataTable columns={connectionColumns} data={connections} searchPlaceholder="Search connections" emptyMessage="No connections." testId="connections-table" />
-      </section>
-      <section className="space-y-3">
-        <PageHeader level={2} title="Credential exchanges" />
-        <DataTable columns={credentialColumns} data={credentials} emptyMessage="No credential exchanges." />
-      </section>
-      <section className="space-y-3">
-        <PageHeader level={2} title="Proof exchanges" />
-        <DataTable columns={proofColumns} data={proofs} emptyMessage="No proof exchanges." />
-      </section>
+    <div className="space-y-4">
+      <Tabs value={tab} onValueChange={(next) => onSearch({ tab: next === 'connections' ? undefined : (next as ExchangeTab), q: undefined, state: undefined, from: undefined, to: undefined })}>
+        <TabsList>
+          {EXCHANGE_TABS.map((value) => (
+            <TabsTrigger key={value} value={value}>
+              {TAB_LABELS[value]}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+      {loading ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : data.tab === 'connections' ? (
+        <DataTable columns={connectionColumns} data={data.page.items} emptyMessage={empty('connections')} testId="connections-table" {...common} />
+      ) : data.tab === 'credentials' ? (
+        <DataTable columns={credentialColumns} data={data.page.items} emptyMessage={empty('credential exchanges')} testId="credentials-table" {...common} />
+      ) : (
+        <DataTable columns={proofColumns} data={data.page.items} emptyMessage={empty('proof exchanges')} testId="proofs-table" {...common} />
+      )}
       {loadBiometricLog && <BiometricLogDialog target={viewing} load={loadBiometricLog} onClose={() => setViewing(null)} />}
     </div>
   )
@@ -212,8 +256,25 @@ const walletColumns = walletColumn.columns([
   walletColumn.accessor('createdAt', { header: 'Created', cell: ({ getValue }) => formatDateTime(getValue()) }),
 ])
 
-export function WalletsTable({ wallets }: { wallets: WalletRow[] }) {
-  return <DataTable columns={walletColumns} data={wallets} searchPlaceholder="Search by external id" emptyMessage="No wallets." />
+export function WalletsTable({ data, search, onSearch, fetching }: ListProps<Page<WalletRow>, WalletSearch>) {
+  return (
+    <DataTable
+      columns={walletColumns}
+      data={data.items}
+      paging={pagingFor(data, onSearch)}
+      onReset={resetFor(search, onSearch)}
+      search={{ value: search.q, placeholder: 'Search external id', onChange: (q) => onSearch({ q }) }}
+      toolbar={
+        <>
+          <SelectFilter label="Status" options={activeRevokedOptions} value={search.status} onChange={(status) => onSearch({ status })} />
+          <DateRangeFilter from={search.from} to={search.to} onChange={(range) => onSearch(range)} />
+        </>
+      }
+      fetching={fetching}
+      emptyMessage={isFiltered(search) ? 'No wallets match.' : 'No wallets.'}
+      testId="wallets-table"
+    />
+  )
 }
 
 // --- API keys -----------------------------------------------------------------------------
@@ -221,12 +282,14 @@ export function WalletsTable({ wallets }: { wallets: WalletRow[] }) {
 const keyColumn = createColumnHelper<DataTableFeatures, ApiKeyRow>()
 
 export function ApiKeysPanel({
-  keys,
+  data,
+  search,
+  onSearch,
+  fetching,
   invalidateKey,
   createKey,
   revokeKey,
-}: {
-  keys: ApiKeyRow[]
+}: ListProps<Page<ApiKeyRow>, ApiKeySearch> & {
   invalidateKey: QueryKey
   /** Omit when the viewer may not create keys. */
   createKey?: (label: string) => Promise<{ apiKey: string }>
@@ -253,7 +316,17 @@ export function ApiKeysPanel({
         description="Your backend calls the 12id API with these keys (Authorization: Bearer). Never put a key in an app."
         actions={createKey && <CreateApiKeyDialog createKey={createKey} invalidateKey={invalidateKey} />}
       />
-      <DataTable columns={columns} data={keys} emptyMessage="No API keys." testId="api-keys-table" />
+      <DataTable
+        columns={columns}
+        data={data.items}
+        paging={pagingFor(data, onSearch)}
+        onReset={resetFor(search, onSearch)}
+        search={{ value: search.q, placeholder: 'Search label or key prefix', onChange: (q) => onSearch({ q }) }}
+        toolbar={<SelectFilter label="Status" options={activeRevokedOptions} value={search.status} onChange={(status) => onSearch({ status })} />}
+        fetching={fetching}
+        emptyMessage={isFiltered(search) ? 'No API keys match.' : 'No API keys.'}
+        testId="api-keys-table"
+      />
     </section>
   )
 }
@@ -287,25 +360,22 @@ function RevokeKeyAction({ apiKey, revoke, invalidateKey }: { apiKey: ApiKeyRow;
 
 // --- webhook deliveries -------------------------------------------------------------------
 
-const FILTERS = ['all', 'dead', 'pending', 'delivered'] as const
-type Filter = (typeof FILTERS)[number]
-const EMPTY_DELIVERIES: DeliveryRow[] = []
 const deliveryColumn = createColumnHelper<DataTableFeatures, DeliveryRow>()
 
-export function DeliveriesPanel<TKey extends QueryKey>({
-  queryFor,
+export function DeliveriesPanel({
+  data,
+  search,
+  onSearch,
+  fetching,
   invalidateKey,
   loadBody,
   retryDelivery,
-}: {
-  queryFor: (status?: DeliveryStatus) => UseQueryOptions<DeliveryRow[], Error, DeliveryRow[], TKey>
+}: ListProps<Page<DeliveryRow>, DeliverySearch> & {
   invalidateKey: QueryKey
   loadBody: (deliveryId: number) => Promise<DeliveryDetail>
   /** Omit when the viewer may not retry. */
   retryDelivery?: (deliveryId: number) => Promise<unknown>
 }) {
-  const [filter, setFilter] = useState<Filter>('all')
-  const deliveries = useQuery(queryFor(filter === 'all' ? undefined : filter))
   const [viewing, setViewing] = useState<number | null>(null)
 
   const columns = deliveryColumn.columns([
@@ -329,27 +399,22 @@ export function DeliveriesPanel<TKey extends QueryKey>({
   return (
     <section className="space-y-4">
       <PageHeader level={2} title="Deliveries" description="Each event sent to the endpoint, with its result. Bodies open on demand and each read is audited." />
-      {deliveries.error ? (
-        <p className="text-sm text-destructive">{deliveries.error.message}</p>
-      ) : (
-        <DataTable
-          columns={columns}
-          data={deliveries.data ?? EMPTY_DELIVERIES}
-          emptyMessage={deliveries.isPending ? 'Loading…' : 'No deliveries.'}
-          testId="deliveries-table"
-          toolbar={
-            <Tabs value={filter} onValueChange={(value) => setFilter(value as Filter)}>
-              <TabsList>
-                {FILTERS.map((value) => (
-                  <TabsTrigger key={value} value={value}>
-                    {value}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
-          }
-        />
-      )}
+      <DataTable
+        columns={columns}
+        data={data.items}
+        paging={pagingFor(data, onSearch)}
+        onReset={resetFor(search, onSearch)}
+        fetching={fetching}
+        emptyMessage={isFiltered(search) ? 'No deliveries match.' : 'No deliveries.'}
+        testId="deliveries-table"
+        toolbar={
+          <>
+            <SelectFilter label="Status" options={deliveryStatusOptions} value={search.status} onChange={(status) => onSearch({ status })} testId="status-filter" />
+            <SelectFilter label="Event" options={eventTypeOptions} value={search.eventType} onChange={(eventType) => onSearch({ eventType })} />
+            <DateRangeFilter from={search.from} to={search.to} onChange={(range) => onSearch(range)} />
+          </>
+        }
+      />
       <DeliveryBodyDialog deliveryId={viewing} invalidateKey={invalidateKey} loadBody={loadBody} onClose={() => setViewing(null)} />
     </section>
   )

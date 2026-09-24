@@ -3,7 +3,7 @@
  * the console (console token + operator role + actor) and the break-glass `x-admin-token` over an
  * SSH tunnel. The edge answers 404 for /admin/*; both callers are audited (audit.ts).
  */
-import { type SQL, and, desc, eq } from 'drizzle-orm'
+import { type SQL, desc, eq, inArray, or } from 'drizzle-orm'
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { z } from 'zod'
 
@@ -13,9 +13,10 @@ import type { Database } from '../../db/client.ts'
 import { DELIVERY_STATUSES, apiKeys, consoleAudit, tenants, webhookDeliveries } from '../../db/schema.ts'
 import { requireOperator } from '../auth.ts'
 import { notFound } from '../errors.ts'
+import { containsI, createdBetween, createdRange, listPage, many, oneOrMany, pageOf, pageQuery, searchQuery } from '../list.ts'
 import { CONSOLE_ONLY_TAG } from './console.ts'
 import { activeRevokedByTenant, deadDeliveriesByTenant, exchangeActivityByTenant } from './stats.ts'
-import { deliveryView, toDeliveryView } from './webhook.ts'
+import { deliveryFilters, deliveryListQuery, deliveryView, toDeliveryView } from './webhook.ts'
 
 export interface AdminDeps {
   db: Database
@@ -129,28 +130,46 @@ export const adminRoutes = (deps: AdminDeps): FastifyPluginAsyncZod => async (ap
     return { revoked: true }
   })
 
-  app.get('/admin/overview', { schema: { tags, summary: 'Per-tenant activity for the operator console', response: { 200: z.array(overviewView) } } }, async () => {
-    const [tenantRows, activity, wallets, keys, deadDeliveries] = await Promise.all([
-      deps.db.select().from(tenants).orderBy(desc(tenants.createdAt)),
-      exchangeActivityByTenant(deps.db),
-      activeRevokedByTenant(deps.db, 'wallets'),
-      activeRevokedByTenant(deps.db, 'api_keys'),
-      deadDeliveriesByTenant(deps.db),
-    ])
-    return tenantRows.map((row) => {
-      const entry = activity.get(row.id)
-      return {
-        tenant: view(row),
-        connections: entry?.connections ?? {},
-        credentials: entry?.credentials ?? {},
-        proofs: entry?.proofs ?? {},
-        wallets: wallets.get(row.id) ?? { active: 0, revoked: 0 },
-        apiKeys: keys.get(row.id) ?? { active: 0, revoked: 0 },
-        deadDeliveries: deadDeliveries.get(row.id) ?? 0,
-        lastActivityAt: entry?.last?.toISOString() ?? null,
-      }
-    })
-  })
+  app.get(
+    '/admin/overview',
+    {
+      schema: {
+        tags,
+        summary: 'Per-tenant activity for the operator console',
+        description: 'Tenants newest first, paged. `q` matches the tenant name.',
+        querystring: pageQuery.extend(searchQuery.shape).extend({ status: z.enum(['provisioning', 'ready', 'failed']).optional() }),
+        response: { 200: pageOf(overviewView) },
+      },
+    },
+    async (request) => {
+      const { q, status } = request.query
+      const filters: SQL[] = []
+      if (q) filters.push(containsI(tenants.name, q))
+      if (status) filters.push(eq(tenants.status, status))
+      const page = await listPage(deps.db, { table: tenants, where: filters, ...request.query }, (where, limit, offset) =>
+        deps.db.select().from(tenants).where(where).orderBy(desc(tenants.createdAt), desc(tenants.id)).limit(limit).offset(offset)
+      )
+      // The aggregates cover this page's tenants only.
+      const ids = page.items.map((row) => row.id)
+      const [activity, wallets, keys, deadDeliveries] = ids.length
+        ? await Promise.all([exchangeActivityByTenant(deps.db, ids), activeRevokedByTenant(deps.db, 'wallets', ids), activeRevokedByTenant(deps.db, 'api_keys', ids), deadDeliveriesByTenant(deps.db, ids)])
+        : [new Map(), new Map(), new Map(), new Map()]
+      const items = page.items.map((row) => {
+        const entry = activity.get(row.id)
+        return {
+          tenant: view(row),
+          connections: entry?.connections ?? {},
+          credentials: entry?.credentials ?? {},
+          proofs: entry?.proofs ?? {},
+          wallets: wallets.get(row.id) ?? { active: 0, revoked: 0 },
+          apiKeys: keys.get(row.id) ?? { active: 0, revoked: 0 },
+          deadDeliveries: deadDeliveries.get(row.id) ?? 0,
+          lastActivityAt: entry?.last?.toISOString() ?? null,
+        }
+      })
+      return { ...page, items }
+    }
+  )
 
   app.get(
     '/admin/webhook-deliveries',
@@ -158,16 +177,18 @@ export const adminRoutes = (deps: AdminDeps): FastifyPluginAsyncZod => async (ap
       schema: {
         tags,
         summary: 'Webhook deliveries across tenants',
-        querystring: z.object({ status: z.enum(DELIVERY_STATUSES).optional(), tenantId: z.uuid().optional(), limit: z.coerce.number().int().min(1).max(200).default(50) }),
-        response: { 200: z.array(deliveryView.extend({ tenantId: z.string() })) },
+        description: 'Newest first, paged. The body is not included.',
+        querystring: deliveryListQuery.extend({ tenantId: z.uuid().optional() }),
+        response: { 200: pageOf(deliveryView.extend({ tenantId: z.string() })) },
       },
     },
     async (request) => {
-      const filters: SQL[] = []
-      if (request.query.status) filters.push(eq(webhookDeliveries.status, request.query.status))
+      const filters = deliveryFilters(request.query)
       if (request.query.tenantId) filters.push(eq(webhookDeliveries.tenantId, request.query.tenantId))
-      const rows = await deps.db.select().from(webhookDeliveries).where(and(...filters)).orderBy(desc(webhookDeliveries.id)).limit(request.query.limit)
-      return rows.map((row) => ({ ...toDeliveryView(row), tenantId: row.tenantId }))
+      const page = await listPage(deps.db, { table: webhookDeliveries, where: filters, ...request.query }, (where, limit, offset) =>
+        deps.db.select().from(webhookDeliveries).where(where).orderBy(desc(webhookDeliveries.createdAt), desc(webhookDeliveries.id)).limit(limit).offset(offset)
+      )
+      return { ...page, items: page.items.map((row) => ({ ...toDeliveryView(row), tenantId: row.tenantId })) }
     }
   )
 
@@ -177,16 +198,26 @@ export const adminRoutes = (deps: AdminDeps): FastifyPluginAsyncZod => async (ap
       schema: {
         tags,
         summary: 'Console audit log',
-        querystring: z.object({ tenantId: z.uuid().optional(), actor: z.string().min(1).max(200).optional(), limit: z.coerce.number().int().min(1).max(500).default(100) }),
-        response: { 200: z.array(auditView) },
+        description: 'Newest first, paged. `q` matches the route pattern or the actor id, or any of the `qActor` ids (the console resolves names and emails to account ids); `actor` restricts to one or more actor ids.',
+        querystring: pageQuery.extend(createdRange.shape).extend(searchQuery.shape).extend({ tenantId: z.uuid().optional(), actor: oneOrMany(z.string().min(1).max(200)), qActor: oneOrMany(z.string().min(1).max(200)) }),
+        response: { 200: pageOf(auditView) },
       },
     },
     async (request) => {
-      const filters: SQL[] = []
-      if (request.query.tenantId) filters.push(eq(consoleAudit.tenantId, request.query.tenantId))
-      if (request.query.actor) filters.push(eq(consoleAudit.actor, request.query.actor))
-      const rows = await deps.db.select().from(consoleAudit).where(and(...filters)).orderBy(desc(consoleAudit.id)).limit(request.query.limit)
-      return rows.map((row) => ({ id: row.id, at: row.at.toISOString(), actor: row.actor, role: row.role, tenantId: row.tenantId, method: row.method, route: row.route, statusCode: row.statusCode, requestId: row.requestId }))
+      const { tenantId, q } = request.query
+      const actors = many(request.query.actor)
+      const filters: SQL[] = createdBetween(consoleAudit.at, request.query)
+      if (tenantId) filters.push(eq(consoleAudit.tenantId, tenantId))
+      if (actors.length) filters.push(inArray(consoleAudit.actor, actors))
+      const qActors = many(request.query.qActor)
+      if (q) filters.push(or(containsI(consoleAudit.route, q), containsI(consoleAudit.actor, q), ...(qActors.length ? [inArray(consoleAudit.actor, qActors)] : []))!)
+      const page = await listPage(deps.db, { table: consoleAudit, where: filters, ...request.query }, (where, limit, offset) =>
+        deps.db.select().from(consoleAudit).where(where).orderBy(desc(consoleAudit.at), desc(consoleAudit.id)).limit(limit).offset(offset)
+      )
+      return {
+        ...page,
+        items: page.items.map((row) => ({ id: row.id, at: row.at.toISOString(), actor: row.actor, role: row.role, tenantId: row.tenantId, method: row.method, route: row.route, statusCode: row.statusCode, requestId: row.requestId })),
+      }
     }
   )
 }

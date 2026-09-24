@@ -1,0 +1,1 @@
+CREATE INDEX "ledger_objects_tenant_kind_created_idx" ON "ledger_objects" USING btree ("tenant_id","kind","created_at" DESC NULLS LAST);

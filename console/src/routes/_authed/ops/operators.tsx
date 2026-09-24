@@ -1,4 +1,4 @@
-import { queryOptions, useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
+import { keepPreviousData, queryOptions, useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { createColumnHelper } from '@tanstack/react-table'
 import { BanIcon, LogOutIcon, UserCheckIcon } from 'lucide-react'
@@ -12,25 +12,45 @@ import { RowAction, RowActions } from '@/components/row-action'
 import { StateBadge } from '@/components/state-badge'
 import { InviteOperatorDialog } from '@/features/operators/invite-operator-dialog'
 import { banOperator, listOperators, revokeOperatorSessions, unbanOperator } from '@/features/operators/operators.functions'
+import { type OperatorSearch, operatorSearch, operatorStatusOptions } from '@/features/operators/operators.schemas'
+import { SelectFilter } from '@/components/data-table/list-toolbar'
+import { useListPending } from '@/components/data-table/use-list-pending'
 import { formatDateTime } from '@/lib/format'
+import { isFiltered, pagingFor, resetFor, parseListSearch, searchPatcher } from '@/lib/list-search'
 
-type OperatorRow = Awaited<ReturnType<typeof listOperators>>[number]
+type OperatorRow = Awaited<ReturnType<typeof listOperators>>['items'][number]
 
-const operatorsQuery = () => queryOptions({ queryKey: ['ops', 'operators'], queryFn: () => listOperators() })
+const operatorsQuery = (search: OperatorSearch) =>
+  queryOptions({ queryKey: ['ops', 'operators', search], queryFn: () => listOperators({ data: search }), placeholderData: keepPreviousData })
 
 export const Route = createFileRoute('/_authed/ops/operators')({
-  loader: ({ context }) => context.queryClient.ensureQueryData(operatorsQuery()),
+  validateSearch: parseListSearch(operatorSearch),
+  loaderDeps: ({ search }) => search,
+  loader: ({ context, deps }) => context.queryClient.ensureQueryData(operatorsQuery(deps)),
   errorComponent: RouteError,
   component: OperatorsPage,
 })
 
 function OperatorsPage() {
   const { viewer } = Route.useRouteContext()
-  const { data } = useSuspenseQuery(operatorsQuery())
+  const search = Route.useSearch()
+  const onSearch = searchPatcher<OperatorSearch>(Route.useNavigate())
+  const fetching = useListPending()
+  const { data } = useSuspenseQuery(operatorsQuery(search))
   return (
     <section className="space-y-4">
       <PageHeader title="Operators" description="12id staff with access to every tenant." actions={<InviteOperatorDialog />} />
-      <DataTable columns={operatorColumns(viewer.userId)} data={data} emptyMessage="No operators." testId="operators-table" />
+      <DataTable
+        columns={operatorColumns(viewer.userId)}
+        data={data.items}
+        paging={pagingFor(data, onSearch)}
+        onReset={resetFor(search, onSearch)}
+        search={{ value: search.q, placeholder: 'Search name or email', onChange: (q) => onSearch({ q }) }}
+        toolbar={<SelectFilter label="Status" options={operatorStatusOptions} value={search.status} onChange={(status) => onSearch({ status })} />}
+        fetching={fetching}
+        emptyMessage={isFiltered(search) ? 'No operators match.' : 'No operators.'}
+        testId="operators-table"
+      />
     </section>
   )
 }

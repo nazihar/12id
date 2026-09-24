@@ -23,6 +23,12 @@ With an API key, those routes answer `403 forbidden`. A leaked key therefore can
 
 Every command returns immediately (`202`) with the exchange record. The holder answers minutes or hours later, so progress arrives by webhook (recommended) or by polling `GET` routes. Pass `externalId` on commands to get your own reference back on every event. Send an `Idempotency-Key` header on POSTs you may retry; a replay with the same key and body returns the original response (`Idempotent-Replayed: true`), the same key with a different body answers 422, and a retry that arrives while the first request is still running answers 409 `idempotency_in_progress` (retry after `Retry-After` seconds). A request that failed with a 5xx can be retried with the same key and runs again. Keys are kept for 24 hours.
 
+**Lists.** Every list route (`GET /v1/connections`, `/v1/credentials`, `/v1/proofs`, `/v1/wallets`, `/v1/webhook/deliveries`, `/v1/proof-templates`, `/v1/schemas`, `/v1/credential-definitions`) answers `{ "items": [...], "total": 312, "page": 1, "pageSize": 25 }`, newest first (`createdAt` descending); the order cannot be changed.
+- `page` starts at 1, and `pageSize` is 25, 50 or 100 (default 25). A page past the end has an empty `items`.
+- `q` is a case-insensitive contains search; on exchanges, `externalId` is the same match on your reference only (`?externalId=4711` finds `order-4711-b`).
+- Exchanges also filter by `state` (repeat it for several: `?state=done&state=abandoned`). Exchanges, wallets and deliveries filter by creation time with `from` (inclusive) and `to` (exclusive), both ISO 8601.
+- `total` counts every match, so `ceil(total / pageSize)` is the last page. To walk everything, raise `page` until `items` is empty.
+
 **Rate limits.** Each API key may make 300 requests per minute, unless 12id raised the limit for your organisation. Each wallet token (the SDK) may make 60 requests per minute, and 3 mediator invitations per 10 minutes. Above a limit the API answers `429 rate_limited` with a `Retry-After` header (seconds). Wait that long, then retry.
 
 **Wallet lifecycle.**

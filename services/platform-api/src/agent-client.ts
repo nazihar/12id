@@ -42,6 +42,16 @@ export interface AgentLedgerObject {
   attributes?: string[] | null
 }
 
+export const LEDGER_OBJECT_STATUSES = ['pending', 'awaiting_endorsement', 'endorsed', 'published', 'deprecated', 'failed'] as const
+
+export interface CataloguePageQuery {
+  kind: AgentLedgerObject['kind']
+  status?: (typeof LEDGER_OBJECT_STATUSES)[number]
+  q?: string
+  page: number
+  pageSize: number
+}
+
 export interface AgentConnection {
   id: string
   state: string
@@ -140,6 +150,12 @@ export function createAgentClient(options: AgentClientOptions) {
     publishCredentialDefinition: (tenantId: string, input: { schemaObjectId: string; tag: string }) =>
       call<AgentLedgerObject>('POST', `${t(tenantId)}/credential-definitions`, input, ledgerTimeoutMs),
     listCatalogue: (tenantId: string) => call<AgentLedgerObject[]>('GET', `${t(tenantId)}/catalogue`),
+    listCataloguePage: (tenantId: string, query: CataloguePageQuery) => {
+      const params = new URLSearchParams({ kind: query.kind, page: String(query.page), pageSize: String(query.pageSize) })
+      if (query.status) params.set('status', query.status)
+      if (query.q) params.set('q', query.q)
+      return call<{ items: AgentLedgerObject[]; total: number; page: number; pageSize: number }>('GET', `${t(tenantId)}/catalogue/page?${params}`)
+    },
     setSchemaDeprecated: (tenantId: string, schemaObjectId: string, deprecated: boolean) =>
       call<{ status: string }>('POST', `${t(tenantId)}/schemas/${schemaObjectId}/deprecation`, { deprecated }),
 

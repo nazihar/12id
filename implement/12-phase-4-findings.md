@@ -1,6 +1,6 @@
 # Phase 4 — Findings
 
-**Plan:** [11-phase-4.md](11-phase-4.md). **Status: 4a, 4b, C7 (console UI revamp) and C8 (dashboards) on staging since 2026-09-17; `e2e:staging` 3/3.**
+**Plan:** [11-phase-4.md](11-phase-4.md). **Status: 4a, 4b, C7 (console UI revamp) and C8 (dashboards) on staging since 2026-09-17; `e2e:staging` 3/3. C9 (console lists) on staging since 2026-09-24; `e2e:staging` 3/3, `smoke:platform-credo` PASSED.**
 
 | Item | State |
 |---|---|
@@ -13,6 +13,7 @@
 | C4 tenant portal (4b) | **done locally, Playwright 4/4 in 2.1 min** (`portal.spec.ts`: owner onboarding by mail link, email-code 2FA, API key and webhook secret shown once, invitation → account → member, role limits, cross-organization denial, role change and removal effective on the next request). Console `tsc` clean, Vitest 11/11, client bundle clean. **Staging, 2026-09-15: redeployed; `staging.spec.ts`, `staging-apikey.spec.ts` and `staging-portal.spec.ts` pass** (agent-backed catalogue, template builder, exchanges; audit log shows actor emails) |
 | C7 console UI revamp | **done and on staging, 2026-09-17.** Locally: `tsc` clean, Vitest 17/17, `vite build` + client-bundle check clean, Playwright 4/4 (`auth`, `ops`, `portal`). Staging: `12id/console:phase4` rebuilt twice (second time with the save-guard fix below), healthy behind Caddy; `npm run e2e:staging` **3/3** (`staging-apikey`, `staging-portal`, `staging`) with the new automation operator. One shell (sidebar + workspace switcher + header with breadcrumb, theme toggle, profile menu), one form kit (TanStack Form + shared zod schemas, field-level errors), short forms in dialogs, the template builder on its own routes, a confirmation dialog in front of every state-changing action, comboboxes instead of selects, dark mode. Edge: `/assets/*` exempt from the console per-IP limit |
 | C8 dashboards | **done and on staging, 2026-09-17; `e2e:staging` 3/3.** Deployed with `console.sops.env` merged into the platform stack after the sync overwrote `platform.sops.env` (trap 45; owner follow-up in §C8 Staging).* platform-api: `GET /v1/stats` (console principal only) + `GET /admin/stats`, migration `0003_stats_indexes`, 42/42 tests (36 + 6), `tsc` clean, `openapi.json` still 25 paths, `openapi.console.json` 37. Console: `/ops` dashboard, tenants table at `/ops/tenants`, `/t/$orgSlug` Overview with the getting-started checklist, the tenant dashboard reused on `/ops/tenants/$tenantId`; shadcn `chart` + recharts 3.8.0; `tsc` clean, Vitest 22/22 (17 + 5), `vite build` + client-bundle check clean, Playwright **4/4**; no horizontal overflow at 1280 or 390 px in either theme |
+| C9 console lists | **done and on staging, 2026-09-24; `e2e:staging` 3/3, `smoke:platform-credo` PASSED.** platform-api 81/81 (72 + `list.test.ts` 9), agent-service 52/52 (with `catalogue-page.test.ts`), `tsc` clean in both; migrations `0007_list_indexes` (`pg_trgm` + trigram and list indexes) and `0008_list_order_indexes` (the primary key closes every list index); agent-service `0001_catalogue_list_index`; `openapi.json` 29 paths and `openapi.console.json` 50, both unchanged in count. Console: `tsc` clean, Vitest 29/29, `vite build` + client-bundle check clean, Playwright **6/6** including the new `lists.spec.ts`. `EXPLAIN` before/after and the staging record below |
 | Not yet exercised at runtime | an invited member accepting through real SMTP on staging (proven locally with the mail outbox, and for owners/operators on staging by the owner's own session) |
 
 Every claim below comes from a local run on 2026-09-14 or a registry/doc read on that date.
@@ -300,3 +301,144 @@ shred -u "$dec"
 cd /opt/12id && EXTRA_SECRETS="agent mediator" infra/scripts/deploy.sh platform config --quiet   # must pass again
 ```
 Then copy the restored `infra/staging/secrets/platform.sops.env` back into the repo and commit it, so the next sync cannot regress it (trap 45).
+
+---
+
+## C9 — Console lists (built 2026-09-24, local)
+
+Decided with the owner before the build (recorded in [11-phase-4.md](11-phase-4.md) §C9):
+- page numbers with a total;
+- the `{ items, total, page, pageSize }` envelope on every list route, customer `/v1` included;
+- external-id search as a case-insensitive contains on `pg_trgm`;
+- fixed `created_at desc` order;
+- Wallets above Exchanges in the sidebar;
+- External id as the first column of credential and proof exchanges.
+
+### Build
+**platform-api.**
+- `src/http/list.ts` holds the shared pieces: `pageQuery` (`page`, `pageSize` 25/50/100), `createdRange`, `q`, `oneOrMany` for repeated parameters, `pageOf`, `containsI` (ILIKE with `%` `_` `\` escaped) and `listPage` (rows and `count(*)` under one `where`, in parallel).
+- Every list route answers the envelope, ordered `created_at desc` with the primary key as tie-break.
+- `/admin/overview` pages the tenants first and runs the per-tenant aggregates (`exchangeActivityByTenant` and the others in `stats.ts`) for that page's ids only. Before, they scanned every tenant on every call.
+- `limit` is gone.
+- The state filter accepts any string: the console offers Credo's issuer/verifier states. A strict enum would turn a new Credo state into a 400.
+
+**agent-service.**
+- A separate route, `GET /tenants/:id/catalogue/page` (one kind, `status`, `q` on name or tag, paged, newest first), backs `/v1/schemas` and `/v1/credential-definitions`.
+- The unpaged `/catalogue` route stays: credential-definition resolution and proof requests need the whole list.
+- Index `ledger_objects (tenant_id, kind, created_at desc)` (migration `0001_catalogue_list_index`).
+
+**console.**
+- `DataTable` is server-driven: page, size, total, a debounced search box, a filter toolbar, no client models and no sort buttons.
+- `lib/list-search.ts` holds the base search schemas, `parseListSearch` (a bad value is dropped, not an error page), `cleanSearch` (defaults stay out of the URL), `searchPatcher` (a filter change returns to page 1) and `allPages`.
+- `features/tenant-data/list.schemas.ts` + `list.params.ts` hold each list's search schema and its platform-api query. The same schema is the route's `validateSearch` and the server function's validator.
+- Routes load through `loaderDeps: ({ search }) => search`. The table dims while the router loads the next page (`useListPending`).
+- Pages with two or three lists became tabs, each tab with its own URL state:
+  - Exchanges (connections / credential exchanges / proof exchanges);
+  - Catalogue (schemas / credential definitions);
+  - Members (members / pending invitations).
+- Members, invitations and operators are paged in the console database (`server/members.server.ts`; operators by `role = 'operator'`, with a status filter that Better Auth's single `filterField` could not combine with the role).
+- The template builder and the Overview's catalogue counts read the whole catalogue through `allPages` (pages of 100). The template edit page loads its template by id instead of scanning the list.
+- The portal's schema list returns `withDefinition` for the schemas on the page, which the "Publish credential definition" action needs.
+
+### Deviations from the plan
+- ~~Date range as two native date inputs~~ — **reverted after the owner's review (2026-09-24):** they looked out of place next to shadcn components. The toolbar follows shadcn's data-table pattern:
+  - one search box;
+  - dashed facet buttons with selection badges;
+  - a Reset button;
+  - the date range as `calendar` + `popover` (shadcn 4.21.0; `react-day-picker` 10.0.1 and `date-fns` 4.4.0, pinned exactly), two months, presets.
+
+  Changes that came with it:
+  - Deliveries' status tabs became a Status facet.
+  - The audit log's two boxes (actor, route) became one. platform-api's audit `q` now matches the route or the actor id, and `qActor` ORs in the account ids the console resolves from names and emails (`list.test.ts` covers both).
+  - **Clipped filter menus (owner report, same day).** shadcn's `DropdownMenuContent` defaults to `w-(--anchor-width)` with `overflow-x-hidden`, so a menu is as wide as its button, and longer items were cut off (`connection.state_changed`, `biometric.check_completed`, the "Rows per page" label). The filter menus, the page-size menu and the theme menu now pass `w-auto` (the ui component stays untouched). The user menu truncates on purpose, and the workspace switcher matches its trigger by design. Checked with dark screenshots of each menu open; redeployed; `e2e:staging` 3/3.
+- react-day-picker's range mode extends an existing range on the first click. The picker makes the first click start a new range, and the second click end it and apply.
+- **Migration `0008_list_order_indexes`**, not in the plan. The first `EXPLAIN` pass showed the fixed order `created_at desc, record_id desc` was only half covered by `(tenant_id, created_at desc)`. `0008` adds the primary key as the last column of every list index, so the planner reads each page straight from the index with no sort. `0007` was already applied to the local test databases, so this is a second migration rather than an edited `0007`.
+- The operator's tenant-overview members card pages with its own state, 25 per page. The route's URL belongs to the dashboard range.
+
+### Two defects the e2e run found (fixed)
+- **A pager click before hydration did nothing.** The next-page button was live in the server render; Playwright clicked it before React attached the handler, and the URL never changed. The pager controls (and the page-size menu, which replaced a native `<select>` per the C7 rule) are now disabled until `useHydrated()`, like every form.
+- **The date range lost its first bound.** Filling "to" right after "from" re-sent the "from" value captured before the navigation, which was still empty. Each date input now patches only its own bound, and `searchPatcher` merges it into the current search.
+
+### `pg_trgm` under the H3 roles (run, Postgres 15.19)
+A role created like `pg-roles.sh` creates service roles (`LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE`) that owns a database (PUBLIC revoked) ran `create extension if not exists pg_trgm`, and then a trigram GIN index. The extension is owned by that role. `pg_trgm` is a trusted extension, so `0007` needs no superuser step on staging.
+
+### EXPLAIN (ANALYZE) before / after (run, 2026-09-24)
+Scratch `platform_api` database migrated through `0008`, holding 90 k connections:
+- tenant A: 50 k connections, 56 % of the table (the hard case for the planner);
+- four tenants with 10 k each;
+- states 70 / 20 / 10 %, one creation every 10 minutes.
+
+"Before" is the index set as of `0006`: `(tenant, created desc)`, `(tenant, state)`, no trigram.
+
+| Query (tenant A unless noted) | Before | After |
+|---|---|---|
+| External-id contains `%47113%`, rows | 38.3 ms, bitmap scan of all 50 k tenant rows + filter | **0.31 ms**, `connections_external_id_trgm_idx` |
+| Same, `count(*)` | 38.4 ms | **0.17 ms** |
+| One state, first page | 0.23 ms, created index + filter | **0.11 ms**, `tenant_state_created_idx`, no sort |
+| Two states, first page | 0.23 ms | 0.10 ms |
+| One state, `count(*)` | 2.7 ms | 2.7 ms (5 000 matching rows counted) |
+| Created range (one week), first page | 0.16 ms | 0.13 ms |
+| Default first page | 0.06 ms (incremental sort) | 0.05 ms, no sort |
+| Deep page, offset 49 000 | 13.2 ms | 9.8 ms |
+| Total, `count(*)` | 9.7 ms, seq scan | 10.4 ms, seq scan |
+| Tenant B (10 k): first page / total | 0.14 / 2.2 ms | 0.11 / 1.5 ms |
+
+What this shows:
+- The trigram index is the one that matters: the contains search fell by two orders of magnitude.
+- The total for a tenant that holds most of the table stays a sequential scan of about 10 ms. That is the price of showing "of N". A cursor without a total (the option not chosen) would avoid it.
+- In one earlier probe run, the default first page chose a parallel seq scan (16.7 ms) over the incremental sort. The run above did not reproduce it; with `0008` the index matches the order exactly and the plan no longer depends on that choice.
+
+### Evidence
+- platform-api: `npm test` **81/81** against the local Phase 2 Postgres; `tsc --noEmit` clean; `npm run openapi` → 29 / 50 paths.
+- agent-service: `npm test` **52/52**; `tsc` clean.
+- console:
+  - `tsc` clean;
+  - Vitest **29/29** (`list-search.test.ts` +6);
+  - `vite build` and `check:client` clean;
+  - `npx playwright test` **6/6** against a local platform-api on the new build: `auth`, `biometrics`, `lists`, `ops`, `portal`.
+  - `lists.spec.ts` covers:
+    - the sidebar order;
+    - 30 seeded connections paged 25 + 5, kept in the URL across a reload;
+    - a middle-fragment external-id search, case-insensitive;
+    - the holder-label search;
+    - External id as the first column header of credential and proof exchanges;
+    - the state filter and the date range, with the URL carrying both;
+    - tab switches clearing filters;
+    - the wallet search.
+- Specs updated for the tabs: `portal` (pending invitations), `staging-portal` (credential definitions, `wallets-table`), `biometrics` (credential exchanges tab, `?tab=credentials`). After the toolbar rework, `lists.spec.ts` also covers Reset (keeps the tab), a range in the URL shown on the picker button, and a new range picked with two calendar clicks. Visual check: dark-mode screenshots of exchanges, the open calendar, deliveries and the audit log.
+
+### Staging (2026-09-24, 09:21–09:30 UTC)
+**Sync.**
+- A tarball of `services/`, `console/`, `infra/` and `implement/` was extracted over `/opt/12id`.
+- It excluded `infra/staging/secrets/` (trap 45; the checksums of the VM's `*.sops.env` were unchanged afterwards), `node_modules`, build output and `.staging`.
+- The VM's `console/` was moved aside first (`console.prev-20260924T092138Z`); the new tree only adds files.
+- A checksum comparison beforehand showed that every other file differing on the VM was older than the repo (smoke scripts of 2026-09-15, docs). The VM-only genesis and firewall files are untouched.
+
+**Deploy.**
+1. `12id/services:phase7` rebuilt, through `agent-provision`, which carries the `build:` key.
+2. `EXTRA_SECRETS=ledger deploy.sh agent up -d`: `0001_catalogue_list_index` applied. Only the known benign Askar "Duplicate entry" provisioning line appeared (Phase 2 findings).
+3. `EXTRA_SECRETS=biometric deploy.sh platform up -d`: `0007` and `0008` applied. **`pg_trgm` is owned by the `platform_api` role (no superuser step)**, and `connections_tenant_created_idx` is `(tenant_id, created_at desc, record_id desc)`.
+4. `deploy.sh console up -d --build console`: `12id/console:phase6` rebuilt (the tag was kept).
+
+All containers are healthy. biometric-service was not recreated: its code did not change, and it keeps the previous `phase7` build until its next deploy.
+
+**Checks.**
+- Outside: console `/api/health` 200; `/` 307 to login; `api.` `/v1/ledger` 200; `api.` with `X-Console-Token` 404; `/v1/connections` without a key 401.
+- `smoke:platform-credo` **PASSED**: new wallet and connection, credential done with the idempotent replay, proof verified, one wake-up, all signatures valid, 0 deliveries pending (read through the new envelope).
+- `e2e:staging` **3/3**: `staging-apikey`, `staging-portal` with the catalogue tabs and `wallets-table`, and `staging`. This ran with the automation operator and the acme test owner; the CSP guard was active.
+- Live API probes on `acme-platform` with its staging key:
+
+  | Request | Result |
+  |---|---|
+  | `/v1/credentials?externalId=CREDO-17902` | 1 (case-insensitive fragment) |
+  | `state=done&state=abandoned` | 14 |
+  | `/v1/proofs?from=<today>` | 1 |
+  | `/v1/wallets?status=revoked` | 1 |
+  | `/v1/webhook/deliveries?eventType=proof.state_changed&status=delivered` | 36 |
+  | `pageSize=10` | 400 "pageSize must be one of 25, 50, 100" |
+  | the old `limit=500` | ignored; answers the first page of 25 |
+
+**Redeploy after the owner's toolbar review (2026-09-24, 10:05–10:12 UTC).**
+- Same sync and deploy steps. platform-api (audit `qActor`) and the console (calendar, facet filters, one audit search) were rebuilt.
+- The first console build failed in `npm ci` with `ETIMEDOUT` on the VM's slow downlink while fetching the two new packages. The old console kept serving, and the retry built.
+- Checks: health 200 on both hosts; `api.` with `X-Console-Token` 404; `/admin/audit?q=api-keys` 54, `q=admin-token` 8, a nonsense term 0; `e2e:staging` **3/3**.

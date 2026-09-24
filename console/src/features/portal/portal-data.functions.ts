@@ -10,7 +10,9 @@ import { biometricOverride, biometricProviderInput, biometricSettingsInput } fro
 import { publishSchemaInput } from '@/features/portal/catalogue.schemas'
 import { connectionInvitationInput } from '@/features/portal/exchanges.schemas'
 import { webhookEndpointInput } from '@/features/portal/webhook.schemas'
-import { DELIVERY_STATUSES } from '@/features/tenant-data/types'
+import { apiKeyQueryParams, catalogueQueryParams, deliveryQueryParams, exchangeQueryParams, walletQueryParams } from '@/features/tenant-data/list.params'
+import { apiKeySearch, catalogueSearch, deliverySearch, exchangeSearch, templateSearch, walletSearch } from '@/features/tenant-data/list.schemas'
+import { allPages, pageParams } from '@/lib/list-search'
 import { apiKeyLabel } from '@/features/tenants/tenants.schemas'
 import { EXPIRY_ATTRIBUTE, templateDefinitionInput } from '@/lib/template-schema'
 import { tenantMiddleware } from '@/server/middleware'
@@ -18,16 +20,38 @@ import { PlatformCallError, platformFor, unwrap } from '@/server/platform.server
 
 import { assertSameOrganization, organizationInput } from './organization-input'
 
-const LIST_LIMIT = 200
-
 // --- catalogue ------------------------------------------------------------------------------
 
+/**
+ * The whole catalogue, for the template builder's pickers and the Overview counts: platform-api
+ * pages it, so every page of 100 is read (a tenant's catalogue is small; each item is a ledger write).
+ */
 export const getPortalCatalogue = createServerFn({ method: 'GET' })
   .middleware([tenantMiddleware()])
   .handler(async ({ context }) => {
     const platform = platformFor(context.principal)
-    const [schemas, credentialDefinitions] = await Promise.all([platform.GET('/v1/schemas'), platform.GET('/v1/credential-definitions')])
-    return { schemas: unwrap(schemas), credentialDefinitions: unwrap(credentialDefinitions) }
+    const [schemas, credentialDefinitions] = await Promise.all([
+      allPages(async (page) => unwrap(await platform.GET('/v1/schemas', { params: { query: { page, pageSize: 100 } } }))),
+      allPages(async (page) => unwrap(await platform.GET('/v1/credential-definitions', { params: { query: { page, pageSize: 100 } } }))),
+    ])
+    return { schemas, credentialDefinitions }
+  })
+
+/** One page of schemas or of credential definitions (`tab`), for the Catalogue page (Phase 4 C9). */
+export const listPortalCatalogue = createServerFn({ method: 'GET' })
+  .middleware([tenantMiddleware()])
+  .validator(catalogueSearch)
+  .handler(async ({ context, data }) => {
+    const platform = platformFor(context.principal)
+    const query = catalogueQueryParams(data)
+    if (data.tab === 'definitions') return { tab: 'definitions' as const, page: unwrap(await platform.GET('/v1/credential-definitions', { params: { query } })) }
+    const [page, definitions] = await Promise.all([
+      platform.GET('/v1/schemas', { params: { query } }).then(unwrap),
+      // Which of this page's schemas already have a credential definition (one per schema).
+      allPages(async (n) => unwrap(await platform.GET('/v1/credential-definitions', { params: { query: { page: n, pageSize: 100 } } }))),
+    ])
+    const onPage = new Set(page.items.map((schema) => schema.id))
+    return { tab: 'schemas' as const, page, withDefinition: [...new Set(definitions.map((d) => d.schemaId).filter((id): id is string => id !== null && onPage.has(id)))] }
   })
 
 /** Publishes a schema on the ledger. `expiresAt` is always included: v1 credentials expire instead of being revoked. */
@@ -60,7 +84,20 @@ export const setSchemaDeprecated = createServerFn({ method: 'POST' })
 
 export const listPortalTemplates = createServerFn({ method: 'GET' })
   .middleware([tenantMiddleware()])
-  .handler(async ({ context }) => unwrap(await platformFor(context.principal).GET('/v1/proof-templates')))
+  .validator(templateSearch)
+  .handler(async ({ context, data }) => unwrap(await platformFor(context.principal).GET('/v1/proof-templates', { params: { query: pageParams(data) } })))
+
+export const getPortalTemplate = createServerFn({ method: 'GET' })
+  .middleware([tenantMiddleware()])
+  .validator(z.object({ templateId: z.uuid() }))
+  .handler(async ({ context, data }) => {
+    try {
+      return unwrap(await platformFor(context.principal).GET('/v1/proof-templates/{id}', { params: { path: { id: data.templateId } } }))
+    } catch (error) {
+      if (error instanceof PlatformCallError && error.status === 404) return null
+      throw error
+    }
+  })
 
 export const createPortalTemplate = createServerFn({ method: 'POST' })
   .middleware([tenantMiddleware({ template: ['create'] })])
@@ -88,21 +125,22 @@ export const deletePortalTemplate = createServerFn({ method: 'POST' })
 
 // --- exchanges and wallets ------------------------------------------------------------------
 
-export const listPortalConnections = createServerFn({ method: 'GET' })
+/** One page of the exchange kind the search's tab names (connections by default). */
+export const listPortalExchanges = createServerFn({ method: 'GET' })
   .middleware([tenantMiddleware()])
-  .handler(async ({ context }) => unwrap(await platformFor(context.principal).GET('/v1/connections', { params: { query: { limit: LIST_LIMIT } } })))
-
-export const listPortalCredentials = createServerFn({ method: 'GET' })
-  .middleware([tenantMiddleware()])
-  .handler(async ({ context }) => unwrap(await platformFor(context.principal).GET('/v1/credentials', { params: { query: { limit: LIST_LIMIT } } })))
-
-export const listPortalProofs = createServerFn({ method: 'GET' })
-  .middleware([tenantMiddleware()])
-  .handler(async ({ context }) => unwrap(await platformFor(context.principal).GET('/v1/proofs', { params: { query: { limit: LIST_LIMIT } } })))
+  .validator(exchangeSearch)
+  .handler(async ({ context, data }) => {
+    const platform = platformFor(context.principal)
+    const query = exchangeQueryParams(data)
+    if (data.tab === 'credentials') return { tab: 'credentials' as const, page: unwrap(await platform.GET('/v1/credentials', { params: { query } })) }
+    if (data.tab === 'proofs') return { tab: 'proofs' as const, page: unwrap(await platform.GET('/v1/proofs', { params: { query } })) }
+    return { tab: 'connections' as const, page: unwrap(await platform.GET('/v1/connections', { params: { query } })) }
+  })
 
 export const listPortalWallets = createServerFn({ method: 'GET' })
   .middleware([tenantMiddleware()])
-  .handler(async ({ context }) => unwrap(await platformFor(context.principal).GET('/v1/wallets', { params: { query: { limit: LIST_LIMIT } } })))
+  .validator(walletSearch)
+  .handler(async ({ context, data }) => unwrap(await platformFor(context.principal).GET('/v1/wallets', { params: { query: walletQueryParams(data) } })))
 
 /** A connection invitation for testing with a holder app (the customer backend normally creates these). */
 export const createPortalInvitation = createServerFn({ method: 'POST' })
@@ -153,8 +191,8 @@ export const deletePortalWebhook = createServerFn({ method: 'POST' })
 
 export const listPortalDeliveries = createServerFn({ method: 'GET' })
   .middleware([tenantMiddleware()])
-  .validator(z.object({ status: z.enum(DELIVERY_STATUSES).optional() }))
-  .handler(async ({ context, data }) => unwrap(await platformFor(context.principal).GET('/v1/webhook/deliveries', { params: { query: { status: data.status, limit: LIST_LIMIT } } })))
+  .validator(deliverySearch)
+  .handler(async ({ context, data }) => unwrap(await platformFor(context.principal).GET('/v1/webhook/deliveries', { params: { query: deliveryQueryParams(data) } })))
 
 export const getPortalDelivery = createServerFn({ method: 'GET' })
   .middleware([tenantMiddleware()])
@@ -173,7 +211,8 @@ export const retryPortalDelivery = createServerFn({ method: 'POST' })
 
 export const listPortalApiKeys = createServerFn({ method: 'GET' })
   .middleware([tenantMiddleware()])
-  .handler(async ({ context }) => unwrap(await platformFor(context.principal).GET('/v1/api-keys')))
+  .validator(apiKeySearch)
+  .handler(async ({ context, data }) => unwrap(await platformFor(context.principal).GET('/v1/api-keys', { params: { query: apiKeyQueryParams(data) } })))
 
 export const createPortalApiKey = createServerFn({ method: 'POST' })
   .middleware([tenantMiddleware({ apiKey: ['create'] })])

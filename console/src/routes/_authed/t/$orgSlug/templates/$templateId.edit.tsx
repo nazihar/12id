@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { PageHeader } from '@/components/page-header'
 import { RouteError } from '@/components/route-error'
 import { updatePortalTemplate } from '@/features/portal/portal-data.functions'
-import { portalCatalogueQuery, portalKey, portalTemplatesQuery } from '@/features/portal/portal.queries'
+import { portalCatalogueQuery, portalKey, portalTemplateQuery } from '@/features/portal/portal.queries'
 import { TemplateBuilder } from '@/features/portal/template-builder'
 import { tenantCan } from '@/lib/permissions'
 import type { TemplateDefinition } from '@/lib/template-schema'
@@ -15,8 +15,8 @@ export const Route = createFileRoute('/_authed/t/$orgSlug/templates/$templateId/
     if (!tenantCan(context.organization.role, { template: ['update'] })) throw redirect({ to: '/t/$orgSlug/templates', params })
   },
   loader: async ({ context, params }) => {
-    const [templates] = await Promise.all([context.queryClient.ensureQueryData(portalTemplatesQuery(params.orgSlug)), context.queryClient.ensureQueryData(portalCatalogueQuery(params.orgSlug))])
-    if (!templates.some((template) => template.id === params.templateId)) throw notFound()
+    const [template] = await Promise.all([context.queryClient.ensureQueryData(portalTemplateQuery(params.orgSlug, params.templateId)), context.queryClient.ensureQueryData(portalCatalogueQuery(params.orgSlug))])
+    if (!template) throw notFound()
   },
   errorComponent: RouteError,
   notFoundComponent: () => <p className="text-sm text-muted-foreground">This template no longer exists.</p>,
@@ -27,8 +27,7 @@ function EditTemplatePage() {
   const { orgSlug, templateId } = Route.useParams()
   const { organization } = Route.useRouteContext()
   const { data: catalogue } = useSuspenseQuery(portalCatalogueQuery(orgSlug))
-  const { data: templates } = useSuspenseQuery(portalTemplatesQuery(orgSlug))
-  const template = templates.find((candidate) => candidate.id === templateId)
+  const { data: template } = useSuspenseQuery(portalTemplateQuery(orgSlug, templateId))
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const update = useMutation({

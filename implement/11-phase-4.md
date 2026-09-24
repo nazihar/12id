@@ -22,6 +22,7 @@ The product will be **SaaS, and also self-hostable**. SaaS needs two kinds of us
 | Client packages | **TanStack Query** (router SSR integration), **TanStack Table**, **TanStack Form** + zod, `qrcode` | One ecosystem with Start; zod schemas shared by forms and server-function validators |
 | UI revamp (C7, 2026-09-17) | **One shell** (shadcn `sidebar` with a workspace switcher as its top item, header with breadcrumb, theme toggle and profile menu), **one form kit** (TanStack Form + shared zod schemas + shadcn `Field`, validated on submit then live, `noValidate`), **short forms in dialogs, only the template builder on routes**, **every state-changing action behind one `ConfirmDialog`**, **row actions as icon buttons with a tooltip label**, **`Combobox` wherever a `<select>` was**, light/dark/system theme | The reference (shadcnuikit dashboard) was mined for ideas only. No portal overview page at the time (kept the redirect to Catalogue; C8 adds one); all e2e selectors follow the dialogs |
 | Dashboards (C8, 2026-09-17) | **`/ops` becomes the operator dashboard** (tenants table moves to `/ops/tenants`); **`/t/$orgSlug` becomes the tenant Overview** (was a redirect to Catalogue); the same tenant dashboard is reused on `/ops/tenants/$tenantId`. Data from two new **console-scope-only** platform-api routes, `GET /v1/stats` and `GET /admin/stats` (counters, a 7/30/90-day series, attention lists, readiness checks). Charts with **shadcn `chart` + recharts**; a validated categorical palette replaces the preset's grayscale `--chart-*` tokens | Customer `openapi.json` unchanged (25 paths); `openapi.console.json` 35 → 37. Migration `0003_stats_indexes` on the mirror tables also delivers the index half of review finding L3. No agent-service call inside the stats routes (trap 44) |
+| Lists (C9, 2026-09-24) | **Every list is paged on the server:** page numbers with a total, the `{ items, total, page, pageSize }` envelope on every list route (customer `/v1` included; `limit` removed), fixed `created_at desc` order, search and filters in the URL, external-id search as a case-insensitive contains on `pg_trgm` | A breaking change to the `/v1` list shape, accepted pre-production. Migration `0007_list_indexes`. Closes review L3 |
 | Data access | **The console never reads `platform_api` or agent databases** | Response stripping, validation and audit stay in platform-api |
 | Customer API keys | Stay in platform-api (sha256 table). The console only manages them through new routes | Better Auth's api-key plugin is **not** used |
 | Storage | Better Auth tables in their own database `console` on `agent-postgres` | platform-api migrations stay separate |
@@ -143,7 +144,7 @@ src/components/form/                 form kit (C7): useAppForm/Form with TextFie
                                      CheckboxField, CheckboxGroupField, SwitchField, ComboboxField, SubmitButton, FormError;
                                      FormDialog for short forms; submitMutation glue to TanStack Query
 src/components/                      app components: DataTable (TanStack Table + shadcn table: sorting, filters, pagination,
-                                     toolbar slot), PageHeader (title + actions slot), ConfirmDialog (AlertDialog for every
+                                     toolbar slot; server-driven since C9, see below), PageHeader (title + actions slot), ConfirmDialog (AlertDialog for every
                                      state-changing action), RowAction (icon + tooltip, optional confirm), IdentifierPair /
                                      CopyableValue, StateBadge, SecretOnceDialog (API key / webhook secret shown once)
 src/components/dashboard/            dashboard kit (C8): StatTile + StatGrid (KPI row), AttentionList (icon + label + count +
@@ -222,6 +223,8 @@ Routes: `/login`, `/2fa`, `/ops` (dashboard since C8; the tenants table until th
   - Webhook endpoint; deliveries with body and retry.
   - Members and invitations.
 - **Cross-tenant:** failed tenants, dead deliveries (`/admin/webhook-deliveries`).
+
+  > **C9 update (2026-09-24):** every one of these lists is paged, searched and filtered on the server, with its state in the URL, newest first. In the tenant sidebar, Wallets comes before Exchanges. Exchanges, Catalogue and Members are tabbed. See §C9.
 - **Operators:** invite operator, ban/unban, revoke sessions (admin plugin). Audit log viewer (`/admin/audit`).
 - The SSH `x-admin-token` path stays as break-glass; runbook updated.
 
@@ -250,6 +253,8 @@ Screens:
   - Preview of the expanded unqualified cred def ids.
 - **Webhook:** set the https URL and event filter; the secret is shown once on create/rotate; deliveries log with status filter, body, retry.
 - **Browsers:** connections / credentials / proofs / wallets (read-only), plus "create connection invitation" with a QR image rendered client-side, for testing with the sample app.
+
+  > **C9 update (2026-09-24):** the browsers page on the server. On the exchanges, the external-id search is a contains match, with state and creation-date filters. External id is the first column of credential and proof exchanges. See §C9.
 
 ### C5 — Staging deploy
 - **`infra/staging/compose.console.yml`:**
@@ -320,8 +325,63 @@ After C7 the console has one shell and one form kit, but no page that answers "h
 - **Pages.** `/ops`: header + range tabs; health strip (three chips from `health.checks` + draining); KPI row (tenants ready of total, connections, credential exchanges, proof exchanges, active wallets, active API keys); `ActivityChart`; `AttentionList` (failed tenants, dead deliveries, stuck credentials, stuck proofs, wallets never connected, tenants without a webhook); top 5 tenants (a table — a hue per tenant would break the series ladder); last 10 audit rows from the existing `/admin/audit` query. `/t/$orgSlug`: header + range tabs; `GettingStarted` while incomplete; KPI row (connections, credentials issued, proofs verified, active wallets, each with its in-flight count beneath); `ActivityChart` + `OutcomeBar` side by side, stacked below `lg`; `AttentionList` (dead deliveries, stuck exchanges, expiring, expired, wallets never connected); webhook card (url or "not configured", counts, last delivery, link); catalogue card with schema / credential-definition counts loaded with `useQuery`, **not** the route loader, so an unreachable agent-service fails only that card. `/ops/tenants/$tenantId`: the same KPI row, chart and attention list from `tenantDashboardQuery(tenantId)` above the existing cards — one set of components, two callers, as `features/tenant-data/panels.tsx` already does.
 - **Tests.** `auth.spec.ts` asserts the dashboard at `/ops` and the table at `/ops/tenants`; `staging.spec.ts` and `staging-portal.spec.ts` `goto('/ops/tenants')` before using `tenants-table`; `ops.spec.ts` covers the range tabs changing the search and the chart, and an attention row linking through; `portal.spec.ts` covers landing on Overview with the sidebar item active and the getting-started checklist on a fresh tenant; Vitest covers the range schema and the getting-started derivation.
 
+### C9 — Console lists: server-side paging, search and filters (2026-09-24; on staging, `e2e:staging` 3/3, `smoke:platform-credo` PASSED)
+After C8 every console table still loads one array (`limit=200`, or unbounded for API keys, templates, catalogue and members) and sorts, searches and pages it in the browser (`components/data-table/data-table.tsx`, local state, not in the URL). A tenant with more than 200 exchanges cannot see the rest (review finding **L3**, cursor half). The exchange lists cannot be searched by external id or filtered by state or date. C9 makes every list server-paged, with its search and filters in the URL and one fixed order. Decisions taken with the owner:
+- **Paging:** page numbers with a total (offset paging). `page ≥ 1`, `pageSize` ∈ {25, 50, 100}, default 25.
+- **Envelope:** `{ items, total, page, pageSize }` on **every** list route, customer `/v1` routes included. `limit` is gone. This breaks the old shape, accepted pre-production: outside the console only one smoke line reads a list, and the SDK reads none.
+- **Order:** always `created_at desc`, with the primary key as tie-break so pages are stable. The UI has no sort controls.
+- **External-id search:** case-insensitive contains (`ILIKE '%term%'`, `%` `_` `\` escaped) on `pg_trgm` GIN indexes.
+- **UI:** in the sidebar (tenant detail and portal), **Wallets moves above Exchanges**. On the credential-exchange and proof-exchange tables, **External id becomes the first column**.
+
+**platform-api** — new `src/http/list.ts`: `pageQuery`, `createdRange` (`from` / `to`, ISO date-time, `created_at >= from and < to`), `q` (1–100 chars), `pageOf(item)` (the envelope schema), `containsI(col, term)`, and `listPage()` (rows with `limit`/`offset` and `count(*)` under the same `where`, in parallel).
+
+| Route | Filters | `q` matches |
+|---|---|---|
+| `GET /v1/connections` | `state` (multi), `from`/`to`, `externalId`, `invitationId` | external id, holder label |
+| `GET /v1/credentials`, `GET /v1/proofs` | `state` (multi), `from`/`to`, `externalId`, `connectionId` | external id |
+| `GET /v1/wallets` | `status` (active / revoked), `from`/`to` | external id |
+| `GET /v1/webhook/deliveries` | `status`, `eventType`, `from`/`to` (order moves from `id desc` to `created_at desc, id desc`) | — |
+| `GET /v1/api-keys` | `status` | label, prefix |
+| `GET /v1/proof-templates` | — | name |
+| `GET /v1/schemas`, `GET /v1/credential-definitions` | `status` | name (and tag) |
+| `GET /admin/overview` | `status` | tenant name |
+| `GET /admin/webhook-deliveries` | `status`, `tenantId`, `eventType`, `from`/`to` | — |
+| `GET /admin/audit` | `tenantId`, `actor` (multi; the console resolves emails to ids), `from`/`to` | route |
+
+- `state` values are checked against per-kind lists in `src/exchange-states.ts` (Credo v1 states plus the biometric held states), mirrored in the console.
+- `/admin/overview` pages the tenants first and runs the three per-tenant aggregates for that page's ids only (they scanned every tenant before).
+- `openapi.json` and `openapi.console.json` are regenerated (path counts unchanged); `docs/api.md` documents the envelope; `infra/smoke/platform-credo.ts` reads `.items`.
+
+**agent-service** — the catalogue route (`GET /tenants/:id/catalogue`) takes optional `kind`, `status`, `q`, `page`, `pageSize`. With `page` it returns the envelope ordered `created_at desc`; without it, the full array as before, because credential-definition resolution and proof requests need the whole list. Index `ledger_objects (tenant_id, kind, created_at desc)`.
+
+**Indexes** — platform-api migration `0007_list_indexes`:
+- `create extension if not exists pg_trgm` (a trusted extension: the database owner role from H3 may create it; checked against `infra/scripts/pg-roles.sh` roles before staging);
+- trigram GIN on `connections.external_id`, `connections.their_label`, `credentials.external_id`, `proofs.external_id`, `wallets.external_id`;
+- `(tenant_id, state)` → `(tenant_id, state, created_at desc)` on the three mirror tables;
+- `(tenant_id, created_at desc)` on `wallets` (replaces `(tenant_id)`), `api_keys` (none before) and `proof_templates` (replaces `(tenant_id)`);
+- `webhook_deliveries (tenant_id, created_at desc, id desc)` (replaces `(tenant_id, created_at)`) and a partial `(created_at desc) where status = 'dead'` for the cross-tenant dead list;
+- `console_audit (actor, at desc)`.
+- `tenants` and the Better Auth tables are small and stay as they are.
+- **Added during the build — migration `0008_list_order_indexes`:** every list index ends with the primary key, e.g. `(tenant_id, created_at desc, record_id desc)` and `(tenant_id, state, created_at desc, record_id desc)`, so the fixed order is read from the index with no sort. The `EXPLAIN` numbers are in the findings.
+
+**console**:
+- `DataTable` becomes server-driven: `page`, `pageSize`, `total`, page and size callbacks, an optional debounced search box and a filter toolbar. The client sort, filter and pagination models and the header sort buttons are removed. The pager reads "26–50 of 312".
+- `lib/list-search.ts`: a base search schema (`page`, `pageSize`, `q`, `from`, `to`) extended per list and parsed like `parseDashboardSearch` (invalid values dropped, defaults kept out of the URL). Every list route has `validateSearch` + `loaderDeps`, and its query key includes the search, with `placeholderData: keepPreviousData`.
+- **Toolbar** (shadcn's data-table toolbar pattern):
+  - one search box per list, then dashed "faceted" filter buttons that show their selection as badges, then a Reset button while anything is set;
+  - pieces: `SearchInput`, `SelectFilter` (one status), `MultiFilter` (states), `DateRangeFilter` (shadcn `calendar` + `popover`, a two-month range with 7/30/90-day presets, inclusive UTC days), `PageSizeMenu`;
+  - pager, menus and the date picker stay disabled until hydration.
+  - *Owner review, 2026-09-24:* this replaced the first build's native date inputs, the two search boxes on the audit log and the status tabs on deliveries. The audit log now has one box: platform-api's `q` matches the route or the actor id, plus `qActor`, the account ids the console resolves from names and emails.
+- The **Exchanges** page becomes three tabs (Connections, Credential exchanges, Proof exchanges; `?tab=`), each with its own search, filters and pager. Only the open tab's query runs. **Catalogue** (schemas / credential definitions) and **Members** (members / pending invitations) follow the same pattern.
+- Members, invitations and operators are paged in the console database or through Better Auth `listUsers` (`limit`/`offset`/`total`).
+
+**Tests:**
+- platform-api: the envelope and total; stable pages at equal `created_at`; `pageSize` out of range → 400; contains search, case-insensitive, with `%` and `_` literal; state and date filters; tenant isolation of search; `/admin/overview` per page; the `0007` indexes and `pg_trgm`.
+- agent-service: the paged catalogue, and the unpaged call still returns the full array.
+- console: Vitest for the search parser and the state lists; Playwright `lists.spec.ts` (paging, external-id search, state filter, date range, nav order, first column) and the existing specs updated for tabs.
+
 ## Order
-C0 → C1 (can start in parallel with C0) → C2 → C3 → C5 (deploy 4a) → C6 for 4a (operator smoke + outside checks) → C4 → C5 redeploy → C6 full (portal smoke, isolation suite, `smoke:platform-credo` with a console-created key) → C7 (UI revamp) → C5 redeploy → `e2e:staging` → **C8** (platform-api stats + migration + OpenAPI → `openapi:client` → shadcn `chart` + palette → dashboard kit → `/ops` and the route move → portal Overview → tenant-detail reuse → e2e updates) → C5 redeploy (both images) → `e2e:staging`.
+C0 → C1 (can start in parallel with C0) → C2 → C3 → C5 (deploy 4a) → C6 for 4a (operator smoke + outside checks) → C4 → C5 redeploy → C6 full (portal smoke, isolation suite, `smoke:platform-credo` with a console-created key) → C7 (UI revamp) → C5 redeploy → `e2e:staging` → **C8** (platform-api stats + migration + OpenAPI → `openapi:client` → shadcn `chart` + palette → dashboard kit → `/ops` and the route move → portal Overview → tenant-detail reuse → e2e updates) → C5 redeploy (both images) → `e2e:staging` → **C9** (migration `0007` + `list.ts` + routes → agent-service catalogue paging → OpenAPI → `openapi:client` → `DataTable` + list search → pages, exchanges first → nav + columns → tests) → C5 redeploy (platform-api, agent-service, console) → `e2e:staging`.
 
 ## Verification (gate)
 - `tsc --noEmit` + tests green in `platform-api` and `console`, including the isolation suite and the import-scan rule.
@@ -338,6 +398,10 @@ C0 → C1 (can start in parallel with C0) → C2 → C3 → C5 (deploy 4a) → C
   - console `tsc`, Vitest, `vite build` + `check:client` (recharts adds nothing server-side to the client bundle; note the size delta), Playwright `e2e` 4/4;
   - palette validator output recorded for both modes; screenshots at 1280 and 390 px in light and dark; `document.documentElement.scrollWidth === window.innerWidth` at both widths;
   - staging: both images rebuilt, `compose ps` healthy, `e2e:staging` 3/3, `/ops` showing real numbers, `api.` with `X-Console-Token` still 404, no `console_audit` rows from dashboard reads.
+- C9 (lists):
+  - `tsc --noEmit` + tests green in platform-api, agent-service and console (Vitest, `vite build`, `check:client`); Playwright `e2e` including `lists.spec.ts`;
+  - `EXPLAIN (ANALYZE)` before and after on 50 k synthetic rows per mirror table: external-id contains, state + first page, date range, deep page; no sequential scan of a mirror table;
+  - staging: `0007` applied, `pg_trgm` in `platform_api`; `smoke:platform-credo` PASSED; `smoke:biometric-credo` 18/18; `e2e:staging` green; a tenant with more than 25 exchanges pages through, finds a record by a middle fragment of its external id, and filters by state and date.
 
 ## Document updates
 - `12id/implement/11-phase-4.md` (this plan), `12id/implement/12-phase-4-findings.md`.
@@ -351,6 +415,7 @@ C0 → C1 (can start in parallel with C0) → C2 → C3 → C5 (deploy 4a) → C
   - new **§12.15** SaaS + self-host product decision (console self-host-ready now, stack packaging later);
   - traps found during the build.
 - **C8:** §10 Phase 4 checklist line for the dashboards; §2.6 platform-API responsibilities (aggregate stats for the console); trap 45 (secrets files overwritten by a tree sync, found during the staging deploy); `17-phase-7.md` L3 index half marked as delivered by `0003_stats_indexes`.
+- **C9:** §10 Phase 4 checklist line for the lists; `17-phase-7.md` L3 closed by C9 (page numbers instead of a cursor, owner decision); `services/platform-api/docs/api.md` list envelope; evidence in `12-phase-4-findings.md` "C9".
 
 ## Out of scope
-Self-host packaging of the whole stack; OIDC/SSO (Better Auth plugin later); self-signup of tenants; billing; per-API-key rate limits; Swift pass; production ledger (§12.1); Phase 1–3 leftovers (M6 failover, alert email, `indy-node-monitor`, upstream mediator bug report). For C8: publishing `/v1/stats` to customers in `openapi.json` (a later, non-breaking step); usage metering; live-updating dashboards (navigation refetch with a 60 s `staleTime` is enough); Prometheus/Grafana changes; per-tenant quotas (review M3); the rest of the Phase 6 fix set.
+Self-host packaging of the whole stack; OIDC/SSO (Better Auth plugin later); self-signup of tenants; billing; per-API-key rate limits; Swift pass; production ledger (§12.1); Phase 1–3 leftovers (M6 failover, alert email, `indy-node-monitor`, upstream mediator bug report). For C8: publishing `/v1/stats` to customers in `openapi.json` (a later, non-breaking step); usage metering; live-updating dashboards (navigation refetch with a 60 s `staleTime` is enough); Prometheus/Grafana changes; per-tenant quotas (review M3); the rest of the Phase 6 fix set. For C9: cursor paging; sort controls; search over attribute or disclosed values (personal data, review H1); saved filters; CSV export; paging the per-record biometric log.

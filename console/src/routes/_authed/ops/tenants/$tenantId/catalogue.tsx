@@ -9,12 +9,13 @@ import { PageHeader } from '@/components/page-header'
 import { RouteError } from '@/components/route-error'
 import { StateBadge } from '@/components/state-badge'
 import { Badge } from '@/components/ui/badge'
-import type { getCatalogue } from '@/features/tenant-data/tenant-data.functions'
+import { SelectFilter } from '@/components/data-table/list-toolbar'
+import { useListPending } from '@/components/data-table/use-list-pending'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { type CatalogueSearch, catalogueSearch, catalogueStatusOptions } from '@/features/tenant-data/list.schemas'
 import { catalogueQuery } from '@/features/tenant-data/tenant-data.queries'
-
-type Catalogue = Awaited<ReturnType<typeof getCatalogue>>
-type SchemaRow = Catalogue['schemas'][number]
-type CredentialDefinitionRow = Catalogue['credentialDefinitions'][number]
+import type { CredentialDefinitionRow, SchemaRow } from '@/features/tenant-data/types'
+import { isFiltered, pagingFor, resetFor, parseListSearch, searchPatcher } from '@/lib/list-search'
 
 const schemaColumn = createColumnHelper<DataTableFeatures, SchemaRow>()
 const schemaColumns = schemaColumn.columns([
@@ -46,24 +47,43 @@ const definitionColumns = definitionColumn.columns([
 ])
 
 export const Route = createFileRoute('/_authed/ops/tenants/$tenantId/catalogue')({
-  loader: ({ context, params }) => context.queryClient.ensureQueryData(catalogueQuery(params.tenantId)),
+  validateSearch: parseListSearch(catalogueSearch),
+  loaderDeps: ({ search }) => search,
+  loader: ({ context, params, deps }) => context.queryClient.ensureQueryData(catalogueQuery(params.tenantId, deps)),
   errorComponent: RouteError,
   component: CataloguePage,
 })
 
 function CataloguePage() {
   const { tenantId } = Route.useParams()
-  const { data } = useSuspenseQuery(catalogueQuery(tenantId))
+  const search = Route.useSearch()
+  const onSearch = searchPatcher<CatalogueSearch>(Route.useNavigate())
+  const fetching = useListPending()
+  const { data } = useSuspenseQuery(catalogueQuery(tenantId, search))
+  const tab = search.tab ?? 'schemas'
+  const common = {
+    paging: pagingFor(data.page, onSearch),
+    onReset: resetFor(search, onSearch),
+    search: { value: search.q, placeholder: tab === 'schemas' ? 'Search schema name' : 'Search schema name or tag', onChange: (q: string | undefined) => onSearch({ q }) },
+    toolbar: <SelectFilter label="Status" options={catalogueStatusOptions} value={search.status} onChange={(status) => onSearch({ status })} />,
+    fetching,
+  }
   return (
-    <div className="space-y-8">
-      <section className="space-y-3">
-        <PageHeader level={2} title="Schemas" description="Offers and proof requests use the wire identifier. Publishing happens in the tenant portal." />
-        <DataTable columns={schemaColumns} data={data.schemas} searchPlaceholder="Search schemas" emptyMessage="No schemas published." />
-      </section>
-      <section className="space-y-3">
-        <PageHeader level={2} title="Credential definitions" />
-        <DataTable columns={definitionColumns} data={data.credentialDefinitions} emptyMessage="No credential definitions published." />
-      </section>
-    </div>
+    <section className="space-y-4">
+      <PageHeader title="Catalogue" description="Newest first. Offers and proof requests use the wire identifier. Publishing happens in the tenant portal." />
+      <Tabs value={tab} onValueChange={(next) => onSearch({ tab: next === 'schemas' ? undefined : 'definitions', q: undefined, status: undefined })}>
+        <TabsList>
+          <TabsTrigger value="schemas">Schemas</TabsTrigger>
+          <TabsTrigger value="definitions">Credential definitions</TabsTrigger>
+        </TabsList>
+      </Tabs>
+      {data.tab !== tab ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : data.tab === 'schemas' ? (
+        <DataTable columns={schemaColumns} data={data.page.items} emptyMessage={isFiltered(search) ? 'No schemas match.' : 'No schemas published.'} testId="schemas-table" {...common} />
+      ) : (
+        <DataTable columns={definitionColumns} data={data.page.items} emptyMessage={isFiltered(search) ? 'No credential definitions match.' : 'No credential definitions published.'} testId="definitions-table" {...common} />
+      )}
+    </section>
   )
 }

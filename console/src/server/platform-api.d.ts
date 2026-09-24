@@ -110,10 +110,20 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List schemas */
+        /**
+         * List schemas
+         * @description Newest first, paged with `page` and `pageSize`. `q` matches the schema name.
+         */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    page?: number;
+                    /** @description 25, 50 or 100. */
+                    pageSize?: number;
+                    /** @description Case-insensitive contains match. */
+                    q?: string;
+                    status?: "pending" | "awaiting_endorsement" | "endorsed" | "published" | "deprecated" | "failed";
+                };
                 header?: never;
                 path?: never;
                 cookie?: never;
@@ -127,15 +137,20 @@ export interface paths {
                     };
                     content: {
                         "application/json": {
-                            id: string;
-                            name: string;
-                            version: string;
-                            attributes: string[] | null;
-                            status: string;
-                            schemaId: string | null;
-                            qualifiedId: string | null;
-                            lastError: string | null;
-                        }[];
+                            items: {
+                                id: string;
+                                name: string;
+                                version: string;
+                                attributes: string[] | null;
+                                status: string;
+                                schemaId: string | null;
+                                qualifiedId: string | null;
+                                lastError: string | null;
+                            }[];
+                            total: number;
+                            page: number;
+                            pageSize: number;
+                        };
                     };
                 };
             };
@@ -328,10 +343,20 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List credential definitions */
+        /**
+         * List credential definitions
+         * @description Newest first, paged with `page` and `pageSize`. `q` matches the schema name or the tag.
+         */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    page?: number;
+                    /** @description 25, 50 or 100. */
+                    pageSize?: number;
+                    /** @description Case-insensitive contains match. */
+                    q?: string;
+                    status?: "pending" | "awaiting_endorsement" | "endorsed" | "published" | "deprecated" | "failed";
+                };
                 header?: never;
                 path?: never;
                 cookie?: never;
@@ -345,16 +370,21 @@ export interface paths {
                     };
                     content: {
                         "application/json": {
-                            id: string;
-                            schemaId: string | null;
-                            schemaName: string;
-                            schemaVersion: string;
-                            tag: string;
-                            status: string;
-                            credentialDefinitionId: string | null;
-                            qualifiedId: string | null;
-                            lastError: string | null;
-                        }[];
+                            items: {
+                                id: string;
+                                schemaId: string | null;
+                                schemaName: string;
+                                schemaVersion: string;
+                                tag: string;
+                                status: string;
+                                credentialDefinitionId: string | null;
+                                qualifiedId: string | null;
+                                lastError: string | null;
+                            }[];
+                            total: number;
+                            page: number;
+                            pageSize: number;
+                        };
                     };
                 };
             };
@@ -540,13 +570,27 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List connections */
+        /**
+         * List connections
+         * @description Newest first (`createdAt` descending), paged with `page` and `pageSize`. `q` matches the external id or the holder's label.
+         */
         get: {
             parameters: {
                 query?: {
+                    page?: number;
+                    /** @description 25, 50 or 100. */
+                    pageSize?: number;
+                    /** @description Created at or after this instant (ISO 8601). */
+                    from?: string;
+                    /** @description Created before this instant (ISO 8601). */
+                    to?: string;
+                    /** @description Case-insensitive contains match. */
+                    q?: string;
+                    /** @description One or more states; repeat the parameter for several. */
+                    state?: string | string[];
+                    /** @description Case-insensitive contains match on the external id. */
+                    externalId?: string;
                     invitationId?: string;
-                    state?: string;
-                    limit?: number;
                 };
                 header?: never;
                 path?: never;
@@ -561,16 +605,21 @@ export interface paths {
                     };
                     content: {
                         "application/json": {
-                            id: string;
-                            state: string;
-                            invitationId: string | null;
-                            theirLabel: string | null;
-                            externalId: string | null;
-                            /** Format: date-time */
-                            createdAt: string;
-                            /** Format: date-time */
-                            updatedAt: string;
-                        }[];
+                            items: {
+                                id: string;
+                                state: string;
+                                invitationId: string | null;
+                                theirLabel: string | null;
+                                externalId: string | null;
+                                /** Format: date-time */
+                                createdAt: string;
+                                /** Format: date-time */
+                                updatedAt: string;
+                            }[];
+                            total: number;
+                            page: number;
+                            pageSize: number;
+                        };
                     };
                 };
             };
@@ -782,13 +831,27 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List credential exchanges */
+        /**
+         * List credential exchanges
+         * @description Newest first (`createdAt` descending), paged with `page` and `pageSize`. `q` matches the external id.
+         */
         get: {
             parameters: {
                 query?: {
+                    page?: number;
+                    /** @description 25, 50 or 100. */
+                    pageSize?: number;
+                    /** @description Created at or after this instant (ISO 8601). */
+                    from?: string;
+                    /** @description Created before this instant (ISO 8601). */
+                    to?: string;
+                    /** @description Case-insensitive contains match. */
+                    q?: string;
+                    /** @description One or more states; repeat the parameter for several. */
+                    state?: string | string[];
+                    /** @description Case-insensitive contains match on the external id. */
+                    externalId?: string;
                     connectionId?: string;
-                    state?: string;
-                    limit?: number;
                 };
                 header?: never;
                 path?: never;
@@ -803,35 +866,40 @@ export interface paths {
                     };
                     content: {
                         "application/json": {
-                            id: string;
-                            state: string;
-                            connectionId: string | null;
-                            threadId: string | null;
-                            externalId: string | null;
-                            credentialDefinitionId: string | null;
-                            attributes: {
-                                [key: string]: string;
-                            } | null;
-                            errorMessage: string | null;
-                            biometric: {
-                                /** @enum {boolean} */
-                                required: true;
-                                /** @enum {string} */
-                                status: "pending" | "passed" | "failed" | "expired" | "cancelled";
-                                attempts: number;
-                                attemptsRemaining: number;
-                                livenessScore: number | null;
-                                matchScore: number | null;
-                                reason: string | null;
+                            items: {
+                                id: string;
+                                state: string;
+                                connectionId: string | null;
+                                threadId: string | null;
+                                externalId: string | null;
+                                credentialDefinitionId: string | null;
+                                attributes: {
+                                    [key: string]: string;
+                                } | null;
+                                errorMessage: string | null;
+                                biometric: {
+                                    /** @enum {boolean} */
+                                    required: true;
+                                    /** @enum {string} */
+                                    status: "pending" | "passed" | "failed" | "expired" | "cancelled";
+                                    attempts: number;
+                                    attemptsRemaining: number;
+                                    livenessScore: number | null;
+                                    matchScore: number | null;
+                                    reason: string | null;
+                                    /** Format: date-time */
+                                    expiresAt: string;
+                                    decidedAt: string | null;
+                                } | null;
                                 /** Format: date-time */
-                                expiresAt: string;
-                                decidedAt: string | null;
-                            } | null;
-                            /** Format: date-time */
-                            createdAt: string;
-                            /** Format: date-time */
-                            updatedAt: string;
-                        }[];
+                                createdAt: string;
+                                /** Format: date-time */
+                                updatedAt: string;
+                            }[];
+                            total: number;
+                            page: number;
+                            pageSize: number;
+                        };
                     };
                 };
             };
@@ -1087,13 +1155,27 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List proof exchanges */
+        /**
+         * List proof exchanges
+         * @description Newest first (`createdAt` descending), paged with `page` and `pageSize`. `q` matches the external id.
+         */
         get: {
             parameters: {
                 query?: {
+                    page?: number;
+                    /** @description 25, 50 or 100. */
+                    pageSize?: number;
+                    /** @description Created at or after this instant (ISO 8601). */
+                    from?: string;
+                    /** @description Created before this instant (ISO 8601). */
+                    to?: string;
+                    /** @description Case-insensitive contains match. */
+                    q?: string;
+                    /** @description One or more states; repeat the parameter for several. */
+                    state?: string | string[];
+                    /** @description Case-insensitive contains match on the external id. */
+                    externalId?: string;
                     connectionId?: string;
-                    state?: string;
-                    limit?: number;
                 };
                 header?: never;
                 path?: never;
@@ -1108,38 +1190,43 @@ export interface paths {
                     };
                     content: {
                         "application/json": {
-                            id: string;
-                            state: string;
-                            connectionId: string | null;
-                            threadId: string | null;
-                            externalId: string | null;
-                            templateId: string | null;
-                            verified: boolean | null;
-                            disclosed: {
-                                [key: string]: {
-                                    [key: string]: string;
-                                };
-                            } | null;
-                            errorMessage: string | null;
-                            biometric: {
-                                /** @enum {boolean} */
-                                required: true;
-                                /** @enum {string} */
-                                status: "pending" | "passed" | "failed" | "expired" | "cancelled";
-                                attempts: number;
-                                attemptsRemaining: number;
-                                livenessScore: number | null;
-                                matchScore: number | null;
-                                reason: string | null;
+                            items: {
+                                id: string;
+                                state: string;
+                                connectionId: string | null;
+                                threadId: string | null;
+                                externalId: string | null;
+                                templateId: string | null;
+                                verified: boolean | null;
+                                disclosed: {
+                                    [key: string]: {
+                                        [key: string]: string;
+                                    };
+                                } | null;
+                                errorMessage: string | null;
+                                biometric: {
+                                    /** @enum {boolean} */
+                                    required: true;
+                                    /** @enum {string} */
+                                    status: "pending" | "passed" | "failed" | "expired" | "cancelled";
+                                    attempts: number;
+                                    attemptsRemaining: number;
+                                    livenessScore: number | null;
+                                    matchScore: number | null;
+                                    reason: string | null;
+                                    /** Format: date-time */
+                                    expiresAt: string;
+                                    decidedAt: string | null;
+                                } | null;
                                 /** Format: date-time */
-                                expiresAt: string;
-                                decidedAt: string | null;
-                            } | null;
-                            /** Format: date-time */
-                            createdAt: string;
-                            /** Format: date-time */
-                            updatedAt: string;
-                        }[];
+                                createdAt: string;
+                                /** Format: date-time */
+                                updatedAt: string;
+                            }[];
+                            total: number;
+                            page: number;
+                            pageSize: number;
+                        };
                     };
                 };
             };
@@ -1955,10 +2042,19 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List proof templates */
+        /**
+         * List proof templates
+         * @description Newest first (`createdAt` descending), paged with `page` and `pageSize`. `q` matches the name.
+         */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    page?: number;
+                    /** @description 25, 50 or 100. */
+                    pageSize?: number;
+                    /** @description Case-insensitive contains match. */
+                    q?: string;
+                };
                 header?: never;
                 path?: never;
                 cookie?: never;
@@ -1972,51 +2068,56 @@ export interface paths {
                     };
                     content: {
                         "application/json": {
-                            id: string;
-                            name: string;
-                            definition: {
+                            items: {
+                                id: string;
                                 name: string;
-                                groups: {
-                                    key: string;
-                                    /** @default [] */
-                                    attributes: string[];
-                                    credentials: ({
-                                        schemaName: string;
-                                        /**
-                                         * @default all
-                                         * @enum {string}
-                                         */
-                                        versions: "active" | "all";
-                                    } | {
-                                        credentialDefinitionId: string;
-                                    })[];
-                                    predicates?: {
-                                        name: string;
-                                        /** @enum {string} */
-                                        type: ">=" | ">" | "<=" | "<";
-                                        value: number;
+                                definition: {
+                                    name: string;
+                                    groups: {
+                                        key: string;
+                                        /** @default [] */
+                                        attributes: string[];
+                                        credentials: ({
+                                            schemaName: string;
+                                            /**
+                                             * @default all
+                                             * @enum {string}
+                                             */
+                                            versions: "active" | "all";
+                                        } | {
+                                            credentialDefinitionId: string;
+                                        })[];
+                                        predicates?: {
+                                            name: string;
+                                            /** @enum {string} */
+                                            type: ">=" | ">" | "<=" | "<";
+                                            value: number;
+                                        }[];
                                     }[];
-                                }[];
-                            };
-                            biometricPolicy: {
-                                /** @enum {string} */
-                                mode: "inherit";
-                            } | {
-                                /** @enum {string} */
-                                mode: "off";
-                            } | {
-                                /** @enum {string} */
-                                mode: "required";
-                                minMatchScore?: number;
-                                minLivenessScore?: number;
-                                maxAttempts?: number;
-                                ttlMinutes?: number;
-                            };
-                            /** Format: date-time */
-                            createdAt: string;
-                            /** Format: date-time */
-                            updatedAt: string;
-                        }[];
+                                };
+                                biometricPolicy: {
+                                    /** @enum {string} */
+                                    mode: "inherit";
+                                } | {
+                                    /** @enum {string} */
+                                    mode: "off";
+                                } | {
+                                    /** @enum {string} */
+                                    mode: "required";
+                                    minMatchScore?: number;
+                                    minLivenessScore?: number;
+                                    maxAttempts?: number;
+                                    ttlMinutes?: number;
+                                };
+                                /** Format: date-time */
+                                createdAt: string;
+                                /** Format: date-time */
+                                updatedAt: string;
+                            }[];
+                            total: number;
+                            page: number;
+                            pageSize: number;
+                        };
                     };
                 };
             };
@@ -2604,11 +2705,23 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List wallets */
+        /**
+         * List wallets
+         * @description Newest first (`createdAt` descending), paged with `page` and `pageSize`. `q` matches the external id.
+         */
         get: {
             parameters: {
                 query?: {
-                    limit?: number;
+                    page?: number;
+                    /** @description 25, 50 or 100. */
+                    pageSize?: number;
+                    /** @description Created at or after this instant (ISO 8601). */
+                    from?: string;
+                    /** @description Created before this instant (ISO 8601). */
+                    to?: string;
+                    /** @description Case-insensitive contains match. */
+                    q?: string;
+                    status?: "active" | "revoked";
                 };
                 header?: never;
                 path?: never;
@@ -2623,16 +2736,21 @@ export interface paths {
                     };
                     content: {
                         "application/json": {
-                            id: string;
-                            externalId: string | null;
-                            hasMediatorInvitation: boolean;
-                            lastSyncRequestedAt: string | null;
-                            /** Format: date-time */
-                            createdAt: string;
-                            connectedAt: string | null;
-                            revokedAt: string | null;
-                            revokedReason: string | null;
-                        }[];
+                            items: {
+                                id: string;
+                                externalId: string | null;
+                                hasMediatorInvitation: boolean;
+                                lastSyncRequestedAt: string | null;
+                                /** Format: date-time */
+                                createdAt: string;
+                                connectedAt: string | null;
+                                revokedAt: string | null;
+                                revokedReason: string | null;
+                            }[];
+                            total: number;
+                            page: number;
+                            pageSize: number;
+                        };
                     };
                 };
             };
@@ -3030,12 +3148,22 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List deliveries */
+        /**
+         * List deliveries
+         * @description Newest first (`createdAt` descending), paged with `page` and `pageSize`.
+         */
         get: {
             parameters: {
                 query?: {
+                    page?: number;
+                    /** @description 25, 50 or 100. */
+                    pageSize?: number;
+                    /** @description Created at or after this instant (ISO 8601). */
+                    from?: string;
+                    /** @description Created before this instant (ISO 8601). */
+                    to?: string;
                     status?: "pending" | "sending" | "delivered" | "dead";
-                    limit?: number;
+                    eventType?: "connection.state_changed" | "credential.state_changed" | "proof.state_changed" | "wallet.sync_requested" | "biometric.check_completed";
                 };
                 header?: never;
                 path?: never;
@@ -3050,20 +3178,25 @@ export interface paths {
                     };
                     content: {
                         "application/json": {
-                            id: number;
-                            eventId: string;
-                            eventType: string;
-                            /** @enum {string} */
-                            status: "pending" | "sending" | "delivered" | "dead";
-                            attempts: number;
-                            /** Format: date-time */
-                            nextAttemptAt: string;
-                            lastStatusCode: number | null;
-                            lastError: string | null;
-                            /** Format: date-time */
-                            createdAt: string;
-                            deliveredAt: string | null;
-                        }[];
+                            items: {
+                                id: number;
+                                eventId: string;
+                                eventType: string;
+                                /** @enum {string} */
+                                status: "pending" | "sending" | "delivered" | "dead";
+                                attempts: number;
+                                /** Format: date-time */
+                                nextAttemptAt: string;
+                                lastStatusCode: number | null;
+                                lastError: string | null;
+                                /** Format: date-time */
+                                createdAt: string;
+                                deliveredAt: string | null;
+                            }[];
+                            total: number;
+                            page: number;
+                            pageSize: number;
+                        };
                     };
                 };
             };
@@ -3224,10 +3357,20 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List API keys */
+        /**
+         * List API keys
+         * @description Newest first, paged. `q` matches the label or the key prefix.
+         */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    page?: number;
+                    /** @description 25, 50 or 100. */
+                    pageSize?: number;
+                    /** @description Case-insensitive contains match. */
+                    q?: string;
+                    status?: "active" | "revoked";
+                };
                 header?: never;
                 path?: never;
                 cookie?: never;
@@ -3241,14 +3384,19 @@ export interface paths {
                     };
                     content: {
                         "application/json": {
-                            id: string;
-                            label: string;
-                            prefix: string;
-                            /** Format: date-time */
-                            createdAt: string;
-                            lastUsedAt: string | null;
-                            revokedAt: string | null;
-                        }[];
+                            items: {
+                                id: string;
+                                label: string;
+                                prefix: string;
+                                /** Format: date-time */
+                                createdAt: string;
+                                lastUsedAt: string | null;
+                                revokedAt: string | null;
+                            }[];
+                            total: number;
+                            page: number;
+                            pageSize: number;
+                        };
                     };
                 };
                 /** @description Default Response */
@@ -4251,10 +4399,20 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Per-tenant activity for the operator console */
+        /**
+         * Per-tenant activity for the operator console
+         * @description Tenants newest first, paged. `q` matches the tenant name.
+         */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    page?: number;
+                    /** @description 25, 50 or 100. */
+                    pageSize?: number;
+                    /** @description Case-insensitive contains match. */
+                    q?: string;
+                    status?: "provisioning" | "ready" | "failed";
+                };
                 header?: never;
                 path?: never;
                 cookie?: never;
@@ -4268,37 +4426,42 @@ export interface paths {
                     };
                     content: {
                         "application/json": {
-                            tenant: {
-                                id: string;
-                                name: string;
-                                status: string;
-                                did: string | null;
-                                agentTenantId: string;
-                                lastError: string | null;
-                                rateLimitPerMin: number | null;
-                                /** Format: date-time */
-                                createdAt: string;
-                            };
-                            connections: {
-                                [key: string]: number;
-                            };
-                            credentials: {
-                                [key: string]: number;
-                            };
-                            proofs: {
-                                [key: string]: number;
-                            };
-                            wallets: {
-                                active: number;
-                                revoked: number;
-                            };
-                            apiKeys: {
-                                active: number;
-                                revoked: number;
-                            };
-                            deadDeliveries: number;
-                            lastActivityAt: string | null;
-                        }[];
+                            items: {
+                                tenant: {
+                                    id: string;
+                                    name: string;
+                                    status: string;
+                                    did: string | null;
+                                    agentTenantId: string;
+                                    lastError: string | null;
+                                    rateLimitPerMin: number | null;
+                                    /** Format: date-time */
+                                    createdAt: string;
+                                };
+                                connections: {
+                                    [key: string]: number;
+                                };
+                                credentials: {
+                                    [key: string]: number;
+                                };
+                                proofs: {
+                                    [key: string]: number;
+                                };
+                                wallets: {
+                                    active: number;
+                                    revoked: number;
+                                };
+                                apiKeys: {
+                                    active: number;
+                                    revoked: number;
+                                };
+                                deadDeliveries: number;
+                                lastActivityAt: string | null;
+                            }[];
+                            total: number;
+                            page: number;
+                            pageSize: number;
+                        };
                     };
                 };
             };
@@ -4318,13 +4481,23 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Webhook deliveries across tenants */
+        /**
+         * Webhook deliveries across tenants
+         * @description Newest first, paged. The body is not included.
+         */
         get: {
             parameters: {
                 query?: {
+                    page?: number;
+                    /** @description 25, 50 or 100. */
+                    pageSize?: number;
+                    /** @description Created at or after this instant (ISO 8601). */
+                    from?: string;
+                    /** @description Created before this instant (ISO 8601). */
+                    to?: string;
                     status?: "pending" | "sending" | "delivered" | "dead";
+                    eventType?: "connection.state_changed" | "credential.state_changed" | "proof.state_changed" | "wallet.sync_requested" | "biometric.check_completed";
                     tenantId?: string;
-                    limit?: number;
                 };
                 header?: never;
                 path?: never;
@@ -4339,21 +4512,26 @@ export interface paths {
                     };
                     content: {
                         "application/json": {
-                            id: number;
-                            eventId: string;
-                            eventType: string;
-                            /** @enum {string} */
-                            status: "pending" | "sending" | "delivered" | "dead";
-                            attempts: number;
-                            /** Format: date-time */
-                            nextAttemptAt: string;
-                            lastStatusCode: number | null;
-                            lastError: string | null;
-                            /** Format: date-time */
-                            createdAt: string;
-                            deliveredAt: string | null;
-                            tenantId: string;
-                        }[];
+                            items: {
+                                id: number;
+                                eventId: string;
+                                eventType: string;
+                                /** @enum {string} */
+                                status: "pending" | "sending" | "delivered" | "dead";
+                                attempts: number;
+                                /** Format: date-time */
+                                nextAttemptAt: string;
+                                lastStatusCode: number | null;
+                                lastError: string | null;
+                                /** Format: date-time */
+                                createdAt: string;
+                                deliveredAt: string | null;
+                                tenantId: string;
+                            }[];
+                            total: number;
+                            page: number;
+                            pageSize: number;
+                        };
                     };
                 };
             };
@@ -4373,13 +4551,25 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Console audit log */
+        /**
+         * Console audit log
+         * @description Newest first, paged. `q` matches the route pattern or the actor id, or any of the `qActor` ids (the console resolves names and emails to account ids); `actor` restricts to one or more actor ids.
+         */
         get: {
             parameters: {
                 query?: {
+                    page?: number;
+                    /** @description 25, 50 or 100. */
+                    pageSize?: number;
+                    /** @description Created at or after this instant (ISO 8601). */
+                    from?: string;
+                    /** @description Created before this instant (ISO 8601). */
+                    to?: string;
+                    /** @description Case-insensitive contains match. */
+                    q?: string;
                     tenantId?: string;
-                    actor?: string;
-                    limit?: number;
+                    actor?: string | string[];
+                    qActor?: string | string[];
                 };
                 header?: never;
                 path?: never;
@@ -4394,17 +4584,22 @@ export interface paths {
                     };
                     content: {
                         "application/json": {
-                            id: number;
-                            /** Format: date-time */
-                            at: string;
-                            actor: string;
-                            role: string;
-                            tenantId: string | null;
-                            method: string;
-                            route: string;
-                            statusCode: number;
-                            requestId: string;
-                        }[];
+                            items: {
+                                id: number;
+                                /** Format: date-time */
+                                at: string;
+                                actor: string;
+                                role: string;
+                                tenantId: string | null;
+                                method: string;
+                                route: string;
+                                statusCode: number;
+                                requestId: string;
+                            }[];
+                            total: number;
+                            page: number;
+                            pageSize: number;
+                        };
                     };
                 };
             };

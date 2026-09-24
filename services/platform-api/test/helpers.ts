@@ -108,6 +108,13 @@ export function fakeAgent(overrides: Partial<AgentClient> = {}) {
     publishSchema: record('publishSchema', sampleCatalogue[2]),
     publishCredentialDefinition: record('publishCredentialDefinition', sampleCatalogue[3]),
     listCatalogue: record('listCatalogue', sampleCatalogue),
+    listCataloguePage: async (tenantId, query) => {
+      calls.push({ method: 'listCataloguePage', args: [tenantId, query] })
+      const q = query.q?.toLowerCase()
+      const matching = sampleCatalogue.filter((o) => o.kind === query.kind && (!query.status || o.status === query.status) && (!q || o.name.toLowerCase().includes(q) || o.tag.toLowerCase().includes(q)))
+      const start = (query.page - 1) * query.pageSize
+      return { items: matching.slice(start, start + query.pageSize), total: matching.length, page: query.page, pageSize: query.pageSize }
+    },
     setSchemaDeprecated: record('setSchemaDeprecated', { status: 'deprecated' }),
     createInvitation: record('createInvitation', { outOfBandId: 'oob-1', invitationUrl: 'https://agent.test?oob=abc', multiUse: false }),
     listConnections: record('listConnections', []),

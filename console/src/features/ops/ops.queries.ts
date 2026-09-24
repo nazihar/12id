@@ -1,17 +1,18 @@
-import { queryOptions } from '@tanstack/react-query'
-
-import type { DeliveryStatus } from '@/features/tenant-data/tenant-data.queries'
+import { keepPreviousData, queryOptions } from '@tanstack/react-query'
 
 import { listAuditLog, listDeliveriesAcrossTenants } from './ops.functions'
+import type { AuditSearch, OpsDeliverySearch } from './ops.schemas'
 
-export const deliveriesAcrossTenantsQuery = (status: DeliveryStatus = 'dead') =>
+export const deliveriesAcrossTenantsQuery = (search: OpsDeliverySearch = {}) =>
   queryOptions({
-    queryKey: ['ops', 'deliveries', status],
-    queryFn: () => listDeliveriesAcrossTenants({ data: { status } }),
+    queryKey: ['ops', 'deliveries', search],
+    queryFn: () => listDeliveriesAcrossTenants({ data: search }),
+    placeholderData: keepPreviousData,
   })
 
-export const auditLogQuery = (filters: { tenantId?: string; actor?: string } = {}) =>
+export const auditLogQuery = (search: AuditSearch = {}) =>
   queryOptions({
-    queryKey: ['ops', 'audit', filters.tenantId ?? 'all', filters.actor ?? 'all'],
-    queryFn: () => listAuditLog({ data: filters }),
+    queryKey: ['ops', 'audit', search],
+    queryFn: () => listAuditLog({ data: search }),
+    placeholderData: keepPreviousData,
   })

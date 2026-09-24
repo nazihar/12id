@@ -1,4 +1,5 @@
-import { useSuspenseQuery } from '@tanstack/react-query'
+import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
+import { useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { createColumnHelper } from '@tanstack/react-table'
 
@@ -15,8 +16,9 @@ import { CreateTenantOrganizationDialog } from '@/features/tenants/create-tenant
 import type { getTenantOrganization } from '@/features/tenants/tenant-owner.functions'
 import { tenantOrganizationQuery, tenantQuery } from '@/features/tenants/tenants.queries'
 import { formatDateTime } from '@/lib/format'
+import { type PageSize, pagingFor } from '@/lib/list-search'
 
-type MemberRow = NonNullable<Awaited<ReturnType<typeof getTenantOrganization>>>['members'][number]
+type MemberRow = NonNullable<Awaited<ReturnType<typeof getTenantOrganization>>>['members']['items'][number]
 
 const column = createColumnHelper<DataTableFeatures, MemberRow>()
 const memberColumns = column.columns([
@@ -85,7 +87,7 @@ function TenantOverviewPage() {
         </CardHeader>
         <CardContent>
           {organization ? (
-            <DataTable columns={memberColumns} data={organization.members} emptyMessage="No members." pageSize={10} testId="members-table" />
+            <OrganizationMembers tenantId={tenantId} />
           ) : (
             <p className="text-sm text-muted-foreground">No organization yet. Create one with its first owner; the owner invites the rest of the team from the portal.</p>
           )}
@@ -93,5 +95,23 @@ function TenantOverviewPage() {
       </Card>
     </div>
     </div>
+  )
+}
+
+/** The organization's members, paged on the server; page 1 comes from the route loader. */
+function OrganizationMembers({ tenantId }: { tenantId: string }) {
+  const [paging, setPaging] = useState<{ page?: number; pageSize?: PageSize }>({})
+  const { data, isFetching } = useQuery(tenantOrganizationQuery(tenantId, paging))
+  const members = data?.members
+  if (!members) return <p className="text-sm text-muted-foreground">Loading…</p>
+  return (
+    <DataTable
+      columns={memberColumns}
+      data={members.items}
+      paging={pagingFor(members, (next) => setPaging((current) => ({ page: next.page, pageSize: 'pageSize' in next ? next.pageSize : current.pageSize })))}
+      fetching={isFetching}
+      emptyMessage="No members."
+      testId="members-table"
+    />
   )
 }

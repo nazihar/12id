@@ -5,7 +5,7 @@
  */
 import { randomBytes } from 'node:crypto'
 
-import { and, desc, eq, sql } from 'drizzle-orm'
+import { type SQL, and, desc, eq, sql } from 'drizzle-orm'
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { z } from 'zod'
 
@@ -14,6 +14,7 @@ import { DELIVERY_STATUSES, webhookDeliveries, webhookEndpoints } from '../../db
 import { EVENT_TYPES } from '../../webhooks/events.ts'
 import { type TenantContext, requireConsolePrincipal } from '../auth.ts'
 import { notFound } from '../errors.ts'
+import { createdBetween, createdRange, listPage, pageOf, pageQuery } from '../list.ts'
 import { CONSOLE_ONLY_TAG } from './console.ts'
 
 const errorBody = z.object({ error: z.string(), reason: z.string() })
@@ -43,6 +44,15 @@ export const toDeliveryView = (row: typeof webhookDeliveries.$inferSelect) => ({
   createdAt: row.createdAt.toISOString(),
   deliveredAt: row.deliveredAt?.toISOString() ?? null,
 })
+
+/** Delivery list filters, shared with the operator's cross-tenant list (Phase 4 C9). */
+export const deliveryListQuery = pageQuery.extend(createdRange.shape).extend({ status: z.enum(DELIVERY_STATUSES).optional(), eventType: z.enum(EVENT_TYPES).optional() })
+export function deliveryFilters(query: z.infer<typeof deliveryListQuery>): SQL[] {
+  const filters = createdBetween(webhookDeliveries.createdAt, query)
+  if (query.status) filters.push(eq(webhookDeliveries.status, query.status))
+  if (query.eventType) filters.push(eq(webhookDeliveries.eventType, query.eventType))
+  return filters
+}
 
 const httpsUrl = z.url().refine((u) => u.startsWith('https://'), 'webhook URLs must use https')
 const newSecret = () => `whsec_${randomBytes(32).toString('base64url')}`
@@ -120,12 +130,21 @@ export const webhookRoutes = (deps: { db: Database }): FastifyPluginAsyncZod => 
 
   app.get(
     '/v1/webhook/deliveries',
-    { schema: { tags: ['webhooks'], summary: 'List deliveries', querystring: z.object({ status: z.enum(DELIVERY_STATUSES).optional(), limit: z.coerce.number().int().min(1).max(200).default(50) }), response: { 200: z.array(deliveryView) } } },
+    {
+      schema: {
+        tags: ['webhooks'],
+        summary: 'List deliveries',
+        description: 'Newest first (`createdAt` descending), paged with `page` and `pageSize`.',
+        querystring: deliveryListQuery,
+        response: { 200: pageOf(deliveryView) },
+      },
+    },
     async (request) => {
-      const filters = [eq(webhookDeliveries.tenantId, tenant(request).id)]
-      if (request.query.status) filters.push(eq(webhookDeliveries.status, request.query.status))
-      const rows = await deps.db.select().from(webhookDeliveries).where(and(...filters)).orderBy(desc(webhookDeliveries.id)).limit(request.query.limit)
-      return rows.map(delivery)
+      const filters = [eq(webhookDeliveries.tenantId, tenant(request).id), ...deliveryFilters(request.query)]
+      const page = await listPage(deps.db, { table: webhookDeliveries, where: filters, ...request.query }, (where, limit, offset) =>
+        deps.db.select().from(webhookDeliveries).where(where).orderBy(desc(webhookDeliveries.createdAt), desc(webhookDeliveries.id)).limit(limit).offset(offset)
+      )
+      return { ...page, items: page.items.map(delivery) }
     }
   )
 

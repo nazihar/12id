@@ -100,9 +100,14 @@ export interface ExchangeActivity {
 
 const emptyActivity = (): ExchangeActivity => ({ connections: {}, credentials: {}, proofs: {}, last: null })
 
+/** One tenant, or the tenants of one page of `/admin/overview` (Phase 4 C9). */
+type TenantScope = string | string[]
+const tenantIn = (scope: TenantScope) =>
+  typeof scope === 'string' ? sql`tenant_id = ${scope}` : sql`tenant_id in (${sql.join(scope.map((id) => sql`${id}::uuid`), sql`, `)})`
+
 /** Exchange counts by kind and state per tenant, with the latest `updated_at` of any exchange. */
-export async function exchangeActivityByTenant(db: Database, tenantId?: string): Promise<Map<string, ExchangeActivity>> {
-  const scope = tenantId ? sql`where tenant_id = ${tenantId}` : sql``
+export async function exchangeActivityByTenant(db: Database, tenantId?: TenantScope): Promise<Map<string, ExchangeActivity>> {
+  const scope = tenantId ? sql`where ${tenantIn(tenantId)}` : sql``
   const result = await db.execute<{ tenant_id: string; kind: ExchangeKind; state: string; n: number; last: Date | string | null }>(sql`
     select tenant_id, 'connections' as kind, state, count(*)::int as n, max(updated_at) as last from connections ${scope} group by tenant_id, state
     union all select tenant_id, 'credentials', state, count(*)::int, max(updated_at) from credentials ${scope} group by tenant_id, state
@@ -119,16 +124,16 @@ export async function exchangeActivityByTenant(db: Database, tenantId?: string):
 }
 
 /** `active` / `revoked` per tenant for a table with `revoked_at` (wallets, api_keys). */
-export async function activeRevokedByTenant(db: Database, table: 'wallets' | 'api_keys', tenantId?: string): Promise<Map<string, { active: number; revoked: number }>> {
-  const scope = tenantId ? sql`where tenant_id = ${tenantId}` : sql``
+export async function activeRevokedByTenant(db: Database, table: 'wallets' | 'api_keys', tenantId?: TenantScope): Promise<Map<string, { active: number; revoked: number }>> {
+  const scope = tenantId ? sql`where ${tenantIn(tenantId)}` : sql``
   const result = await db.execute<{ tenant_id: string; active: number; revoked: number }>(
     sql`select tenant_id, (count(*) filter (where revoked_at is null))::int as active, (count(*) filter (where revoked_at is not null))::int as revoked from ${sql.raw(table)} ${scope} group by tenant_id`
   )
   return new Map(result.rows.map((row) => [row.tenant_id, { active: Number(row.active), revoked: Number(row.revoked) }]))
 }
 
-export async function deadDeliveriesByTenant(db: Database, tenantId?: string): Promise<Map<string, number>> {
-  const scope = tenantId ? sql`and tenant_id = ${tenantId}` : sql``
+export async function deadDeliveriesByTenant(db: Database, tenantId?: TenantScope): Promise<Map<string, number>> {
+  const scope = tenantId ? sql`and ${tenantIn(tenantId)}` : sql``
   const result = await db.execute<{ tenant_id: string; n: number }>(sql`select tenant_id, count(*)::int as n from webhook_deliveries where status = 'dead' ${scope} group by tenant_id`)
   return new Map(result.rows.map((row) => [row.tenant_id, Number(row.n)]))
 }

@@ -146,7 +146,7 @@ describe('dashboard stats', { skip: db ? false : 'no test database' }, () => {
   it('keeps /admin/overview consistent with the shared aggregates', async () => {
     const response = await app.inject({ method: 'GET', url: '/admin/overview', headers: operator })
     assert.equal(response.statusCode, 200, response.body)
-    const row = (response.json() as Array<{ tenant: { id: string }; credentials: Record<string, number>; wallets: { active: number }; deadDeliveries: number; lastActivityAt: string | null }>).find((r) => r.tenant.id === acme)
+    const row = (response.json().items as Array<{ tenant: { id: string }; credentials: Record<string, number>; wallets: { active: number }; deadDeliveries: number; lastActivityAt: string | null }>).find((r) => r.tenant.id === acme)
     assert.deepEqual(row?.credentials, { done: 4, 'offer-sent': 2, abandoned: 1 })
     assert.equal(row?.wallets.active, 3)
     assert.equal(row?.deadDeliveries, 1)
@@ -165,7 +165,7 @@ describe('dashboard stats', { skip: db ? false : 'no test database' }, () => {
     const text = plan.rows.map((r) => r['QUERY PLAN']).join('\n')
     // A tiny table may still be seq-scanned; only assert the index exists.
     const indexes = await db!.db.execute<{ indexname: string }>(sql`select indexname from pg_indexes where tablename in ('connections', 'credentials', 'proofs') and indexname like '%tenant_%_idx'`)
-    assert.deepEqual(indexes.rows.map((r) => r.indexname).sort(), ['connections_tenant_created_idx', 'connections_tenant_state_idx', 'credentials_tenant_created_idx', 'credentials_tenant_state_idx', 'proofs_tenant_created_idx', 'proofs_tenant_state_idx'])
+    assert.deepEqual(indexes.rows.map((r) => r.indexname).sort(), ['connections_tenant_created_idx', 'connections_tenant_state_created_idx', 'credentials_tenant_created_idx', 'credentials_tenant_state_created_idx', 'proofs_tenant_created_idx', 'proofs_tenant_state_created_idx'])
     assert.ok(text.length > 0)
   })
 })

@@ -7,10 +7,13 @@ import type { DataTableFeatures } from '@/components/data-table/data-table-featu
 import { PageHeader } from '@/components/page-header'
 import { RouteError } from '@/components/route-error'
 import type { listProofTemplates } from '@/features/tenant-data/tenant-data.functions'
+import { useListPending } from '@/components/data-table/use-list-pending'
+import { type TemplateSearch, templateSearch } from '@/features/tenant-data/list.schemas'
 import { proofTemplatesQuery } from '@/features/tenant-data/tenant-data.queries'
+import { isFiltered, pagingFor, resetFor, parseListSearch, searchPatcher } from '@/lib/list-search'
 import { formatDateTime } from '@/lib/format'
 
-type TemplateRow = Awaited<ReturnType<typeof listProofTemplates>>[number]
+type TemplateRow = Awaited<ReturnType<typeof listProofTemplates>>['items'][number]
 type Group = TemplateRow['definition']['groups'][number]
 
 function describeCredentials(group: Group) {
@@ -45,18 +48,31 @@ const columns = column.columns([
 ])
 
 export const Route = createFileRoute('/_authed/ops/tenants/$tenantId/templates')({
-  loader: ({ context, params }) => context.queryClient.ensureQueryData(proofTemplatesQuery(params.tenantId)),
+  validateSearch: parseListSearch(templateSearch),
+  loaderDeps: ({ search }) => search,
+  loader: ({ context, params, deps }) => context.queryClient.ensureQueryData(proofTemplatesQuery(params.tenantId, deps)),
   errorComponent: RouteError,
   component: TemplatesPage,
 })
 
 function TemplatesPage() {
   const { tenantId } = Route.useParams()
-  const { data } = useSuspenseQuery(proofTemplatesQuery(tenantId))
+  const search = Route.useSearch()
+  const onSearch = searchPatcher<TemplateSearch>(Route.useNavigate())
+  const { data } = useSuspenseQuery(proofTemplatesQuery(tenantId, search))
   return (
     <section className="space-y-4">
       <PageHeader title="Proof templates" description="What the tenant's backend can ask holders to prove. Templates are edited in the tenant portal." />
-      <DataTable columns={columns} data={data} searchPlaceholder="Search templates" emptyMessage="No proof templates." />
+      <DataTable
+        columns={columns}
+        data={data.items}
+        paging={pagingFor(data, onSearch)}
+        onReset={resetFor(search, onSearch)}
+        search={{ value: search.q, placeholder: 'Search template name', onChange: (q) => onSearch({ q }) }}
+        fetching={useListPending()}
+        emptyMessage={isFiltered(search) ? 'No proof templates match.' : 'No proof templates.'}
+        testId="templates-table"
+      />
     </section>
   )
 }

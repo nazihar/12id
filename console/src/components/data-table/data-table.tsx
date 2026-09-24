@@ -1,80 +1,69 @@
-import { type ColumnDef, type PaginationState, type RowData, type SortingState, useTable } from '@tanstack/react-table'
-import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon } from 'lucide-react'
-import { type ReactNode, useState } from 'react'
+import { useHydrated } from '@tanstack/react-router'
+import { type ColumnDef, type RowData, useTable } from '@tanstack/react-table'
+import { ChevronLeftIcon, ChevronRightIcon, ChevronsLeftIcon, ChevronsRightIcon, XIcon } from 'lucide-react'
+import type { ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import type { PageSize } from '@/lib/list-search'
+import { cn } from '@/lib/utils'
 
 import { type DataTableFeatures, features } from './data-table-features'
+import { PageSizeMenu, SearchInput } from './list-toolbar'
+
+export interface DataTablePaging {
+  page: number
+  pageSize: number
+  total: number
+  onChange: (next: { page?: number; pageSize?: PageSize }) => void
+}
 
 interface DataTableProps<TData extends RowData> {
   columns: ColumnDef<DataTableFeatures, TData>[]
-  /** Pass query data directly; a new array each render resets the table's models. */
+  /** One page of rows as the server returned it (newest first). */
   data: TData[]
-  /** Shows a search box over the text columns when set. */
-  searchPlaceholder?: string
+  /** Server paging; without it the table shows every row it is given (short, bounded lists only). */
+  paging?: DataTablePaging
+  /** A debounced search box, written to the URL by the caller. */
+  search?: { value?: string; placeholder: string; onChange: (value: string | undefined) => void }
   emptyMessage?: string
-  pageSize?: number
   testId?: string
-  /** Filters or actions shown on the search row, right-aligned. */
+  /** Filter buttons, shown after the search box. */
   toolbar?: ReactNode
+  /** Shown as a Reset button while any search or filter is set. */
+  onReset?: () => void
+  /** A newer page is loading; the current rows stay visible, dimmed. */
+  fetching?: boolean
 }
 
-// shadcn's TanStack Table v9 data-table recipe, with client-side sorting, search and pagination.
-export function DataTable<TData extends RowData>({ columns, data, searchPlaceholder, emptyMessage = 'Nothing here yet.', pageSize = 25, testId, toolbar }: DataTableProps<TData>) {
-  const [sorting, setSorting] = useState<SortingState>([])
-  const [globalFilter, setGlobalFilter] = useState('')
-  const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize })
-
-  const table = useTable({
-    features,
-    columns,
-    data,
-    state: { sorting, globalFilter, pagination },
-    onSortingChange: setSorting,
-    onGlobalFilterChange: setGlobalFilter,
-    onPaginationChange: setPagination,
-    globalFilterFn: 'includesString',
-    enableSortingRemoval: false,
-  })
+// shadcn's TanStack Table v9 data-table recipe, driven by the server since Phase 4 C9: the page,
+// search and filters live in the URL and platform-api answers one page at a time. No sort controls.
+export function DataTable<TData extends RowData>({ columns, data, paging, search, emptyMessage = 'Nothing here yet.', testId, toolbar, onReset, fetching }: DataTableProps<TData>) {
+  const table = useTable({ features, columns, data })
   const rows = table.getRowModel().rows
 
   return (
     <div className="space-y-3" data-testid={testId}>
-      {(searchPlaceholder || toolbar) && (
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          {searchPlaceholder ? (
-            <Input value={globalFilter} onChange={(event) => table.setGlobalFilter(event.target.value)} placeholder={searchPlaceholder} aria-label={searchPlaceholder} className="max-w-xs" />
-          ) : (
-            <span />
-          )}
+      {(search || toolbar) && (
+        <div className="flex flex-wrap items-center gap-2">
+          {search && <SearchInput value={search.value} placeholder={search.placeholder} onChange={search.onChange} />}
           {toolbar}
+          {onReset && (
+            <Button variant="ghost" size="sm" className="h-8" onClick={onReset}>
+              Reset
+              <XIcon />
+            </Button>
+          )}
         </div>
       )}
       {/* The table scrolls inside this box; the page itself never grows wider than the window. */}
-      <div className="w-full max-w-full overflow-x-auto rounded-lg border">
+      <div className={cn('w-full max-w-full overflow-x-auto rounded-lg border transition-opacity', fetching && 'opacity-60')} aria-busy={fetching || undefined}>
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((group) => (
               <TableRow key={group.id}>
                 {group.headers.map((header) => (
-                  <TableHead key={header.id}>
-                    {header.isPlaceholder ? null : header.column.getCanSort() ? (
-                      <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" onClick={header.column.getToggleSortingHandler()}>
-                        <table.FlexRender header={header} />
-                        {header.column.getIsSorted() === 'asc' ? (
-                          <ArrowUpIcon className="size-3" />
-                        ) : header.column.getIsSorted() === 'desc' ? (
-                          <ArrowDownIcon className="size-3" />
-                        ) : (
-                          <ArrowUpDownIcon className="size-3 opacity-40" />
-                        )}
-                      </button>
-                    ) : (
-                      <table.FlexRender header={header} />
-                    )}
-                  </TableHead>
+                  <TableHead key={header.id}>{header.isPlaceholder ? null : <table.FlexRender header={header} />}</TableHead>
                 ))}
               </TableRow>
             ))}
@@ -100,19 +89,40 @@ export function DataTable<TData extends RowData>({ columns, data, searchPlacehol
           </TableBody>
         </Table>
       </div>
-      {table.getPageCount() > 1 && (
-        <div className="flex items-center justify-end gap-2 text-sm text-muted-foreground">
-          <span>
-            Page {pagination.pageIndex + 1} of {table.getPageCount()}
-          </span>
-          <Button variant="outline" size="sm" onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()}>
-            Previous
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => table.nextPage()} disabled={!table.getCanNextPage()}>
-            Next
-          </Button>
-        </div>
-      )}
+      {paging && paging.total > 0 && <Pager {...paging} />}
     </div>
+  )
+}
+
+function Pager({ page, pageSize, total, onChange }: DataTablePaging) {
+  // A click before hydration would do nothing; the controls wait for it, like every form (C7).
+  const hydrated = useHydrated()
+  const pages = Math.max(1, Math.ceil(total / pageSize))
+  const first = Math.min(total, (page - 1) * pageSize + 1)
+  const last = Math.min(total, page * pageSize)
+  return (
+    <nav className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground" aria-label="Pagination">
+      <span data-testid="pager-range" className="tabular-nums">
+        {page > pages ? `Page ${page} is past the end` : `${first}–${last} of ${total}`}
+      </span>
+      <div className="flex items-center gap-2">
+        <PageSizeMenu value={pageSize as PageSize} onChange={(size) => onChange({ pageSize: size, page: undefined })} />
+        <span className="tabular-nums">
+          Page {page} of {pages}
+        </span>
+        <Button variant="outline" size="icon-sm" aria-label="First page" onClick={() => onChange({ page: undefined })} disabled={!hydrated || page <= 1}>
+          <ChevronsLeftIcon />
+        </Button>
+        <Button variant="outline" size="icon-sm" aria-label="Previous page" onClick={() => onChange({ page: page - 1 > 1 ? Math.min(page - 1, pages) : undefined })} disabled={!hydrated || page <= 1}>
+          <ChevronLeftIcon />
+        </Button>
+        <Button variant="outline" size="icon-sm" aria-label="Next page" onClick={() => onChange({ page: page + 1 })} disabled={!hydrated || page >= pages}>
+          <ChevronRightIcon />
+        </Button>
+        <Button variant="outline" size="icon-sm" aria-label="Last page" onClick={() => onChange({ page: pages > 1 ? pages : undefined })} disabled={!hydrated || page >= pages}>
+          <ChevronsRightIcon />
+        </Button>
+      </div>
+    </nav>
   )
 }

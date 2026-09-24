@@ -2,13 +2,18 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
-import { createApiKeyInput, createTenantInput, rateLimitInput, tenantInput } from '@/features/tenants/tenants.schemas'
+import { apiKeyQueryParams } from '@/features/tenant-data/list.params'
+import { apiKeySearch } from '@/features/tenant-data/list.schemas'
+import { createApiKeyInput, createTenantInput, rateLimitInput, tenantInput, tenantListSearch } from '@/features/tenants/tenants.schemas'
+import { pageParams } from '@/lib/list-search'
 import { operatorMiddleware } from '@/server/middleware'
 import { platformFor, unwrap } from '@/server/platform.server'
 
+/** One page of tenants with their activity, newest first (Phase 4 C9). */
 export const getTenantOverview = createServerFn({ method: 'GET' })
   .middleware([operatorMiddleware])
-  .handler(async ({ context }) => unwrap(await platformFor(context.principal).GET('/admin/overview')))
+  .validator(tenantListSearch)
+  .handler(async ({ context, data }) => unwrap(await platformFor(context.principal).GET('/admin/overview', { params: { query: { ...pageParams(data), status: data.status } } })))
 
 export const getTenant = createServerFn({ method: 'GET' })
   .middleware([operatorMiddleware])
@@ -43,8 +48,8 @@ export const setTenantRateLimit = createServerFn({ method: 'POST' })
 // so every key action is audited with its tenant.
 export const listApiKeys = createServerFn({ method: 'GET' })
   .middleware([operatorMiddleware])
-  .validator(tenantInput)
-  .handler(async ({ context, data }) => unwrap(await platformFor(context.principal, { tenantId: data.tenantId }).GET('/v1/api-keys')))
+  .validator(tenantInput.extend(apiKeySearch.shape))
+  .handler(async ({ context, data }) => unwrap(await platformFor(context.principal, { tenantId: data.tenantId }).GET('/v1/api-keys', { params: { query: apiKeyQueryParams(data) } })))
 
 export const createApiKey = createServerFn({ method: 'POST' })
   .middleware([operatorMiddleware])

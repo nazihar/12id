@@ -13,14 +13,21 @@ import { RowAction, RowActions } from '@/components/row-action'
 import { StateBadge } from '@/components/state-badge'
 import { Badge } from '@/components/ui/badge'
 import { publishCredentialDefinition, setSchemaDeprecated } from '@/features/portal/portal-data.functions'
-import { portalCatalogueQuery, portalKey } from '@/features/portal/portal.queries'
+import { portalCataloguePageQuery, portalKey } from '@/features/portal/portal.queries'
 import { CredentialDefinitionPolicyAction } from '@/features/portal/biometric-policy-dialog'
 import { PublishSchemaDialog } from '@/features/portal/publish-schema-dialog'
+import { SelectFilter } from '@/components/data-table/list-toolbar'
+import { useListPending } from '@/components/data-table/use-list-pending'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { type CatalogueSearch, catalogueSearch, catalogueStatusOptions } from '@/features/tenant-data/list.schemas'
 import type { CredentialDefinitionRow, SchemaRow } from '@/features/tenant-data/types'
+import { isFiltered, pagingFor, resetFor, parseListSearch, searchPatcher } from '@/lib/list-search'
 import { tenantCan } from '@/lib/permissions'
 
 export const Route = createFileRoute('/_authed/t/$orgSlug/catalogue')({
-  loader: ({ context, params }) => context.queryClient.ensureQueryData(portalCatalogueQuery(params.orgSlug)),
+  validateSearch: parseListSearch(catalogueSearch),
+  loaderDeps: ({ search }) => search,
+  loader: ({ context, params, deps }) => context.queryClient.ensureQueryData(portalCataloguePageQuery(params.orgSlug, deps)),
   errorComponent: RouteError,
   component: PortalCataloguePage,
 })
@@ -37,7 +44,11 @@ const definitionColumns = definitionColumn.columns([
 function PortalCataloguePage() {
   const { orgSlug } = Route.useParams()
   const { organization } = Route.useRouteContext()
-  const { data } = useSuspenseQuery(portalCatalogueQuery(orgSlug))
+  const search = Route.useSearch()
+  const onSearch = searchPatcher<CatalogueSearch>(Route.useNavigate())
+  const fetching = useListPending()
+  const { data } = useSuspenseQuery(portalCataloguePageQuery(orgSlug, search))
+  const tab = search.tab ?? 'schemas'
   const canPublish = tenantCan(organization.role, { catalogue: ['publish'] })
   const canDeprecate = tenantCan(organization.role, { catalogue: ['deprecate'] })
   const canBiometrics = tenantCan(organization.role, { biometrics: ['update'] })
@@ -56,7 +67,7 @@ function PortalCataloguePage() {
         }),
       ]
     : definitionColumns
-  const withDefinition = new Set(data.credentialDefinitions.map((definition) => definition.schemaId))
+  const withDefinition = new Set(data.tab === 'schemas' ? data.withDefinition : [])
 
   const schemaColumns = schemaColumn.columns([
     schemaColumn.accessor('name', { header: 'Schema' }),
@@ -91,21 +102,35 @@ function PortalCataloguePage() {
     }),
   ])
 
+  const common = {
+    paging: pagingFor(data.page, onSearch),
+    onReset: resetFor(search, onSearch),
+    search: { value: search.q, placeholder: tab === 'schemas' ? 'Search schema name' : 'Search schema name or tag', onChange: (q: string | undefined) => onSearch({ q }) },
+    toolbar: <SelectFilter label="Status" options={catalogueStatusOptions} value={search.status} onChange={(status) => onSearch({ status })} />,
+    fetching,
+  }
+
   return (
-    <div className="space-y-8">
-      <section className="space-y-4">
-        <PageHeader
-          title="Catalogue"
-          description="The schemas and credential definitions this organization has published on the ledger. Offers and proof requests use the wire identifier."
-          actions={canPublish && <PublishSchemaDialog organizationId={organization.id} orgSlug={orgSlug} />}
-        />
-        <DataTable columns={schemaColumns} data={data.schemas} searchPlaceholder="Search schemas" emptyMessage="No schemas published." testId="schemas-table" />
-      </section>
-      <section className="space-y-3">
-        <PageHeader level={2} title="Credential definitions" description="One per schema; publishing it lets your backend issue credentials of that schema." />
-        <DataTable columns={definitionColumnsWithPolicy} data={data.credentialDefinitions} emptyMessage="No credential definitions published." testId="definitions-table" />
-      </section>
-    </div>
+    <section className="space-y-4">
+      <PageHeader
+        title="Catalogue"
+        description="The schemas and credential definitions this organization has published on the ledger, newest first. Offers and proof requests use the wire identifier. One credential definition per schema; publishing it lets your backend issue credentials of that schema."
+        actions={canPublish && <PublishSchemaDialog organizationId={organization.id} orgSlug={orgSlug} />}
+      />
+      <Tabs value={tab} onValueChange={(next) => onSearch({ tab: next === 'schemas' ? undefined : 'definitions', q: undefined, status: undefined })}>
+        <TabsList>
+          <TabsTrigger value="schemas">Schemas</TabsTrigger>
+          <TabsTrigger value="definitions">Credential definitions</TabsTrigger>
+        </TabsList>
+      </Tabs>
+      {data.tab !== tab ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : data.tab === 'schemas' ? (
+        <DataTable columns={schemaColumns} data={data.page.items} emptyMessage={isFiltered(search) ? 'No schemas match.' : 'No schemas published.'} testId="schemas-table" {...common} />
+      ) : (
+        <DataTable columns={definitionColumnsWithPolicy} data={data.page.items} emptyMessage={isFiltered(search) ? 'No credential definitions match.' : 'No credential definitions published.'} testId="definitions-table" {...common} />
+      )}
+    </section>
   )
 }
 

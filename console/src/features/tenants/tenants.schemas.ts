@@ -2,8 +2,15 @@
 import { z } from 'zod'
 
 import { emailAddress, personName } from '@/features/operators/operators.schemas'
+import { listSearch } from '@/lib/list-search'
 
 export const tenantInput = z.object({ tenantId: z.uuid() })
+
+/** Operator tenants list (Phase 4 C9): search by name, filter by onboarding status. */
+export const TENANT_STATUSES = ['provisioning', 'ready', 'failed'] as const
+export const tenantListSearch = listSearch.extend({ status: z.enum(TENANT_STATUSES).optional() })
+export type TenantListSearch = z.infer<typeof tenantListSearch>
+export const tenantStatusOptions = TENANT_STATUSES.map((value) => ({ value, label: value }))
 
 export const createTenantInput = z.object({ name: z.string().trim().min(1, 'Enter the organization name.').max(200, 'Use at most 200 characters.') })
 export type CreateTenantInput = z.input<typeof createTenantInput>

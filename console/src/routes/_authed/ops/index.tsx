@@ -66,6 +66,7 @@ function OperatorDashboardPage() {
   const navigate = Route.useNavigate()
   const { data: stats } = useSuspenseQuery(operatorDashboardQuery(days))
   const audit = useQuery(auditLogQuery())
+  const recent = audit.data?.items.slice(0, 10)
   const { platform } = stats
 
   return (
@@ -131,13 +132,13 @@ function OperatorDashboardPage() {
         <CardContent>
           {audit.error ? (
             <p className="text-sm text-destructive">{audit.error.message}</p>
-          ) : !audit.data ? (
+          ) : !recent ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
-          ) : audit.data.length === 0 ? (
+          ) : recent.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nothing audited yet.</p>
           ) : (
             <ul className="divide-y" data-testid="recent-audit">
-              {audit.data.slice(0, 10).map((entry) => (
+              {recent.map((entry) => (
                 <li key={entry.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-sm">
                   <span className="text-muted-foreground tabular-nums">{formatDateTime(entry.at)}</span>
                   <span className="min-w-0 truncate">{entry.actorEmail ?? entry.actor}</span>

@@ -80,11 +80,11 @@ describe('console scope', { skip: db ? false : 'no test database' }, () => {
     assert.equal((await app.inject({ method: 'GET', url: '/v1/api-keys', headers: bearer })).statusCode, 403)
 
     const listed = await app.inject({ method: 'GET', url: '/v1/api-keys', headers: member(tenantA) })
-    assert.equal(listed.json().length, 1)
-    assert.equal(listed.json()[0].prefix, apiKey.slice(0, 12))
-    assert.equal(listed.json()[0].apiKey, undefined)
+    assert.equal(listed.json().total, 1)
+    assert.equal(listed.json().items[0].prefix, apiKey.slice(0, 12))
+    assert.equal(listed.json().items[0].apiKey, undefined)
 
-    assert.deepEqual((await app.inject({ method: 'GET', url: '/v1/api-keys', headers: member(tenantB) })).json(), [])
+    assert.deepEqual((await app.inject({ method: 'GET', url: '/v1/api-keys', headers: member(tenantB) })).json().items, [])
     assert.equal((await app.inject({ method: 'DELETE', url: `/v1/api-keys/${apiKeyId}`, headers: member(tenantB) })).statusCode, 404, 'another tenant cannot revoke it')
     assert.equal((await app.inject({ method: 'DELETE', url: `/v1/api-keys/${apiKeyId}`, headers: member(tenantA) })).statusCode, 200)
     assert.equal((await app.inject({ method: 'GET', url: '/v1/connections', headers: bearer })).statusCode, 401)
@@ -106,7 +106,7 @@ describe('console scope', { skip: db ? false : 'no test database' }, () => {
     const [dead] = await db!.db.insert(webhookDeliveries).values({ tenantId: tenantB, eventType: 'proof.state_changed', body: '{"data":{}}', url: 'https://globex.test/hook', status: 'dead', attempts: 12 }).returning()
     const overview = await app.inject({ method: 'GET', url: '/admin/overview', headers: operator })
     assert.equal(overview.statusCode, 200, overview.body)
-    const rows = overview.json() as Array<{ tenant: { id: string }; credentials: Record<string, number>; apiKeys: { active: number; revoked: number }; deadDeliveries: number; lastActivityAt: string | null }>
+    const rows = overview.json().items as Array<{ tenant: { id: string }; credentials: Record<string, number>; apiKeys: { active: number; revoked: number }; deadDeliveries: number; lastActivityAt: string | null }>
     const acme = rows.find((row) => row.tenant.id === tenantA)
     const globex = rows.find((row) => row.tenant.id === tenantB)
     assert.deepEqual(acme?.credentials, { 'offer-sent': 1 })
@@ -117,7 +117,7 @@ describe('console scope', { skip: db ? false : 'no test database' }, () => {
 
     const deliveries = await app.inject({ method: 'GET', url: '/admin/webhook-deliveries?status=dead', headers: operator })
     assert.equal(deliveries.statusCode, 200, deliveries.body)
-    assert.deepEqual(deliveries.json().map((d: { id: number; tenantId: string }) => [d.id, d.tenantId]), [[dead.id, tenantB]])
+    assert.deepEqual(deliveries.json().items.map((d: { id: number; tenantId: string }) => [d.id, d.tenantId]), [[dead.id, tenantB]])
 
     const body = await app.inject({ method: 'GET', url: `/v1/webhook/deliveries/${dead.id}`, headers: member(tenantB, 'member') })
     assert.equal(body.statusCode, 200, body.body)
@@ -138,6 +138,6 @@ describe('console scope', { skip: db ? false : 'no test database' }, () => {
 
     const listed = await app.inject({ method: 'GET', url: `/admin/audit?tenantId=${tenantB}`, headers: operator })
     assert.equal(listed.statusCode, 200, listed.body)
-    assert.equal(listed.json().length, 3)
+    assert.equal(listed.json().total, 3)
   })
 })
