@@ -212,8 +212,8 @@ export const biometricRoutes = (deps: { db: Database; agent: AgentClient; biomet
         body: z.object({ providerId: z.string().min(1).max(100), config: z.record(z.string(), z.unknown()) }),
         response: { 200: settingsView, 400: errorBody },
       },
-      // The body may carry vendor secrets: never store it for idempotency replays.
-      config: { idempotency: false },
+      // The body may carry vendor secrets: never store it for idempotency replays or in the audit (L10).
+      config: { idempotency: false, auditBody: false },
     },
     async (request) => {
       const t = consoleTenant(request)

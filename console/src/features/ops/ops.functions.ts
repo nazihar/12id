@@ -37,5 +37,14 @@ export const listAuditLog = createServerFn({ method: 'GET' })
     const actorIds = [...new Set(entries.items.map((entry) => entry.actor))]
     const accounts = actorIds.length === 0 ? [] : await db.select({ id: user.id, email: user.email, name: user.name }).from(user).where(inArray(user.id, actorIds))
     const byId = new Map(accounts.map((account) => [account.id, account]))
-    return { ...entries, items: entries.items.map((entry) => ({ ...entry, actorEmail: byId.get(entry.actor)?.email ?? null, actorName: byId.get(entry.actor)?.name ?? null })) }
+    // `changes` (review L10) is free-form JSON, which a server function cannot type; it goes to the page as text.
+    return {
+      ...entries,
+      items: entries.items.map(({ changes, ...entry }) => ({
+        ...entry,
+        changes: changes ? JSON.stringify(changes, null, 2) : null,
+        actorEmail: byId.get(entry.actor)?.email ?? null,
+        actorName: byId.get(entry.actor)?.name ?? null,
+      })),
+    }
   })

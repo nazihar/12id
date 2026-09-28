@@ -270,6 +270,11 @@ export const consoleAudit = pgTable('console_audit', {
   requestId: text('request_id').notNull(),
   /** Why: required for an operator's erasure and for revealing personal data (Phase 7 H1). */
   reason: text('reason'),
+  /**
+   * What was changed (review L10): the route parameters and the request body of a mutating call,
+   * with secrets and personal data replaced (`http/audit-changes.ts`). Null for reads and bodiless calls.
+   */
+  changes: jsonb('changes').$type<Record<string, unknown>>(),
 }, (table) => [index('console_audit_at_idx').on(table.at), index('console_audit_tenant_idx').on(table.tenantId, table.at), index('console_audit_actor_idx').on(table.actor, table.at.desc())])
 
 // --- Biometric gate (Phase 6, implement/15-phase-6-biometric.md B3) ------------------------

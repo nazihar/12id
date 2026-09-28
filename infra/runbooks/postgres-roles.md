@@ -123,6 +123,7 @@ Steps 1–2 change no running service. Every service still connects as `postgres
    docker exec mediator-postgres-1 psql -U postgres -c 'DROP DATABASE endorser'
    ```
    Until then, `pg-roles.sh mediator` keeps it closed to everyone except the superuser. It is the rollback path: point the old compose file back at it.
+   The nightly backup never included this copy. Before dropping it, dump it with `age` and prove that the dump restores, as staging did (below).
 
 A fresh environment uses the same order: start `postgres` / `agent-postgres` alone, run `pg-roles.sh`, then bring each stack up. The provision jobs find their databases already created and owned by the right role, and run their migrations as that role.
 
@@ -198,7 +199,12 @@ Staging, 2026-09-22 (backup before: `20260922T053321Z`; first backup after: `202
   - `smoke:platform-credo` PASSED with a new tenant, `Phase 7 H2-H3 smoke 2026-09-22`. Its NYM, schema and cred def went through the moved endorser.
   - Console `e2e:staging` 3/3.
 - **Restore drill:** the endorser store from `agent-endorser.dump.age` reported `result: existing` with the known DID.
-- **Left:**
-  - drop the old `endorser` database on the mediator instance after 2026-09-29;
-  - remove the unused `AGENT_INTERNAL_TOKEN` from `agent.sops.env`;
-  - commit the VM's `*.sops.env` files.
+- **Leftovers, done 2026-09-28 (Phase 9 W1):**
+  - **The old `endorser` database on the mediator instance is dropped.**
+    - It went one day before the planned date, at the owner's request to close W1. Rolling back to it would have lost six days of endorser writes anyway.
+    - First it was dumped to `/opt/12id/backups/mediator-endorser-predrop-20260928.dump.age`. The file is encrypted to the VM's age key, and the rotation (which prunes only dated directories) keeps it.
+    - The dump was restored into a scratch database: 4 tables, identical row counts (`items` 4, `items_tags` 6, `profiles` 1, `config` 3). The scratch database was then dropped.
+    - The store's tables sat in schema `postgres`, the old store user (trap 49).
+    - No session was open on it when it was dropped. The instance now holds `drizzle`, `mediator`, `message_pickup` and `postgres`.
+  - `AGENT_INTERNAL_TOKEN` is removed from `agent.sops.env` (`set-secret.sh agent AGENT_INTERNAL_TOKEN --unset`). The key-name diff against the saved copy shows only that key gone.
+  - The VM's `*.sops.env` files match the repo.

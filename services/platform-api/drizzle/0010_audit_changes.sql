@@ -1,0 +1,1 @@
+ALTER TABLE "console_audit" ADD COLUMN "changes" jsonb;

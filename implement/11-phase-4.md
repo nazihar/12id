@@ -111,6 +111,11 @@ Files: `src/http/auth.ts`, `src/http/app.ts`, `src/config.ts`, `src/db/schema.ts
 - **Audit:** table `console_audit` (`id`, `at`, `actor`, `role`, `tenant_id` nullable, `method`, `route` pattern, `status_code`, `request_id`).
   - Written in `onResponse` for every console-principal request that mutates, plus key-creation and secret-rotation responses.
   - `GET /admin/audit?tenantId=&actor=` for operators.
+  > **Phase 7 update (2026-09-28, review L10):**
+  > - A row recorded the route and the status, never the change, so a bad edit could not be reconstructed.
+  > - A mutating call now also stores `changes`: its route parameters and request body (migration `0010_audit_changes`). Secrets are replaced by key name and personal data by field (offer values, disclosed values, face images). The provider configuration opts out with `config: { auditBody: false }`.
+  > - `GET /admin/audit` returns `changes` and `reason`, and the console's audit log has a Details dialog.
+  > - See [`17-phase-7.md`](17-phase-7.md) L10.
 - **New routes:**
   - `POST/GET /v1/api-keys`, `DELETE /v1/api-keys/:id`: **console principal only** (403 for API keys, so a leaked key cannot mint more). Reuse `generateSecret`, `hashSecret`, `lookupPrefix` from `src/auth/tokens.ts`. The plaintext is returned once.
   - `GET /admin/tenants/:id` (detail).

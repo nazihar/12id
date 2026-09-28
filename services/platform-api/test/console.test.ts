@@ -136,8 +136,18 @@ describe('console scope', { skip: db ? false : 'no test database' }, () => {
     assert.ok(rows.some((r) => r.route === '/admin/tenants/:id/onboard' && r.actor === 'admin-token' && r.tenantId === tenantB))
     assert.equal(rows.filter((r) => r.method === 'GET').length, 1, 'plain reads are not audited')
 
+    // Review L10: what changed, with personal data replaced; reads record nothing.
+    const created = rows.find((r) => r.method === 'POST' && r.route === '/admin/tenants')
+    assert.deepEqual(created?.changes, { body: { name: 'Acme' } })
+    const offer = rows.find((r) => r.route === '/v1/credentials/offer')
+    assert.deepEqual(offer?.changes, { body: { connectionId: 'conn-1', credentialDefinitionId: 'ABC:3:CL:12:default', attributes: '[personal data]' } })
+    const revoked = rows.find((r) => r.method === 'DELETE' && r.route === '/v1/api-keys/:id')
+    assert.ok(typeof (revoked?.changes?.params as { id?: unknown } | undefined)?.id === 'string')
+    assert.equal(rows.find((r) => r.method === 'GET')?.changes, null)
+
     const listed = await app.inject({ method: 'GET', url: `/admin/audit?tenantId=${tenantB}`, headers: operator })
     assert.equal(listed.statusCode, 200, listed.body)
     assert.equal(listed.json().total, 3)
+    assert.ok(listed.json().items.every((item: { changes: unknown; reason: unknown }) => 'changes' in item && 'reason' in item))
   })
 })

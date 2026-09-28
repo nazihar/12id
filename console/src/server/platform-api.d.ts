@@ -5097,7 +5097,7 @@ export interface paths {
         };
         /**
          * Console audit log
-         * @description Newest first, paged. `q` matches the route pattern or the actor id, or any of the `qActor` ids (the console resolves names and emails to account ids); `actor` restricts to one or more actor ids.
+         * @description Newest first, paged. Each change carries its route parameters and request body, with secrets and personal data replaced. `q` matches the route pattern or the actor id, or any of the `qActor` ids (the console resolves names and emails to account ids); `actor` restricts to one or more actor ids.
          */
         get: {
             parameters: {
@@ -5139,6 +5139,10 @@ export interface paths {
                                 route: string;
                                 statusCode: number;
                                 requestId: string;
+                                reason: string | null;
+                                changes: {
+                                    [key: string]: unknown;
+                                } | null;
                             }[];
                             total: number;
                             page: number;

@@ -147,4 +147,9 @@ test('staging: tenant owner works through the portal', async ({ browser, page, c
   // The operator sees the owner's changes in the audit log.
   await page.goto('/ops/audit')
   await expect(page.getByText(ownerEmail).first()).toBeVisible()
+  // ...and what each change was (review L10): the key's label, never the key.
+  await page.getByTestId('audit-table').getByRole('row').filter({ hasText: 'POST /v1/api-keys' }).first().getByRole('button', { name: 'Details' }).click()
+  const changes = page.getByTestId('audit-changes')
+  await expect(changes).toContainText(keyLabel)
+  await expect(changes).not.toContainText('12id_sk_')
 })

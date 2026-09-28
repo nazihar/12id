@@ -1,6 +1,9 @@
 # Phase 9 — Production (plan)
 
-**Status (2026-09-28):** planned; nothing built. W0 (this document and the updates to the other docs) is done. Evidence will go to `19-phase-9-production-findings.md` when the work starts.
+**Status (2026-09-28):**
+- W0 (this document and the updates to the other docs) is done.
+- **W1 (close Phase 7) is done on staging.** Its evidence stays with each finding in `17-phase-7.md`.
+- Next is W2. Evidence from W2 on goes to `19-phase-9-production-findings.md`.
 
 ## Context
 Phases 0–6 are built and verified on the staging VM `id-dev` (`*.12id.naziharitsolution.com`, [`4-init-post-phase-0.md`](4-init-post-phase-0.md) §10):
@@ -57,7 +60,7 @@ W2, W3 and W5 can partly run in parallel. W6 waits on hardware.
 - `4-init-post-phase-0.md`: §0.1 von-network note, §10 Phase 9 entry, §12.1 decided, new §12.18.
 - `17-phase-7.md`: finding L16.
 
-### W1 — Close Phase 7 (on staging) — ~4 d
+### W1 — Close Phase 7 (on staging) — ~4 d ✅ 2026-09-28
 > **Status 2026-09-28: H1 done on staging, with L5.**
 > - Owner decisions: scrub, never delete; 90-day default retention; operators masked, with an audited reveal; operator-created keys flagged. Evidence in `17-phase-7.md` §2 H1.
 >
@@ -65,9 +68,11 @@ W2, W3 and W5 can partly run in parallel. W6 waits on hardware.
 > - Staging leftovers:
 >   - `AGENT_INTERNAL_TOKEN` is removed from `agent.sops.env` (VM and repo);
 >   - the owner's `CONSOLE_TOKEN` is back in the VM's `platform.sops.env`, which matches the repo.
-> - **Left in W1:**
->   - drop the old `endorser` database on the mediator instance, not before 2026-09-29;
->   - the owner's call on L10, which is half a day, so it is not "cheap".
+> - **Done later the same day, at the owner's request ("complete W1"):**
+>   - **L10:** the console audit now records what each change was, with secrets and personal data replaced (`17-phase-7.md` L10).
+>   - **The old `endorser` database is dropped** from the mediator instance, one day early. It was dumped encrypted first and a scratch restore matched it (`infra/runbooks/postgres-roles.md`).
+>
+> **W1 is complete.** Phase 7's own work is done on staging. The findings still open belong to later workstreams: L2, L16, M11, M13 and M17 to W2; M15 to W3; L9 to W4; L8 is the owner's rotation; L12 waits for the next Credo release. The go-live gate's "H1 on production" comes with W5.
 > - **L11 done the same day (owner decision: 7 days is a security concern).** Every console session now ends 24 h after sign-in, and operators keep 12 h. Activity does not extend a session. `e2e:staging` passed 3/3.
 > - **Found on staging while verifying.** Neither was caused by the Low batch; both were firing before it:
 >   - **`indy-vdr-proxy` does not recover from a failed pool start.** It logged `Pool timeout` and hung on every request from 2026-09-27 12:48 until a manual `docker restart`. `EndpointDown` fired all that time. For W2: give it a healthcheck on `/genesis` and a restart policy that acts on it (for example autoheal, or a probe that exits).

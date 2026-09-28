@@ -11,12 +11,11 @@
 - **Kept open by owner decision (2026-09-22):** M13 (off-site backups, later) and M17 (tags and CI, in the publishing phase).
 - **Fixed since: H1 (and L5), on staging 2026-09-28** (§2 H1 status; customer document `services/platform-api/docs/data-protection.md`).
 - **Added 2026-09-28:** L16 (the staging ledger's trustee seed is public), found while planning Phase 9 ([`18-phase-9-production.md`](18-phase-9-production.md)). Phase 9 also closes the owner-held M11, M13 and M17.
-- **Fixed since: the Low batch, on staging 2026-09-28** (L1, L4, L6, L7, L13, L14, L15, I1, I2; §10 row 14), and **L11** the same day by owner decision.
+- **Fixed since: the Low batch, on staging 2026-09-28** (L1, L4, L6, L7, L13, L14, L15, I1, I2; §10 row 14), and **L10** and **L11** the same day by owner decision.
 - Still open:
   - L2, L16 and M15, with Phase 9;
   - L9, with the Phase 8 load test;
   - L8, the owner's rotation;
-  - L10, an owner call (L11 was done the same day: 24 h sessions);
   - L12, with the next Credo release.
 
 Every finding names its file and line. The evidence marker on each finding says how it was checked:
@@ -66,7 +65,7 @@ Severity is exploitability × impact against the **production** threat model (cu
 | L7 | Low | mediator | **Done 2026-09-28.** `webhook-sink` debug container runs permanently in the stack | 10 min |
 | L8 | Low | dev machine | `console/.staging/` holds a live staging API key, owner password and TOTP secrets in plaintext (git-ignored) | rotate |
 | L9 | Low | agent-service | Askar Postgres pool size not set (`maxConnections` default) vs `TENANT_SESSION_LIMIT` 100 | verify in Phase 8 |
-| L10 | Low | platform-api | Console audit records route + status only, never the change; a bad edit cannot be reconstructed | 0.5 d |
+| L10 | Low | platform-api | **Done 2026-09-28 (owner).** Console audit records route + status only, never the change; a bad edit cannot be reconstructed | 0.5 d |
 | L11 | Low | console | **Done 2026-09-28 (owner: 24 h from sign-in).** Tenant-member sessions last 7 days sliding (operators 12 h) | 10 min |
 | L12 | Low | all | npm audit: transitive moderates only (valibot via unused `dcql`; esbuild via `drizzle-kit`) | with next Credo bump |
 | L13 | Low | mediator | **Done 2026-09-28.** Valkey runs `noeviction` for what is now a pure cache (streams unused since multi-instance delivery is `none`): it refuses writes instead of evicting when full (§8) | 10 min |
@@ -327,7 +326,28 @@ Severity is exploitability × impact against the **production** threat model (cu
 ### L10 · Low · Audit log has no diff
 `http/audit.ts:31`: actor, role, tenant, method, route, status. Fix: add a redacted request-body snapshot (secrets dropped) for mutating routes.
 
-**Not done with the Low batch (2026-09-28).** Phase 9 W1 takes L10 "only if cheap", and it is half a day. H1 already added `console_audit.reason` for erasures and reveals. It waits for the owner, or for the next time the console audit is touched (§10).
+**Owner decision (2026-09-28): do it with W1.**
+
+**Status (2026-09-28): done on staging.**
+- **Built:** `http/audit-changes.ts`. Each mutating console or break-glass call stores `changes = { params, body }` in the new `console_audit.changes` column (migration `0010_audit_changes`).
+- **Replaced before storing, at any depth:**
+  - secrets, by key name (`secret`, `token`, `password`, `passphrase`, `private`, `apiKey`, `accessKey`, `signature`) → `[redacted]`;
+  - personal data → `[personal data]`: an offer's `attributes` record, `values`, `disclosed`, `referenceImage` and `image`. The audit has no retention or erasure path (H1), so personal data must never enter it. A schema's or a template's `attributes` list holds names only, so it stays;
+  - strings over 2,000 characters are shortened, and a snapshot over 16 KB is replaced by its size (the parameters are kept).
+- **Opt-out:** a route whose body may hold vendor secrets under any name sets `config: { auditBody: false }` and records only its parameters. Today that is `PUT /v1/biometrics/provider`, the route already excluded from idempotency storage.
+- **Read side:**
+  - `GET /admin/audit` returns `changes` and `reason`; before, it omitted the H1 `reason` too;
+  - the console's audit log has a **Details** dialog per entry. The server function passes `changes` to the browser as formatted JSON text, because a server function cannot type free-form JSON.
+- **Evidence:**
+  - `audit-changes.test.ts`, 5 cases: secrets at depth, personal data, the opt-out, the caps;
+  - `console.test.ts` now checks the stored snapshots (a tenant creation, an offer whose attributes are replaced, a revocation's id, nothing for a read);
+  - platform-api 100/100; console `tsc`, Vitest 32/32, build and `check:client`.
+  - On staging:
+    - migration `0010` applied through the provision job;
+    - `e2e:staging` passed 3/3, and `staging-portal` now opens the Details of the owner's key creation, expects the label and rejects `12id_sk_`;
+    - the run's 6 audit rows each held the change (key labels, a template definition, ids), and none held a `12id_sk_`, `12id_wt_` or `whsec_` value;
+    - `smoke:platform-credo` PASSED, `smoke:biometric-credo` 18/18.
+- **Not covered:** a PUT stores the new value, not the old one. The value before a change is the previous audit entry for the same route and id, if that change was made after this release.
 
 ### Strengths (keep)
 Hashed tokens with prefix lookup and length-checked `timingSafeEqual` (`auth/tokens.ts`, `credo-base/src/internal-token.ts`); a tenant predicate on every mirror query and every agent call (verified route by route in `exchanges.ts`, `wallets.ts`, `webhook.ts`, `console.ts`, `proof-templates.ts`); idempotency reserved on arrival, per tenant, URL in the hash, secrets never stored (`idempotency.ts`); response serialisation by schema (no field leaks); generic 5xx bodies (`errors.ts`); HTTPS-only webhook URLs with `redirect: 'manual'` and a timestamped HMAC (`signer.ts`) — this closes SSRF into the Docker network without a private-IP list; `bodyLimit` 1 MB; `SKIP LOCKED` claim so a second replica is safe; graceful drain; `x-admin-token` accepted only on `/admin/*`, which the edge refuses.
@@ -864,7 +884,7 @@ Two cheap adjacent wins while in here: `GET /v1/ledger` returns static, env-deri
 
 **Owner decisions (not code):** M16 confirm alert e-mail delivery; L2 whether Grafana and the ledger browser exist in production at all; L8 rotate the `.staging` credentials; §12.1 ledger topology, a clean production host, TAA (bucket C).
 
-**Defer to their phases:** M15 with 5b.1 (the wrapper rebuild changes the size budget); L9, M1's concurrency switch and M2's numbers with the Phase 8 load tests; L10 when the console audit is next touched (L11 done 2026-09-28, owner decision); L3 in Phase 4 C9 (2026-09-24).
+**Defer to their phases:** M15 with 5b.1 (the wrapper rebuild changes the size budget); L9, M1's concurrency switch and M2's numbers with the Phase 8 load tests; L10 and L11 done 2026-09-28 by owner decision; L3 in Phase 4 C9 (2026-09-24).
 
 **Explicitly not doing:** sharing the mediator's Valkey with the other services, or adding Redis anywhere (§8). Build M4's rate limiter in-process behind a small store interface so it can move to Redis the day platform-api runs a second replica.
 

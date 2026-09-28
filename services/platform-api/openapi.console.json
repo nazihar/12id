@@ -12431,7 +12431,7 @@
           "admin",
           "console-only"
         ],
-        "description": "Newest first, paged. `q` matches the route pattern or the actor id, or any of the `qActor` ids (the console resolves names and emails to account ids); `actor` restricts to one or more actor ids.",
+        "description": "Newest first, paged. Each change carries its route parameters and request body, with secrets and personal data replaced. `q` matches the route pattern or the actor id, or any of the `qActor` ids (the console resolves names and emails to account ids); `actor` restricts to one or more actor ids.",
         "parameters": [
           {
             "schema": {
@@ -12594,6 +12594,26 @@
                           },
                           "requestId": {
                             "type": "string"
+                          },
+                          "reason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "changes": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "additionalProperties": {}
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
                           }
                         },
                         "required": [
@@ -12605,7 +12625,9 @@
                           "method",
                           "route",
                           "statusCode",
-                          "requestId"
+                          "requestId",
+                          "reason",
+                          "changes"
                         ],
                         "additionalProperties": false
                       }

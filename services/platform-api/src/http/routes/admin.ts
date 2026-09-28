@@ -41,7 +41,21 @@ const overviewView = z.object({
   /** Latest update of any connection, credential or proof exchange. */
   lastActivityAt: z.iso.datetime().nullable(),
 })
-const auditView = z.object({ id: z.number().int(), at: z.iso.datetime(), actor: z.string(), role: z.string(), tenantId: z.string().nullable(), method: z.string(), route: z.string(), statusCode: z.number().int(), requestId: z.string() })
+const auditView = z.object({
+  id: z.number().int(),
+  at: z.iso.datetime(),
+  actor: z.string(),
+  role: z.string(),
+  tenantId: z.string().nullable(),
+  method: z.string(),
+  route: z.string(),
+  statusCode: z.number().int(),
+  requestId: z.string(),
+  /** Why, for an operator's erasure or a reveal of personal data (Phase 7 H1). */
+  reason: z.string().nullable(),
+  /** Route parameters and request body of a change, secrets and personal data replaced (review L10). */
+  changes: z.record(z.string(), z.unknown()).nullable(),
+})
 
 async function onboard(deps: AdminDeps, tenantId: string, agentTenantId: string) {
   try {
@@ -199,7 +213,7 @@ export const adminRoutes = (deps: AdminDeps): FastifyPluginAsyncZod => async (ap
       schema: {
         tags,
         summary: 'Console audit log',
-        description: 'Newest first, paged. `q` matches the route pattern or the actor id, or any of the `qActor` ids (the console resolves names and emails to account ids); `actor` restricts to one or more actor ids.',
+        description: 'Newest first, paged. Each change carries its route parameters and request body, with secrets and personal data replaced. `q` matches the route pattern or the actor id, or any of the `qActor` ids (the console resolves names and emails to account ids); `actor` restricts to one or more actor ids.',
         querystring: pageQuery.extend(createdRange.shape).extend(searchQuery.shape).extend({ tenantId: z.uuid().optional(), actor: oneOrMany(z.string().min(1).max(200)), qActor: oneOrMany(z.string().min(1).max(200)) }),
         response: { 200: pageOf(auditView) },
       },
@@ -217,7 +231,7 @@ export const adminRoutes = (deps: AdminDeps): FastifyPluginAsyncZod => async (ap
       )
       return {
         ...page,
-        items: page.items.map((row) => ({ id: row.id, at: row.at.toISOString(), actor: row.actor, role: row.role, tenantId: row.tenantId, method: row.method, route: row.route, statusCode: row.statusCode, requestId: row.requestId })),
+        items: page.items.map((row) => ({ id: row.id, at: row.at.toISOString(), actor: row.actor, role: row.role, tenantId: row.tenantId, method: row.method, route: row.route, statusCode: row.statusCode, requestId: row.requestId, reason: row.reason, changes: row.changes ?? null })),
       }
     }
   )
