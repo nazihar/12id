@@ -16,11 +16,13 @@ import { type GateEngine, biometricLogView, gatesFor } from '../../biometric/gat
 import { effectivePolicy, runGated } from '../../biometric/gating.ts'
 import type { Database } from '../../db/client.ts'
 import { connections, credentials, proofTemplates, proofs } from '../../db/schema.ts'
+import { type ErasureDeps, type Requester, eraseConnection, eraseExchange } from '../../erasure.ts'
 import { expandTemplate, templateDefinition } from '../../templates.ts'
-import { connectionView, credentialView, proofView, toConnectionView, toCredentialView, toProofView } from '../../views.ts'
+import { connectionView, credentialView, expiryOf, proofView, toConnectionView, toCredentialView, toProofView } from '../../views.ts'
 import { assertTenantReady, type TenantContext } from '../auth.ts'
+import { cleanReason, maskConnection, maskCredential, maskProof, masked } from '../personal-data.ts'
 import { containsI, createdBetween, createdRange, listPage, many, oneOrMany, pageOf, pageQuery, searchQuery } from '../list.ts'
-import { badRequest, notFound } from '../errors.ts'
+import { PlatformError, badRequest, notFound } from '../errors.ts'
 import { resolveCredentialDefinition } from './catalogue.ts'
 
 export interface ExchangeDeps {
@@ -29,6 +31,8 @@ export interface ExchangeDeps {
   /** Phase 6; absent when biometric-service is not configured (nothing is gated). */
   biometric?: BiometricClient
   gates?: GateEngine
+  /** Phase 7 H1: agent, biometric-service and the webhook queue, for erasure. */
+  erasure: ErasureDeps
 }
 
 const errorBody = z.object({ error: z.string(), reason: z.string() })
@@ -61,6 +65,24 @@ const biometricInput = z
   .describe('Required when the biometric policy for this credential definition or proof template applies; ignored otherwise.')
 // A 5 MB image is about 6.7 MB of base64.
 const GATED_BODY_LIMIT = 8 * 1024 * 1024
+
+const same = <T>(view: T) => view
+
+/** Erasure body (Phase 7 H1). Operators must give a reason; the tenant's own people may. */
+const eraseBody = z.object({ reason: z.string().max(500).optional().describe('Why the data is erased; recorded in the audit log. Required from operators.') }).nullish()
+const eraseDescription = (what: string) =>
+  `Removes the personal data of ${what} everywhere the platform holds it (the exchange record in the agent, webhook delivery bodies, biometric scores) and keeps the record itself with its ids, state and timestamps, so lists and history stay whole. Only finished exchanges (\`done\`, \`abandoned\`, \`declined\`) can be erased; a running one answers 409. Repeating the call is harmless. A \`record.erased\` webhook follows. The credential in the holder's wallet is not affected.`
+
+/** Who is erasing: an API key, or a console owner, admin or operator (never a member). */
+function requesterOf(request: { tenant?: TenantContext; body?: unknown; auditReason?: string }): Requester {
+  const principal = (request.tenant as TenantContext).principal
+  if (principal.kind === 'apiKey') return { via: 'api_key', actor: principal.apiKeyId }
+  if (principal.role === 'member') throw new PlatformError(403, 'forbidden', 'members cannot erase personal data')
+  const reason = cleanReason((request.body as { reason?: unknown } | undefined)?.reason)
+  if (principal.role === 'operator' && !reason) throw new PlatformError(400, 'reason_required', "operators must give a reason to erase a tenant's data")
+  if (reason) request.auditReason = `erase: ${reason}`
+  return { via: 'console', actor: principal.actor, role: principal.role, reason }
+}
 
 export const exchangeRoutes = (deps: ExchangeDeps): FastifyPluginAsyncZod => async (app) => {
   const tenant = (request: { tenant?: TenantContext }) => {
@@ -106,7 +128,8 @@ export const exchangeRoutes = (deps: ExchangeDeps): FastifyPluginAsyncZod => asy
       const page = await listPage(deps.db, { table: connections, where: filters, ...request.query }, (where, limit, offset) =>
         deps.db.select().from(connections).where(where).orderBy(desc(connections.createdAt), desc(connections.recordId)).limit(limit).offset(offset)
       )
-      return { ...page, items: page.items.map(toConnectionView) }
+      const hide = masked(request)
+      return { ...page, items: page.items.map((r) => (hide ? maskConnection(toConnectionView(r)) : toConnectionView(r))) }
     }
   )
 
@@ -114,7 +137,7 @@ export const exchangeRoutes = (deps: ExchangeDeps): FastifyPluginAsyncZod => asy
     const t = tenant(request)
     const [row] = await deps.db.select().from(connections).where(and(eq(connections.tenantId, t.id), eq(connections.recordId, request.params.id)))
     if (!row) throw notFound('connection')
-    return toConnectionView(row)
+    return masked(request) ? maskConnection(toConnectionView(row)) : toConnectionView(row)
   })
 
   // --- credentials -------------------------------------------------------------------
@@ -147,8 +170,8 @@ export const exchangeRoutes = (deps: ExchangeDeps): FastifyPluginAsyncZod => asy
         mirror: async (tx, r) => {
           await tx
             .insert(credentials)
-            .values({ tenantId: t.id, recordId: r.credentialExchangeId, connectionId: request.body.connectionId, state: r.state, threadId: r.threadId, externalId: request.body.externalId ?? null, credentialDefinitionId: credDef.unqualifiedId, attributes: request.body.attributes })
-            .onConflictDoUpdate({ target: [credentials.tenantId, credentials.recordId], set: { credentialDefinitionId: credDef.unqualifiedId, attributes: request.body.attributes } })
+            .values({ tenantId: t.id, recordId: r.credentialExchangeId, connectionId: request.body.connectionId, state: r.state, threadId: r.threadId, externalId: request.body.externalId ?? null, credentialDefinitionId: credDef.unqualifiedId, attributes: request.body.attributes, expiresAt: expiryOf(request.body.attributes) })
+            .onConflictDoUpdate({ target: [credentials.tenantId, credentials.recordId], set: { credentialDefinitionId: credDef.unqualifiedId, attributes: request.body.attributes, expiresAt: expiryOf(request.body.attributes) } })
         },
       })
       const [row] = await deps.db.select().from(credentials).where(and(eq(credentials.tenantId, t.id), eq(credentials.recordId, result.credentialExchangeId)))
@@ -176,7 +199,8 @@ export const exchangeRoutes = (deps: ExchangeDeps): FastifyPluginAsyncZod => asy
         deps.db.select().from(credentials).where(where).orderBy(desc(credentials.createdAt), desc(credentials.recordId)).limit(limit).offset(offset)
       )
       const gates = await gatesFor(deps.db, t.id, 'credential', page.items.map((r) => r.recordId))
-      return { ...page, items: page.items.map((r) => toCredentialView(r, gates.get(r.recordId))) }
+      const hide = masked(request)
+      return { ...page, items: page.items.map((r) => (hide ? maskCredential : same)(toCredentialView(r, gates.get(r.recordId)))) }
     }
   )
 
@@ -185,7 +209,7 @@ export const exchangeRoutes = (deps: ExchangeDeps): FastifyPluginAsyncZod => asy
     const [row] = await deps.db.select().from(credentials).where(and(eq(credentials.tenantId, t.id), eq(credentials.recordId, request.params.id)))
     if (!row) throw notFound('credential exchange')
     const gates = await gatesFor(deps.db, t.id, 'credential', [row.recordId])
-    return toCredentialView(row, gates.get(row.recordId))
+    return (masked(request) ? maskCredential : same)(toCredentialView(row, gates.get(row.recordId)))
   })
 
   // --- proofs ------------------------------------------------------------------------
@@ -250,7 +274,8 @@ export const exchangeRoutes = (deps: ExchangeDeps): FastifyPluginAsyncZod => asy
         deps.db.select().from(proofs).where(where).orderBy(desc(proofs.createdAt), desc(proofs.recordId)).limit(limit).offset(offset)
       )
       const gates = await gatesFor(deps.db, t.id, 'proof', page.items.map((r) => r.recordId))
-      return { ...page, items: page.items.map((r) => toProofView(r, gates.get(r.recordId))) }
+      const hide = masked(request)
+      return { ...page, items: page.items.map((r) => (hide ? maskProof : same)(toProofView(r, gates.get(r.recordId)))) }
     }
   )
 
@@ -259,8 +284,59 @@ export const exchangeRoutes = (deps: ExchangeDeps): FastifyPluginAsyncZod => asy
     const [row] = await deps.db.select().from(proofs).where(and(eq(proofs.tenantId, t.id), eq(proofs.recordId, request.params.id)))
     if (!row) throw notFound('proof exchange')
     const gates = await gatesFor(deps.db, t.id, 'proof', [row.recordId])
-    return toProofView(row, gates.get(row.recordId))
+    return (masked(request) ? maskProof : same)(toProofView(row, gates.get(row.recordId)))
   })
+
+  // --- erasure (Phase 7 H1) ---------------------------------------------------------
+  const agentTenant = (t: TenantContext) => ({ id: t.id, agentTenantId: t.agentTenantId })
+
+  app.post(
+    '/v1/credentials/:id/erase',
+    {
+      schema: { tags: ['credentials'], summary: 'Erase the personal data of a credential exchange', description: eraseDescription('this credential exchange (its attribute values)'), params: z.object({ id: recordId }), body: eraseBody, response: { 200: credentialView, 400: errorBody, 403: errorBody, 404: errorBody, 409: errorBody } },
+    },
+    async (request) => {
+      const t = tenant(request)
+      await eraseExchange(deps.erasure, agentTenant(t), 'credential', request.params.id, requesterOf(request))
+      const [row] = await deps.db.select().from(credentials).where(and(eq(credentials.tenantId, t.id), eq(credentials.recordId, request.params.id)))
+      const gates = await gatesFor(deps.db, t.id, 'credential', [row!.recordId])
+      return toCredentialView(row!, gates.get(row!.recordId))
+    }
+  )
+
+  app.post(
+    '/v1/proofs/:id/erase',
+    {
+      schema: { tags: ['proofs'], summary: 'Erase the personal data of a proof exchange', description: eraseDescription('this proof exchange (its disclosed values)'), params: z.object({ id: recordId }), body: eraseBody, response: { 200: proofView, 400: errorBody, 403: errorBody, 404: errorBody, 409: errorBody } },
+    },
+    async (request) => {
+      const t = tenant(request)
+      await eraseExchange(deps.erasure, agentTenant(t), 'proof', request.params.id, requesterOf(request))
+      const [row] = await deps.db.select().from(proofs).where(and(eq(proofs.tenantId, t.id), eq(proofs.recordId, request.params.id)))
+      const gates = await gatesFor(deps.db, t.id, 'proof', [row!.recordId])
+      return toProofView(row!, gates.get(row!.recordId))
+    }
+  )
+
+  app.post(
+    '/v1/connections/:id/erase',
+    {
+      schema: {
+        tags: ['connections'],
+        summary: 'Erase a connection and every exchange on it',
+        description: `${eraseDescription('this connection (the holder\'s label) and of every credential and proof exchange on it')} The agent drops the connection, so the holder can no longer reach this tenant through it. \`erasedExchanges\` lists the exchanges erased along with it.`,
+        params: z.object({ id: recordId }),
+        body: eraseBody,
+        response: { 200: connectionView.extend({ erasedExchanges: z.object({ credentials: z.array(z.string()), proofs: z.array(z.string()) }) }), 400: errorBody, 403: errorBody, 404: errorBody, 409: errorBody },
+      },
+    },
+    async (request) => {
+      const t = tenant(request)
+      const erased = await eraseConnection(deps.erasure, agentTenant(t), request.params.id, requesterOf(request))
+      const [row] = await deps.db.select().from(connections).where(and(eq(connections.tenantId, t.id), eq(connections.recordId, request.params.id)))
+      return { ...toConnectionView(row!), erasedExchanges: erased }
+    }
+  )
 
   // --- biometric log (Phase 6) ------------------------------------------------------
   const logDescription = 'Every step of the biometric gate for this exchange, oldest first: attempts with liveness and match scores against the thresholds, decisions, and what the platform did with the exchange. Never contains images. `biometric` is null when the exchange was not gated.'

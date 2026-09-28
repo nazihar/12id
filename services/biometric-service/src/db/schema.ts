@@ -38,13 +38,16 @@ export const checks = pgTable('checks', {
   thresholds: jsonb('thresholds').$type<{ minLivenessScore: number; minMatchScore: number }>().notNull(),
   /** Null once decided or expired. */
   referenceCiphertext: bytea('reference_ciphertext'),
-  referenceSha256: text('reference_sha256').notNull(),
+  /** Null once the check was erased (Phase 7 H1). */
+  referenceSha256: text('reference_sha256'),
   status: text('status', { enum: ['pending', 'passed', 'failed', 'expired', 'cancelled'] }).notNull().default('pending'),
   /** Sessions started so far; an abandoned session still counts. */
   attempts: integer('attempts').notNull().default(0),
   maxAttempts: integer('max_attempts').notNull(),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   decidedAt: timestamp('decided_at', { withTimezone: true }),
+  /** Scores, vendor values, hashes and vendor session ids removed (Phase 7 H1); the decision stays. */
+  erasedAt: timestamp('erased_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index('checks_pending_expiry_idx').on(table.expiresAt).where(sql`${table.status} = 'pending'`),
@@ -56,7 +59,8 @@ export const sessions = pgTable('sessions', {
   checkId: uuid('check_id').notNull().references(() => checks.id),
   tenantId: text('tenant_id').notNull(),
   attempt: integer('attempt').notNull(),
-  vendorSessionId: text('vendor_session_id').notNull(),
+  /** Null once the check was erased (Phase 7 H1). */
+  vendorSessionId: text('vendor_session_id'),
   /** started → completing (single-use claim) → completed. */
   status: text('status', { enum: ['started', 'completing', 'completed'] }).notNull().default('started'),
   startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),

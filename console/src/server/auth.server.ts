@@ -19,6 +19,7 @@ import { eq } from 'drizzle-orm'
 import { OPERATOR_ROLE, hasPlatformRole, platformAc, platformRoles, tenantAc, tenantRoles } from '../lib/permissions'
 import { consoleDb } from './db.server'
 import * as schema from './db/auth-schema'
+import { startAuthHousekeeping } from './data-protection.server'
 import { sendMail } from './email.server'
 import { serverEnv } from './env.server'
 
@@ -117,3 +118,6 @@ export const auth = betterAuth({
 })
 
 export type Auth = typeof auth
+
+// Phase 7 H1: expired sessions, verification tokens and idle rate-limit counters are deleted hourly.
+startAuthHousekeeping()

@@ -101,6 +101,41 @@ describe('biometric service (database)', async () => {
     assert.equal(view.sessions[0]!.result!.decision, 'passed')
   })
 
+  it('erases a decided check: the decision stays, scores, hashes, vendor values and session ids go', async (t) => {
+    if (skip()) return t.skip()
+    const service = testService(db!)
+    const tenantId = await mockTenant(service)
+    const { checkId } = await service.createCheck(defaultCheck(tenantId))
+    const session = await service.startSession(checkId)
+    await service.completeSession(session.sessionId, { live: true, face: 'same' })
+
+    assert.deepEqual(await service.eraseCheck(checkId), { erased: true })
+    const [check] = await db!.select().from(schema.checks).where(eq(schema.checks.id, checkId))
+    assert.equal(check!.status, 'passed')
+    assert.equal(check!.referenceSha256, null)
+    assert.ok(check!.erasedAt)
+    const [stored] = await db!.select().from(schema.sessions).where(eq(schema.sessions.checkId, checkId))
+    assert.equal(stored!.vendorSessionId, null)
+    const [result] = await db!.select().from(schema.results).where(eq(schema.results.checkId, checkId))
+    assert.deepEqual([result!.decision, result!.livenessScore, result!.matchScore, result!.probeSha256, result!.raw], ['passed', null, null, null, {}])
+
+    const view = await service.getCheck(checkId)
+    assert.equal(view.sessions[0]!.vendorSessionId, null)
+    assert.deepEqual(await service.eraseCheck(checkId), { erased: true }, 'idempotent')
+    assert.deepEqual(await service.eraseCheck('00000000-0000-4000-8000-000000000000'), { erased: false })
+  })
+
+  it('erasing a pending check cancels it', async (t) => {
+    if (skip()) return t.skip()
+    const service = testService(db!)
+    const tenantId = await mockTenant(service)
+    const { checkId } = await service.createCheck(defaultCheck(tenantId))
+    await service.eraseCheck(checkId)
+    const [check] = await db!.select().from(schema.checks).where(eq(schema.checks.id, checkId))
+    assert.equal(check!.status, 'cancelled')
+    assert.equal(check!.referenceCiphertext, null)
+  })
+
   it('keeps the check pending after a failed attempt, fails it when attempts run out', async (t) => {
     if (skip()) return t.skip()
     const service = testService(db!)

@@ -10,6 +10,7 @@ import { sql } from 'drizzle-orm'
 
 import { apiKeys, connections, consoleAudit, credentials, proofs, tenants, wallets, webhookDeliveries, webhookEndpoints } from '../src/db/schema.ts'
 import { buildApp } from '../src/http/app.ts'
+import { expiryOf } from '../src/views.ts'
 import { fakeAgent, silentLogger, testConfig, testDatabase } from './helpers.ts'
 
 const db = await testDatabase()
@@ -51,9 +52,9 @@ describe('dashboard stats', { skip: db ? false : 'no test database' }, () => {
       { tenantId: acme, recordId: 'c3', state: 'invitation', createdAt: daysAgo(40), updatedAt: daysAgo(40) },
     ])
     await db!.db.insert(credentials).values([
-      { tenantId: acme, recordId: 'k1', state: 'done', attributes: { name: 'Ada', expiresAt: epoch(daysAgo(-10)) }, createdAt: daysAgo(0), updatedAt: daysAgo(0) },
-      { tenantId: acme, recordId: 'k2', state: 'done', attributes: { name: 'Bob', expiresAt: epoch(daysAgo(5)) }, createdAt: daysAgo(3), updatedAt: daysAgo(3) },
-      { tenantId: acme, recordId: 'k3', state: 'done', attributes: { name: 'Cy', expiresAt: 'not-a-number' }, createdAt: daysAgo(3), updatedAt: daysAgo(3) },
+      { tenantId: acme, recordId: 'k1', state: 'done', attributes: { name: 'Ada', expiresAt: epoch(daysAgo(-10)) }, expiresAt: expiryOf({ expiresAt: epoch(daysAgo(-10)) }), createdAt: daysAgo(0), updatedAt: daysAgo(0) },
+      { tenantId: acme, recordId: 'k2', state: 'done', attributes: { name: 'Bob', expiresAt: epoch(daysAgo(5)) }, expiresAt: expiryOf({ expiresAt: epoch(daysAgo(5)) }), createdAt: daysAgo(3), updatedAt: daysAgo(3) },
+      { tenantId: acme, recordId: 'k3', state: 'done', attributes: { name: 'Cy', expiresAt: 'not-a-number' }, expiresAt: expiryOf({ expiresAt: 'not-a-number' }), createdAt: daysAgo(3), updatedAt: daysAgo(3) },
       { tenantId: acme, recordId: 'k4', state: 'done', attributes: { name: 'Di' }, createdAt: daysAgo(3), updatedAt: daysAgo(3) },
       { tenantId: acme, recordId: 'k5', state: 'offer-sent', createdAt: daysAgo(2), updatedAt: daysAgo(2) },
       { tenantId: acme, recordId: 'k6', state: 'offer-sent', createdAt: daysAgo(0), updatedAt: daysAgo(0) },
@@ -165,7 +166,7 @@ describe('dashboard stats', { skip: db ? false : 'no test database' }, () => {
     const text = plan.rows.map((r) => r['QUERY PLAN']).join('\n')
     // A tiny table may still be seq-scanned; only assert the index exists.
     const indexes = await db!.db.execute<{ indexname: string }>(sql`select indexname from pg_indexes where tablename in ('connections', 'credentials', 'proofs') and indexname like '%tenant_%_idx'`)
-    assert.deepEqual(indexes.rows.map((r) => r.indexname).sort(), ['connections_tenant_created_idx', 'connections_tenant_state_created_idx', 'credentials_tenant_created_idx', 'credentials_tenant_state_created_idx', 'proofs_tenant_created_idx', 'proofs_tenant_state_created_idx'])
+    assert.deepEqual(indexes.rows.map((r) => r.indexname).sort(), ['connections_tenant_created_idx', 'connections_tenant_state_created_idx', 'credentials_tenant_created_idx', 'credentials_tenant_expires_idx', 'credentials_tenant_state_created_idx', 'proofs_tenant_created_idx', 'proofs_tenant_state_created_idx'])
     assert.ok(text.length > 0)
   })
 })

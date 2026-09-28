@@ -70,6 +70,13 @@ src/http/app.ts          Fastify + zod + internalApiErrorHandler (credo-base/fas
 src/http/auth.ts         API-key and wallet-token bearer auth (sha256 lookup, timingSafeEqual), admin token
 src/http/routes/{admin,catalogue,connections,credentials,proof-templates,proofs,wallets,wallet,webhook,ledger,internal}.ts
 src/outbox-consumer.ts   poll agent outbox → mirror tables → enqueue webhook events
+
+> **Phase 7 update (2026-09-28, review H1):**
+> - Personal data is scrubbed, never deleted: `erasure.ts` (the erase routes per exchange and per connection, `record.erased`, the `erasures` log) and `retention.ts` (per-tenant period, 90 d default).
+> - Rows keep `erased_at`; deliveries carry `record_id`; `credentials.expires_at` keeps the dashboard's expiry counts.
+> - Operators get masked views unless they send an audited reveal reason (`http/personal-data.ts`).
+> - Delivery retry now needs a dead or pending, unerased delivery (L5).
+> - See [`17-phase-7.md`](17-phase-7.md) H1 and `docs/data-protection.md`.
 src/webhooks/{signer,dispatcher}.ts   HMAC signing, SKIP LOCKED worker, backoff, dead-letter
 src/main.ts              server + workers + SIGTERM (stop accepting, finish in-flight deliveries, close pool)
 test/                    node --test

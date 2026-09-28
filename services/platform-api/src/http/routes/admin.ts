@@ -113,7 +113,8 @@ export const adminRoutes = (deps: AdminDeps): FastifyPluginAsyncZod => async (ap
       const [tenant] = await deps.db.select({ id: tenants.id }).from(tenants).where(eq(tenants.id, request.params.id))
       if (!tenant) throw notFound('tenant')
       const apiKey = generateSecret(API_KEY_PREFIX)
-      const [row] = await deps.db.insert(apiKeys).values({ tenantId: tenant.id, prefix: lookupPrefix(apiKey), keyHash: hashSecret(apiKey), label: request.body.label }).returning()
+      // Flagged as an operator's key in the tenant's list (Phase 7 H1).
+      const [row] = await deps.db.insert(apiKeys).values({ tenantId: tenant.id, prefix: lookupPrefix(apiKey), keyHash: hashSecret(apiKey), label: request.body.label, createdBy: request.operator?.actor ?? 'admin-token', createdByRole: 'operator' }).returning()
       // The plaintext key exists only in this response.
       return reply.code(201).send({ id: row.id, label: row.label, apiKey, createdAt: row.createdAt.toISOString() })
     }

@@ -30,7 +30,7 @@ It is a third-party integration the platform owns:
 | Reference image | **Per request** (sent with the offer or proof request), deleted at decision time | Nothing biometric persists on our side beyond scores and decisions |
 | Device capture | **Native add-ons**, platform-specific, named after the core SDK | Android: `com.12id:holder-sdk-android-biometrics-aws`. iOS mirrors it in Phase 5-iOS. Switching vendor later needs the tenant's app to ship the new add-on |
 | Audit | Biometric log shown per exchange in the console exchanges list (tenant + operator) | Log rows carry scores, decisions and AWS session ids, never images |
-| Log retention | **No automatic deletion in this phase** | Left to the Phase 7 retention work (H1), which must include the biometric tables |
+| Log retention | **No automatic deletion in this phase** | Left to the Phase 7 retention work (H1), which must include the biometric tables. *Phase 7 update (2026-09-28): done. Scores and vendor session ids in `exchange_gates`/`exchange_gate_events` and biometric-service's check (new `POST /checks/:id/erase`, migration `0001_erasure`) are scrubbed with the exchange by retention or on request; decisions stay* |
 
 ## Facts this plan builds on (verified while planning, source read)
 - **No hold point today.** agent-service runs with global `autoAcceptCredentials` / `autoAcceptProofs: ContentApproved` (`agent/root-agent.ts`). A matching credential request is issued at once, and a presentation is verified and acked at once. Credo takes a **per-record** override on `offerCredential` / `requestProof`. With `Never` the record parks at `request-received` / `presentation-received`, and the outbox already emits that transition with its thread id.

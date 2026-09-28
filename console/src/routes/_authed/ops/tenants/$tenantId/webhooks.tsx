@@ -58,6 +58,7 @@ function WebhooksPage() {
         fetching={fetching}
         invalidateKey={['ops', 'tenant', tenantId, 'webhook-deliveries']}
         loadBody={(deliveryId) => getWebhookDelivery({ data: { tenantId, deliveryId } })}
+        revealBody={(deliveryId, revealReason) => getWebhookDelivery({ data: { tenantId, deliveryId, revealReason } })}
         retryDelivery={(deliveryId) => retryWebhookDelivery({ data: { tenantId, deliveryId } })}
       />
     </div>

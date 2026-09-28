@@ -18,7 +18,7 @@ import type {
   TenantProviderResponse,
   Thresholds,
 } from '@12id/credo-base/biometric-contract.ts'
-import { and, asc, eq, inArray, lte } from 'drizzle-orm'
+import { and, asc, eq, inArray, lte, sql } from 'drizzle-orm'
 import type { Logger } from 'pino'
 
 import { KeyRing, aad, open, seal } from './crypto.ts'
@@ -249,6 +249,8 @@ export function createBiometricService({ db, keyRing, providers, logger }: Biome
       let matchRaw: Record<string, unknown> = {}
       try {
         const { provider, ctx } = await providerContext(check.tenantId)
+        // Only an erased check has no vendor session id, and an erased check is never pending.
+        if (!claimed.vendorSessionId) throw new ServiceError(409, 'check_erased', 'the check was erased')
         outcome = await provider.completeSession(ctx, { vendorSessionId: claimed.vendorSessionId, clientOutput })
         if (outcome.status === 'pending') throw new ServiceError(409, 'result_not_ready', 'the vendor has no result for this session yet')
         if (outcome.status === 'ready') {
@@ -347,6 +349,28 @@ export function createBiometricService({ db, keyRing, providers, logger }: Biome
         .where(and(eq(checks.id, checkId), eq(checks.status, 'pending')))
         .returning({ id: checks.id })
       if (!row) await wipeReference(checkId)
+    },
+
+    /**
+     * Erasure (Phase 7 H1): keeps the check's decision and attempt count, removes everything that
+     * came from the person: the reference image and its hash, scores, vendor values, the probe hash
+     * and vendor session ids. A pending check is cancelled first. Idempotent; unknown ids are a no-op.
+     */
+    async eraseCheck(checkId: string): Promise<{ erased: boolean }> {
+      const [check] = await db.select({ id: checks.id, status: checks.status, erasedAt: checks.erasedAt }).from(checks).where(eq(checks.id, checkId))
+      if (!check) return { erased: false }
+      if (check.erasedAt) return { erased: true }
+      await db.transaction(async (tx) => {
+        const now = new Date()
+        await tx
+          .update(checks)
+          .set({ status: sql`case when ${checks.status} = 'pending' then 'cancelled' else ${checks.status} end`, decidedAt: sql`coalesce(${checks.decidedAt}, ${now})`, referenceCiphertext: null, referenceSha256: null, erasedAt: now })
+          .where(eq(checks.id, checkId))
+        await tx.update(sessions).set({ vendorSessionId: null }).where(eq(sessions.checkId, checkId))
+        await tx.update(results).set({ livenessScore: null, matchScore: null, raw: {}, probeSha256: null }).where(eq(results.checkId, checkId))
+      })
+      logger.info({ checkId }, 'check erased')
+      return { erased: true }
     },
 
     /** Expires overdue pending checks and wipes their images. Returns the expired ids. */

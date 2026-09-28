@@ -20,9 +20,12 @@ export const tenantStatements = {
   webhook: ['update', 'rotate', 'retry'],
   catalogue: ['publish', 'deprecate'],
   template: ['create', 'update', 'delete'],
-  exchange: ['create'],
+  // Phase 7 H1: erase an exchange's or a connection's personal data.
+  exchange: ['create', 'erase'],
   // Phase 6: the biometric provider, the switch and every biometric policy (default, cred def, template).
   biometrics: ['update'],
+  // Phase 7 H1: the tenant's retention period.
+  retention: ['update'],
 } as const
 
 export const tenantAc = createAccessControl(tenantStatements)
@@ -32,9 +35,12 @@ const consoleResources = {
   webhook: ['update', 'rotate', 'retry'],
   catalogue: ['publish', 'deprecate'],
   template: ['create', 'update', 'delete'],
-  exchange: ['create'],
+  // Phase 7 H1: erase an exchange's or a connection's personal data.
+  exchange: ['create', 'erase'],
   // Phase 6: the biometric provider, the switch and every biometric policy (default, cred def, template).
   biometrics: ['update'],
+  // Phase 7 H1: the tenant's retention period.
+  retention: ['update'],
 } as const
 
 export const tenantRoles = {

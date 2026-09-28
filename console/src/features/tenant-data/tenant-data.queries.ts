@@ -8,8 +8,7 @@ import {
   listExchanges,
   listProofTemplates,
   listWallets,
-  listWebhookDeliveries,
-} from './tenant-data.functions'
+  listWebhookDeliveries, getTenantRetention, listTenantErasures } from './tenant-data.functions'
 
 import type { DeliveryStatus } from './types'
 
@@ -36,3 +35,8 @@ export const webhookDeliveriesQuery = (tenantId: string, search: DeliverySearch 
   queryOptions({ queryKey: key(tenantId, 'webhook-deliveries', search), queryFn: () => listWebhookDeliveries({ data: { tenantId, ...search } }), placeholderData: keepPreviousData })
 
 export const tenantBiometricsQuery = (tenantId: string) => queryOptions({ queryKey: key(tenantId, 'biometrics'), queryFn: () => getTenantBiometrics({ data: { tenantId } }) })
+
+// Phase 7 H1: the retention period and the erasure log.
+export const tenantRetentionQuery = (tenantId: string) => queryOptions({ queryKey: key(tenantId, 'data-protection', 'retention'), queryFn: () => getTenantRetention({ data: { tenantId } }) })
+export const tenantErasuresQuery = (tenantId: string, page = 1) =>
+  queryOptions({ queryKey: key(tenantId, 'data-protection', 'erasures', page), queryFn: () => listTenantErasures({ data: { tenantId, page } }), placeholderData: keepPreviousData })

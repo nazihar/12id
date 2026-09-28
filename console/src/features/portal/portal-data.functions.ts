@@ -341,3 +341,35 @@ export const savePortalTemplatePolicy = createServerFn({ method: 'POST' })
     assertSameOrganization(context.organization.id, data.organizationId)
     return unwrap(await platformFor(context.principal).PUT('/v1/proof-templates/{id}/biometric-policy', { params: { path: { id: data.templateId } }, body: data.policy }))
   })
+
+// --- data protection (Phase 7 H1) -----------------------------------------------------------
+
+/** Erases the personal data of one exchange or connection (owners and admins). The reason is optional. */
+export const erasePortalRecord = createServerFn({ method: 'POST' })
+  .middleware([tenantMiddleware({ exchange: ['erase'] })])
+  .validator(organizationInput.extend({ kind: z.enum(['connection', 'credential', 'proof']), id: z.string().min(1).max(100), reason: z.string().trim().max(500).optional() }))
+  .handler(async ({ context, data }) => {
+    assertSameOrganization(context.organization.id, data.organizationId)
+    const platform = platformFor(context.principal)
+    const options = { params: { path: { id: data.id } }, body: { reason: data.reason || undefined } }
+    if (data.kind === 'connection') return unwrap(await platform.POST('/v1/connections/{id}/erase', options)).id
+    if (data.kind === 'credential') return unwrap(await platform.POST('/v1/credentials/{id}/erase', options)).id
+    return unwrap(await platform.POST('/v1/proofs/{id}/erase', options)).id
+  })
+
+export const getPortalRetention = createServerFn({ method: 'GET' })
+  .middleware([tenantMiddleware()])
+  .handler(async ({ context }) => unwrap(await platformFor(context.principal).GET('/v1/data-retention')))
+
+export const setPortalRetention = createServerFn({ method: 'POST' })
+  .middleware([tenantMiddleware({ retention: ['update'] })])
+  .validator(organizationInput.extend({ retentionDays: z.number().int().min(0).max(3650).nullable() }))
+  .handler(async ({ context, data }) => {
+    assertSameOrganization(context.organization.id, data.organizationId)
+    return unwrap(await platformFor(context.principal).PUT('/v1/data-retention', { body: { retentionDays: data.retentionDays } }))
+  })
+
+export const listPortalErasures = createServerFn({ method: 'GET' })
+  .middleware([tenantMiddleware()])
+  .validator(z.object({ page: z.number().int().min(1).default(1), pageSize: z.number().int().min(1).max(100).default(25) }))
+  .handler(async ({ context, data }) => unwrap(await platformFor(context.principal).GET('/v1/erasures', { params: { query: { page: data.page, pageSize: data.pageSize } } })))

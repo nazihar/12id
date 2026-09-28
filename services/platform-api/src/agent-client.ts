@@ -179,6 +179,11 @@ export function createAgentClient(options: AgentClientOptions) {
     acceptPresentation: (tenantId: string, id: string) => call<{ id: string; state: string }>('POST', `${t(tenantId)}/proofs/${encodeURIComponent(id)}/accept`),
     abandonProof: (tenantId: string, id: string, reason: string) => call<{ id: string; state: string }>('POST', `${t(tenantId)}/proofs/${encodeURIComponent(id)}/abandon`, { reason }),
 
+    // Erasure (Phase 7 H1): finished exchange records with their DIDComm messages, and connection records.
+    eraseCredential: (tenantId: string, id: string) => call<{ id: string; erased: boolean }>('POST', `${t(tenantId)}/credentials/${encodeURIComponent(id)}/erase`),
+    eraseProof: (tenantId: string, id: string) => call<{ id: string; erased: boolean }>('POST', `${t(tenantId)}/proofs/${encodeURIComponent(id)}/erase`),
+    eraseConnection: (tenantId: string, id: string) => call<{ id: string; erased: boolean }>('POST', `${t(tenantId)}/connections/${encodeURIComponent(id)}/erase`),
+
     readOutbox: (afterId: number, limit: number) => call<{ rows: OutboxRow[] }>('GET', `/outbox?afterId=${afterId}&limit=${limit}`),
     ackOutbox: (upToId: number) => call<{ acknowledged: number }>('POST', '/outbox/ack', { upToId }),
 

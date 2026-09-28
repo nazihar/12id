@@ -243,6 +243,38 @@ export async function acceptPresentation(deps: ExchangeDeps, tenantId: string, i
   })
 }
 
+// --- Erasure (Phase 7 H1) ---------------------------------------------------------------
+// The platform scrubs personal data from its own tables and asks the agent to drop the Credo
+// records that hold the same values: the exchange record (offered attributes, the presentation) and
+// the DIDComm messages stored with it. Only finished exchanges are erased; a running protocol keeps
+// its record. Idempotent: an unknown id answers `erased: false`.
+
+/** Deletes a finished credential or proof exchange record and its stored DIDComm messages. */
+export async function eraseExchange(deps: ExchangeDeps, tenantId: string, kind: 'credential' | 'proof', id: string) {
+  return withTenant(deps, tenantId, async (t) => {
+    const api = kind === 'credential' ? t.modules.didcomm.credentials : t.modules.didcomm.proofs
+    const record = await api.findById(id)
+    if (!record) return { id, erased: false }
+    const finals = kind === 'credential' ? FINAL_CREDENTIAL_STATES : FINAL_PROOF_STATES
+    if (!finals.includes(record.state)) throw new ExchangeError(409, `${kind} exchange is ${record.state}; only finished exchanges can be erased`)
+    if (kind === 'credential') await t.modules.didcomm.credentials.deleteById(id, { deleteAssociatedDidCommMessages: true })
+    else await t.modules.didcomm.proofs.deleteById(id, { deleteAssociatedDidCommMessages: true })
+    deps.logger.info({ tenantId, kind, id }, 'exchange record erased')
+    return { id, erased: true }
+  })
+}
+
+/** Deletes a connection record (the holder's label and DID document). Exchanges on it are erased first by the platform. */
+export async function eraseConnection(deps: ExchangeDeps, tenantId: string, id: string) {
+  return withTenant(deps, tenantId, async (t) => {
+    const record = await t.modules.didcomm.connections.findById(id)
+    if (!record) return { id, erased: false }
+    await t.modules.didcomm.connections.deleteById(id)
+    deps.logger.info({ tenantId, connectionId: id }, 'connection record erased')
+    return { id, erased: true }
+  })
+}
+
 /**
  * Abandons a held (or still waiting) exchange: a best-effort problem report to the holder, then
  * the record is marked abandoned locally with an outbox row, the same way reconciliation does,

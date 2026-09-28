@@ -172,14 +172,14 @@ const walletsNeverConnectedCount = (db: Database, tenantId?: string) =>
   scalar(db, sql`select count(*)::int as n from wallets where connected_at is null and revoked_at is null and created_at < now() - ${STUCK_AFTER} ${tenantId ? sql`and tenant_id = ${tenantId}` : sql``}`)
 
 /**
- * Issued credentials by their `expiresAt` attribute (epoch seconds as a string, §5.2). The regex guard
- * keeps a non-numeric value — it is a free-form string on the wire — from failing the whole query.
+ * Issued credentials by their `expiresAt` attribute, read from `expires_at` (set from the attribute when
+ * it is a number, §5.2), which survives the erasure of the attributes (Phase 7 H1).
  */
 const expiryCounts = async (db: Database, tenantId: string) => {
   const result = await db.execute<{ expiring: number; expired: number }>(sql`
     with issued as (
-      select to_timestamp((attributes->>'expiresAt')::bigint) as expires_at from credentials
-      where tenant_id = ${tenantId} and state = 'done' and (attributes->>'expiresAt') ~ '^[0-9]{1,12}$')
+      select expires_at from credentials
+      where tenant_id = ${tenantId} and state = 'done' and expires_at is not null)
     select (count(*) filter (where expires_at >= now() and expires_at < now() + ${EXPIRING_WITHIN}))::int as expiring,
            (count(*) filter (where expires_at < now()))::int as expired
     from issued`)

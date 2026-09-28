@@ -17,6 +17,7 @@ import { expireIdempotencyKeys } from './http/idempotency.ts'
 import { createMediatorClient } from './mediator-client.ts'
 import { createOutboxConsumer } from './outbox-consumer.ts'
 import { handleMediatorWebhook } from './wake.ts'
+import { startRetention } from './retention.ts'
 import { startSweep } from './sweep.ts'
 import { createDispatcher } from './webhooks/dispatcher.ts'
 import { endpointLookup } from './webhooks/events.ts'
@@ -66,6 +67,10 @@ const stopSweep = config.SWEEP_INTERVAL_MS > 0
   : async () => undefined
 const expiry = setInterval(() => void expireIdempotencyKeys(db, config.IDEMPOTENCY_TTL_MS).catch((error: unknown) => logger.warn({ err: error }, 'idempotency expiry failed')), 10 * 60 * 1000)
 // Biometric gates past their TTL are expired and their exchanges abandoned; unsettled gates are retried.
+// Retention (Phase 7 H1) runs on the sweep's schedule; SWEEP_INTERVAL_MS 0 turns both off.
+const stopRetention = config.SWEEP_INTERVAL_MS > 0
+  ? startRetention({ db, agent, biometric: biometricClient, endpoints, logger, defaultDays: config.RETENTION_DAYS }, config.SWEEP_INTERVAL_MS)
+  : async () => undefined
 const gateExpiry = gates ? setInterval(() => void gates.expireDue().catch((error: unknown) => logger.warn({ err: error }, 'biometric gate expiry failed')), config.BIOMETRIC_EXPIRY_POLL_MS) : undefined
 
 async function drain(signal: string) {
@@ -75,7 +80,7 @@ async function drain(signal: string) {
   logger.info({ signal }, 'drain started')
   clearInterval(expiry)
   if (gateExpiry) clearInterval(gateExpiry)
-  await Promise.all([stopConsumer(), stopDispatcher(), stopSweep()])
+  await Promise.all([stopConsumer(), stopDispatcher(), stopSweep(), stopRetention()])
   const deadline = started + config.DRAIN_DEADLINE_MS
   while (dispatcher.inFlight() > 0 && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 100))
   await app.close()

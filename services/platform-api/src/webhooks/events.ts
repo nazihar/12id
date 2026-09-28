@@ -10,7 +10,7 @@ import { eq } from 'drizzle-orm'
 import type { Database } from '../db/client.ts'
 import { webhookDeliveries, webhookEndpoints } from '../db/schema.ts'
 
-export const EVENT_TYPES = ['connection.state_changed', 'credential.state_changed', 'proof.state_changed', 'wallet.sync_requested', 'biometric.check_completed'] as const
+export const EVENT_TYPES = ['connection.state_changed', 'credential.state_changed', 'proof.state_changed', 'wallet.sync_requested', 'biometric.check_completed', 'record.erased'] as const
 export type EventType = (typeof EVENT_TYPES)[number]
 
 export interface EventEnvelope {
@@ -37,6 +37,21 @@ export function outboxEventId(outboxRowId: number): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 
+/** The exchange an event is about, stored on the delivery so an erasure can find it (Phase 7 H1). */
+export function eventRecord(type: EventType, data: Record<string, unknown>): { recordType: string; recordId: string } | null {
+  const str = (value: unknown) => (typeof value === 'string' ? value : null)
+  if (type.endsWith('.state_changed')) {
+    const id = str(data.id)
+    return id ? { recordType: type.split('.')[0]!, recordId: id } : null
+  }
+  if (type === 'biometric.check_completed' || type === 'record.erased') {
+    const recordType = str(data.recordType)
+    const recordId = str(data.recordId)
+    return recordType && recordId ? { recordType, recordId } : null
+  }
+  return null
+}
+
 export type EndpointLookup = (tenantId: string) => Promise<{ url: string; events: string[] | null } | null>
 
 export function endpointLookup(db: Database): EndpointLookup {
@@ -57,7 +72,7 @@ export async function enqueueEvent(db: Database, lookup: EndpointLookup, tenantI
   const envelope = buildEnvelope(tenantId, type, data, new Date(), eventId)
   const [row] = await db
     .insert(webhookDeliveries)
-    .values({ tenantId, eventId: envelope.id, eventType: type, body: JSON.stringify(envelope), url: endpoint.url })
+    .values({ tenantId, eventId: envelope.id, eventType: type, ...eventRecord(type, data), body: JSON.stringify(envelope), url: endpoint.url })
     .onConflictDoNothing({ target: webhookDeliveries.eventId })
     .returning({ id: webhookDeliveries.id })
   return row?.id ?? null

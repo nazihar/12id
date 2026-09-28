@@ -38,7 +38,7 @@ export async function testDatabase(): Promise<{ db: Database; close: () => Promi
     }
   }
   if (!shared) return null
-  const tables = [schema.exchangeGateEvents, schema.exchangeGates, schema.credentialDefinitionPolicies, schema.biometricSettings, schema.consoleAudit, schema.webhookDeliveries, schema.webhookEndpoints, schema.idempotencyKeys, schema.proofTemplates, schema.proofs, schema.credentials, schema.connections, schema.wallets, schema.apiKeys, schema.outboxCursor, schema.tenants]
+  const tables = [schema.erasures, schema.exchangeGateEvents, schema.exchangeGates, schema.credentialDefinitionPolicies, schema.biometricSettings, schema.consoleAudit, schema.webhookDeliveries, schema.webhookEndpoints, schema.idempotencyKeys, schema.proofTemplates, schema.proofs, schema.credentials, schema.connections, schema.wallets, schema.apiKeys, schema.outboxCursor, schema.tenants]
   for (const table of tables) await shared.db.delete(table)
   const pool = shared.pool
   return { db: shared.db, close: async () => void pool }
@@ -80,6 +80,7 @@ export const testConfig: PlatformConfig = {
   WALLET_REVOKED_GRACE_DAYS: 30,
   MEDIATOR_INVITATION_TTL_HOURS: 24,
   MEDIATOR_QUEUE_TTL_DAYS: 30,
+  RETENTION_DAYS: 90,
   IDEMPOTENCY_TTL_MS: 60_000,
   DRAIN_DEADLINE_MS: 1000,
   BIOMETRIC_EXPIRY_POLL_MS: 30_000,
@@ -132,6 +133,9 @@ export function fakeAgent(overrides: Partial<AgentClient> = {}) {
     abandonCredential: record('abandonCredential', { id: 'cred-1', state: 'abandoned' }),
     acceptPresentation: record('acceptPresentation', { id: 'proof-1', state: 'done' }),
     abandonProof: record('abandonProof', { id: 'proof-1', state: 'abandoned' }),
+    eraseCredential: async (tenantId, id) => (calls.push({ method: 'eraseCredential', args: [tenantId, id] }), { id, erased: true }),
+    eraseProof: async (tenantId, id) => (calls.push({ method: 'eraseProof', args: [tenantId, id] }), { id, erased: true }),
+    eraseConnection: async (tenantId, id) => (calls.push({ method: 'eraseConnection', args: [tenantId, id] }), { id, erased: true }),
     healthy: async () => true,
     ...overrides,
   }
@@ -178,6 +182,10 @@ export function fakeBiometric(options: { providerStatus?: 'ok' | 'untested' | 'f
       const sessionId = uuid()
       sessions.set(sessionId, { checkId, attempt: c.attempts, completed: false })
       return { sessionId, vendorSessionId: `vendor-${sessionId.slice(-4)}`, providerId: 'mock', captureModule: { provider: 'mock', minVersion: 1 }, clientConfig: { sessionId }, attempt: c.attempts, attemptsRemaining: c.maxAttempts - c.attempts }
+    },
+    eraseCheck: async (checkId) => {
+      calls.push({ method: 'eraseCheck', args: [checkId] })
+      return { erased: checks.has(checkId) }
     },
     completeSession: async (sessionId, clientOutput) => {
       calls.push({ method: 'completeSession', args: [sessionId, clientOutput] })

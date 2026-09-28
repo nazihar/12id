@@ -12,8 +12,12 @@ describe('tenant roles', () => {
     expect(tenantRoles.admin.authorize({ apiKey: ['create'], webhook: ['rotate'], catalogue: ['publish'], template: ['delete'], exchange: ['create'] }).success).toBe(true)
   })
 
+  it('lets owners and admins erase personal data and set the retention period (Phase 7 H1)', () => {
+    for (const role of ['owner', 'admin'] as const) expect(tenantRoles[role].authorize({ exchange: ['erase'], retention: ['update'] }).success).toBe(true)
+  })
+
   it('keeps members read-only', () => {
-    const requests: TenantRequest[] = [{ apiKey: ['create'] }, { webhook: ['update'] }, { catalogue: ['publish'] }, { template: ['create'] }, { exchange: ['create'] }, { member: ['delete'] }, { invitation: ['create'] }]
+    const requests: TenantRequest[] = [{ apiKey: ['create'] }, { webhook: ['update'] }, { catalogue: ['publish'] }, { template: ['create'] }, { exchange: ['create'] }, { exchange: ['erase'] }, { retention: ['update'] }, { member: ['delete'] }, { invitation: ['create'] }]
     for (const request of requests) expect(tenantRoles.member.authorize(request).success).toBe(false)
   })
 })

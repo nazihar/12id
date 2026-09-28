@@ -13,6 +13,8 @@ export const connectionView = z.object({
   invitationId: z.string().nullable(),
   theirLabel: z.string().nullable(),
   externalId: z.string().nullable(),
+  /** When the personal data was erased, on request or by the retention period; null = not erased (Phase 7 H1). */
+  erasedAt: z.iso.datetime().nullable(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 })
@@ -29,6 +31,8 @@ export const credentialView = z.object({
   errorMessage: z.string().nullable(),
   /** null when the exchange is not biometric-gated (Phase 6). */
   biometric: biometricView,
+  /** When the personal data was erased, on request or by the retention period; null = not erased (Phase 7 H1). */
+  erasedAt: z.iso.datetime().nullable(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 })
@@ -46,6 +50,8 @@ export const proofView = z.object({
   errorMessage: z.string().nullable(),
   /** null when not gated. While a gate has not passed, `verified` and `disclosed` stay null. */
   biometric: biometricView,
+  /** When the personal data was erased, on request or by the retention period; null = not erased (Phase 7 H1). */
+  erasedAt: z.iso.datetime().nullable(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 })
@@ -67,7 +73,7 @@ export const walletView = z.object({
 const iso = (d: Date) => d.toISOString()
 
 export function toConnectionView(row: typeof connections.$inferSelect): ConnectionView {
-  return { id: row.recordId, state: row.state, invitationId: row.invitationId, theirLabel: row.theirLabel, externalId: row.externalId, createdAt: iso(row.createdAt), updatedAt: iso(row.updatedAt) }
+  return { id: row.recordId, state: row.state, invitationId: row.invitationId, theirLabel: row.theirLabel, externalId: row.externalId, erasedAt: row.erasedAt ? iso(row.erasedAt) : null, createdAt: iso(row.createdAt), updatedAt: iso(row.updatedAt) }
 }
 
 export function toCredentialView(row: typeof credentials.$inferSelect, gate?: Gate | null): CredentialView {
@@ -81,6 +87,7 @@ export function toCredentialView(row: typeof credentials.$inferSelect, gate?: Ga
     attributes: row.attributes,
     errorMessage: row.errorMessage,
     biometric: toBiometricView(gate),
+    erasedAt: row.erasedAt ? iso(row.erasedAt) : null,
     createdAt: iso(row.createdAt),
     updatedAt: iso(row.updatedAt),
   }
@@ -99,6 +106,7 @@ export function toProofView(row: typeof proofs.$inferSelect, gate?: Gate | null)
     disclosed: withheld ? null : row.disclosed,
     errorMessage: row.errorMessage,
     biometric: toBiometricView(gate),
+    erasedAt: row.erasedAt ? iso(row.erasedAt) : null,
     createdAt: iso(row.createdAt),
     updatedAt: iso(row.updatedAt),
   }
@@ -115,4 +123,14 @@ export function toWalletView(row: typeof wallets.$inferSelect): z.infer<typeof w
     revokedAt: row.revokedAt ? iso(row.revokedAt) : null,
     revokedReason: row.revokedReason,
   }
+}
+
+/**
+ * The mandatory `expiresAt` attribute (epoch seconds as a string, §5.2) as a Date, or null when it is
+ * missing or not a number. Stored on its own (`credentials.expires_at`) so it survives erasure.
+ */
+export function expiryOf(attributes: Record<string, string> | null | undefined): Date | null {
+  const value = attributes?.expiresAt
+  if (!value || !/^[0-9]{1,12}$/.test(value)) return null
+  return new Date(Number(value) * 1000)
 }

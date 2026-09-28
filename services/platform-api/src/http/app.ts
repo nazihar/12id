@@ -24,6 +24,7 @@ import type { PlatformConfig } from '../config.ts'
 import type { Database } from '../db/client.ts'
 import type { MediatorClient } from '../mediator-client.ts'
 import type { WakeOutcome } from '../wake.ts'
+import { endpointLookup } from '../webhooks/events.ts'
 import { consoleAuditHook } from './audit.ts'
 import { CONSOLE_TOKEN_HEADER, requireOperator, requireTenantPrincipal, requireWalletToken } from './auth.ts'
 import { platformErrorHandler } from './errors.ts'
@@ -32,6 +33,7 @@ import { rateLimiter } from './rate-limit.ts'
 import { adminRoutes } from './routes/admin.ts'
 import { biometricRoutes, walletBiometricRoutes } from './routes/biometrics.ts'
 import { catalogueRoutes } from './routes/catalogue.ts'
+import { dataProtectionRoutes } from './routes/data-protection.ts'
 import { CONSOLE_ONLY_TAG, consoleRoutes } from './routes/console.ts'
 import { exchangeRoutes } from './routes/exchanges.ts'
 import { internalRoutes } from './routes/internal.ts'
@@ -103,6 +105,7 @@ export function buildApp(deps: AppDeps, options: BuildOptions = {}) {
         { name: 'wallets', description: 'Wallets (customer backend)' },
         { name: 'wallet (SDK)', description: 'Wallet endpoints called by the app with its wallet token' },
         { name: 'webhooks' },
+        { name: 'data protection', description: 'Retention period and erasure log' },
         ...(deps.biometric ? [{ name: 'biometrics', description: 'Biometric gate settings (console)' }] : []),
         ...(consoleSpec
           ? [
@@ -141,7 +144,9 @@ export function buildApp(deps: AppDeps, options: BuildOptions = {}) {
     scope.addHook('onRequest', limits.tenant)
     useIdempotency(scope, deps.db)
     await scope.register(catalogueRoutes({ agent: deps.agent }))
-    await scope.register(exchangeRoutes({ db: deps.db, agent: deps.agent, biometric: deps.biometric?.client, gates: deps.biometric?.gates }))
+    const erasure = { db: deps.db, agent: deps.agent, biometric: deps.biometric?.client, endpoints: endpointLookup(deps.db), logger: deps.logger }
+    await scope.register(exchangeRoutes({ db: deps.db, agent: deps.agent, biometric: deps.biometric?.client, gates: deps.biometric?.gates, erasure }))
+    await scope.register(dataProtectionRoutes({ db: deps.db, defaultRetentionDays: deps.config.RETENTION_DAYS }))
     if (deps.biometric) await scope.register(biometricRoutes({ db: deps.db, agent: deps.agent, biometric: deps.biometric.client }))
     await scope.register(proofTemplateRoutes({ db: deps.db }))
     await scope.register(walletCustomerRoutes({ db: deps.db }))

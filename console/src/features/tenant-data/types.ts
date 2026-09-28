@@ -25,5 +25,5 @@ export type ExchangeKind = 'credential' | 'proof'
 export const DELIVERY_STATUSES = ['pending', 'sending', 'delivered', 'dead'] as const
 export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number]
 
-export const WEBHOOK_EVENT_TYPES = ['connection.state_changed', 'credential.state_changed', 'proof.state_changed', 'wallet.sync_requested', 'biometric.check_completed'] as const
+export const WEBHOOK_EVENT_TYPES = ['connection.state_changed', 'credential.state_changed', 'proof.state_changed', 'wallet.sync_requested', 'biometric.check_completed', 'record.erased'] as const
 export type WebhookEventType = (typeof WEBHOOK_EVENT_TYPES)[number]

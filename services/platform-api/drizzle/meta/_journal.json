@@ -64,6 +64,13 @@
       "when": 1790240473331,
       "tag": "0008_list_order_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790578574993,
+      "tag": "0009_data_protection",
+      "breakpoints": true
     }
   ]
 }

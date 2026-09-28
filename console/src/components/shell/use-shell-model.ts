@@ -4,7 +4,7 @@
  * every area declares its navigation here and nowhere else.
  */
 import { useMatchRoute, useMatches, useRouteContext } from '@tanstack/react-router'
-import { BuildingIcon, FileBadgeIcon, GlobeIcon, KeyRoundIcon, LayoutDashboardIcon, type LucideIcon, ScanFaceIcon, ScrollTextIcon, ShieldUserIcon, SmartphoneIcon, UsersIcon, WalletIcon, WebhookIcon } from 'lucide-react'
+import { BuildingIcon, FileBadgeIcon, GlobeIcon, KeyRoundIcon, LayoutDashboardIcon, type LucideIcon, ScanFaceIcon, ScrollTextIcon, ShieldCheckIcon, ShieldUserIcon, SmartphoneIcon, UsersIcon, WalletIcon, WebhookIcon } from 'lucide-react'
 
 import type { TenantRole } from '@/lib/permissions'
 
@@ -58,6 +58,7 @@ function tenantItems(tenantId: string): NavItem[] {
     { label: 'Exchanges', to: '/ops/tenants/$tenantId/exchanges', params, icon: GlobeIcon },
     { label: 'Webhooks', to: '/ops/tenants/$tenantId/webhooks', params, icon: WebhookIcon },
     { label: 'Biometrics', to: '/ops/tenants/$tenantId/biometrics', params, icon: ScanFaceIcon },
+    { label: 'Data protection', to: '/ops/tenants/$tenantId/data-protection', params, icon: ShieldCheckIcon },
   ]
 }
 
@@ -71,6 +72,7 @@ function portalItems(orgSlug: string): NavItem[] {
     { label: 'Exchanges', to: '/t/$orgSlug/exchanges', params, icon: GlobeIcon },
     { label: 'Webhooks', to: '/t/$orgSlug/webhooks', params, icon: WebhookIcon },
     { label: 'Biometrics', to: '/t/$orgSlug/biometrics', params, icon: ScanFaceIcon },
+    { label: 'Data protection', to: '/t/$orgSlug/data-protection', params, icon: ShieldCheckIcon },
     { label: 'API keys', to: '/t/$orgSlug/api-keys', params, icon: KeyRoundIcon },
     { label: 'Members', to: '/t/$orgSlug/members', params, icon: UsersIcon },
   ]

@@ -7,6 +7,7 @@ import { apiKeySearch } from '@/features/tenant-data/list.schemas'
 import { createApiKeyInput, createTenantInput, rateLimitInput, tenantInput, tenantListSearch } from '@/features/tenants/tenants.schemas'
 import { pageParams } from '@/lib/list-search'
 import { operatorMiddleware } from '@/server/middleware'
+import { notifyOwnersOfOperatorKey } from '@/server/data-protection.server'
 import { platformFor, unwrap } from '@/server/platform.server'
 
 /** One page of tenants with their activity, newest first (Phase 4 C9). */
@@ -54,7 +55,12 @@ export const listApiKeys = createServerFn({ method: 'GET' })
 export const createApiKey = createServerFn({ method: 'POST' })
   .middleware([operatorMiddleware])
   .validator(tenantInput.extend(createApiKeyInput.shape))
-  .handler(async ({ context, data }) => unwrap(await platformFor(context.principal, { tenantId: data.tenantId }).POST('/v1/api-keys', { body: { label: data.label } })))
+  .handler(async ({ context, data }) => {
+    const created = unwrap(await platformFor(context.principal, { tenantId: data.tenantId }).POST('/v1/api-keys', { body: { label: data.label } }))
+    // The tenant's owners hear about every key an operator creates (Phase 7 H1).
+    await notifyOwnersOfOperatorKey({ tenantId: data.tenantId, label: data.label, operatorUserId: context.principal.actor })
+    return created
+  })
 
 export const revokeApiKey = createServerFn({ method: 'POST' })
   .middleware([operatorMiddleware])

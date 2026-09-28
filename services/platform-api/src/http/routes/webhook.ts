@@ -5,7 +5,7 @@
  */
 import { randomBytes } from 'node:crypto'
 
-import { type SQL, and, desc, eq, sql } from 'drizzle-orm'
+import { type SQL, and, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { z } from 'zod'
 
@@ -13,7 +13,8 @@ import type { Database } from '../../db/client.ts'
 import { DELIVERY_STATUSES, webhookDeliveries, webhookEndpoints } from '../../db/schema.ts'
 import { EVENT_TYPES } from '../../webhooks/events.ts'
 import { type TenantContext, requireConsolePrincipal } from '../auth.ts'
-import { notFound } from '../errors.ts'
+import { PlatformError, notFound } from '../errors.ts'
+import { maskBody, masked } from '../personal-data.ts'
 import { createdBetween, createdRange, listPage, pageOf, pageQuery } from '../list.ts'
 import { CONSOLE_ONLY_TAG } from './console.ts'
 
@@ -30,6 +31,8 @@ export const deliveryView = z.object({
   lastError: z.string().nullable(),
   createdAt: z.iso.datetime(),
   deliveredAt: z.iso.datetime().nullable(),
+  /** Personal data removed from the body (Phase 7 H1); such a delivery is not sent again. */
+  erasedAt: z.iso.datetime().nullable(),
 })
 
 export const toDeliveryView = (row: typeof webhookDeliveries.$inferSelect) => ({
@@ -43,6 +46,7 @@ export const toDeliveryView = (row: typeof webhookDeliveries.$inferSelect) => ({
   lastError: row.lastError,
   createdAt: row.createdAt.toISOString(),
   deliveredAt: row.deliveredAt?.toISOString() ?? null,
+  erasedAt: row.erasedAt?.toISOString() ?? null,
 })
 
 /** Delivery list filters, shared with the operator's cross-tenant list (Phase 4 C9). */
@@ -152,17 +156,22 @@ export const webhookRoutes = (deps: { db: Database }): FastifyPluginAsyncZod => 
   app.get('/v1/webhook/deliveries/:id', { config: { auditRead: true }, schema: { tags: ['webhooks'], summary: 'Get a delivery, including its body', params: z.object({ id: z.coerce.number().int() }), response: { 200: deliveryView.extend({ body: z.string() }), 404: errorBody } } }, async (request) => {
     const [row] = await deps.db.select().from(webhookDeliveries).where(and(eq(webhookDeliveries.tenantId, tenant(request).id), eq(webhookDeliveries.id, request.params.id)))
     if (!row) throw notFound('delivery')
-    return { ...delivery(row), body: row.body }
+    return { ...delivery(row), body: masked(request) ? maskBody(row.body) : row.body }
   })
 
-  app.post('/v1/webhook/deliveries/:id/retry', { schema: { tags: writeTags, summary: 'Retry a dead or pending delivery now', params: z.object({ id: z.coerce.number().int() }), response: { 200: deliveryView, 403: errorBody, 404: errorBody } } }, async (request) => {
+  // Only a dead or pending delivery is sent again (review L5): a delivered event is not repeated, and a
+  // delivery whose personal data was erased (Phase 7 H1) is never sent again.
+  app.post('/v1/webhook/deliveries/:id/retry', { schema: { tags: writeTags, summary: 'Retry a dead or pending delivery now', params: z.object({ id: z.coerce.number().int() }), response: { 200: deliveryView, 403: errorBody, 404: errorBody, 409: errorBody } } }, async (request) => {
     const t = editor(request)
     const [row] = await deps.db
       .update(webhookDeliveries)
       .set({ status: 'pending', nextAttemptAt: new Date() })
-      .where(and(eq(webhookDeliveries.tenantId, t.id), eq(webhookDeliveries.id, request.params.id)))
+      .where(and(eq(webhookDeliveries.tenantId, t.id), eq(webhookDeliveries.id, request.params.id), inArray(webhookDeliveries.status, ['dead', 'pending']), isNull(webhookDeliveries.erasedAt)))
       .returning()
-    if (!row) throw notFound('delivery')
-    return delivery(row)
+    if (row) return delivery(row)
+    const [existing] = await deps.db.select({ status: webhookDeliveries.status, erasedAt: webhookDeliveries.erasedAt }).from(webhookDeliveries).where(and(eq(webhookDeliveries.tenantId, t.id), eq(webhookDeliveries.id, request.params.id)))
+    if (!existing) throw notFound('delivery')
+    if (existing.erasedAt) throw new PlatformError(409, 'delivery_erased', 'the personal data in this delivery was erased; it cannot be sent again')
+    throw new PlatformError(409, 'delivery_not_retryable', `the delivery is ${existing.status}; only dead or pending deliveries can be retried`)
   })
 }

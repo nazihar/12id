@@ -129,6 +129,8 @@ Run from the workstation against **staging** (public genesis + client ports), wi
    - Write each transition transactionally into an `outbox` table: tenant, record id, thread id, state, correlation id.
 
      > **Phase 7 update (2026-09-22, review M7):** as built, each row was a fire-and-forget autocommit. Concurrent inserts could commit out of id order, and the consumer then skipped the late one. All four writers now go through `events/outbox-writer.ts` `insertOutboxRow`, which takes an advisory lock and then inserts, in one transaction. See [`17-phase-7.md`](17-phase-7.md) M7.
+
+     > **Phase 7 update (2026-09-28, review H1):** acknowledged outbox rows are pruned after `OUTBOX_RETENTION_DAYS` (30) by `events/outbox-prune.ts`. New `POST …/credentials|proofs|connections/:id/erase` routes delete finished Credo records with their DIDComm messages, for the platform's erasure and retention. See [`17-phase-7.md`](17-phase-7.md) H1.
    - The Phase 3 platform API consumes the outbox.
 8. **A7 Correlation + wire log.**
    - A correlation id is stored as record metadata at creation, and every log line carries it with `threadId` and `tenantId`.

@@ -29,7 +29,11 @@ export function unwrap<T>(result: { data?: T; error?: unknown; response: Respons
   throw new PlatformCallError(result.response.status, body?.error ?? 'platform_error', body?.reason ?? `platform-api answered ${result.response.status}`)
 }
 
-export function platformFor(principal: Principal, options: { tenantId?: string } = {}) {
+/**
+ * `revealReason` (operators only, Phase 7 H1): platform-api masks personal data for operators unless
+ * a reason is sent; the reason is recorded in its audit log.
+ */
+export function platformFor(principal: Principal, options: { tenantId?: string; revealReason?: string } = {}) {
   const env = serverEnv()
   let tenantId: string | null
   if (principal.role === 'operator') {
@@ -45,5 +49,6 @@ export function platformFor(principal: Principal, options: { tenantId?: string }
     'x-console-role': principal.role,
   }
   if (tenantId) headers['x-console-tenant'] = tenantId
+  if (options.revealReason && principal.role === 'operator') headers['x-console-reveal-reason'] = encodeURIComponent(options.revealReason)
   return createClient<paths>({ baseUrl: env.PLATFORM_API_URL, headers })
 }

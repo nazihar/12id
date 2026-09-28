@@ -86,6 +86,8 @@ export function createBiometricClient(options: BiometricClientOptions) {
     createCheck: (body: CreateCheckBody) => call<{ checkId: string; providerId: string; expiresAt: string }>('POST', '/checks', body),
     getCheck: (checkId: string) => call<CheckResponse>('GET', `/checks/${checkId}`),
     cancelCheck: (checkId: string) => call<void>('DELETE', `/checks/${checkId}`),
+    /** Phase 7 H1: keeps the decision, removes scores, vendor values, hashes and vendor session ids. */
+    eraseCheck: (checkId: string) => call<{ erased: boolean }>('POST', `/checks/${checkId}/erase`),
     startSession: (checkId: string) => call<StartedSession>('POST', `/checks/${checkId}/sessions`),
     completeSession: (sessionId: string, clientOutput: unknown) => call<CompleteSessionResponse>('POST', `/sessions/${sessionId}/complete`, { clientOutput }),
 

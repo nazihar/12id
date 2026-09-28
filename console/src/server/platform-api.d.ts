@@ -611,6 +611,7 @@ export interface paths {
                                 invitationId: string | null;
                                 theirLabel: string | null;
                                 externalId: string | null;
+                                erasedAt: string | null;
                                 /** Format: date-time */
                                 createdAt: string;
                                 /** Format: date-time */
@@ -663,6 +664,7 @@ export interface paths {
                             invitationId: string | null;
                             theirLabel: string | null;
                             externalId: string | null;
+                            erasedAt: string | null;
                             /** Format: date-time */
                             createdAt: string;
                             /** Format: date-time */
@@ -761,6 +763,7 @@ export interface paths {
                                 expiresAt: string;
                                 decidedAt: string | null;
                             } | null;
+                            erasedAt: string | null;
                             /** Format: date-time */
                             createdAt: string;
                             /** Format: date-time */
@@ -891,6 +894,7 @@ export interface paths {
                                     expiresAt: string;
                                     decidedAt: string | null;
                                 } | null;
+                                erasedAt: string | null;
                                 /** Format: date-time */
                                 createdAt: string;
                                 /** Format: date-time */
@@ -962,6 +966,7 @@ export interface paths {
                                 expiresAt: string;
                                 decidedAt: string | null;
                             } | null;
+                            erasedAt: string | null;
                             /** Format: date-time */
                             createdAt: string;
                             /** Format: date-time */
@@ -1085,6 +1090,7 @@ export interface paths {
                                 expiresAt: string;
                                 decidedAt: string | null;
                             } | null;
+                            erasedAt: string | null;
                             /** Format: date-time */
                             createdAt: string;
                             /** Format: date-time */
@@ -1218,6 +1224,7 @@ export interface paths {
                                     expiresAt: string;
                                     decidedAt: string | null;
                                 } | null;
+                                erasedAt: string | null;
                                 /** Format: date-time */
                                 createdAt: string;
                                 /** Format: date-time */
@@ -1292,6 +1299,7 @@ export interface paths {
                                 expiresAt: string;
                                 decidedAt: string | null;
                             } | null;
+                            erasedAt: string | null;
                             /** Format: date-time */
                             createdAt: string;
                             /** Format: date-time */
@@ -1315,6 +1323,372 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/credentials/{id}/erase": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Erase the personal data of a credential exchange
+         * @description Removes the personal data of this credential exchange (its attribute values) everywhere the platform holds it (the exchange record in the agent, webhook delivery bodies, biometric scores) and keeps the record itself with its ids, state and timestamps, so lists and history stay whole. Only finished exchanges (`done`, `abandoned`, `declined`) can be erased; a running one answers 409. Repeating the call is harmless. A `record.erased` webhook follows. The credential in the holder's wallet is not affected.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @description Why the data is erased; recorded in the audit log. Required from operators. */
+                        reason?: string;
+                    } | null;
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            id: string;
+                            state: string;
+                            connectionId: string | null;
+                            threadId: string | null;
+                            externalId: string | null;
+                            credentialDefinitionId: string | null;
+                            attributes: {
+                                [key: string]: string;
+                            } | null;
+                            errorMessage: string | null;
+                            biometric: {
+                                /** @enum {boolean} */
+                                required: true;
+                                /** @enum {string} */
+                                status: "pending" | "passed" | "failed" | "expired" | "cancelled";
+                                attempts: number;
+                                attemptsRemaining: number;
+                                livenessScore: number | null;
+                                matchScore: number | null;
+                                reason: string | null;
+                                /** Format: date-time */
+                                expiresAt: string;
+                                decidedAt: string | null;
+                            } | null;
+                            erasedAt: string | null;
+                            /** Format: date-time */
+                            createdAt: string;
+                            /** Format: date-time */
+                            updatedAt: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/proofs/{id}/erase": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Erase the personal data of a proof exchange
+         * @description Removes the personal data of this proof exchange (its disclosed values) everywhere the platform holds it (the exchange record in the agent, webhook delivery bodies, biometric scores) and keeps the record itself with its ids, state and timestamps, so lists and history stay whole. Only finished exchanges (`done`, `abandoned`, `declined`) can be erased; a running one answers 409. Repeating the call is harmless. A `record.erased` webhook follows. The credential in the holder's wallet is not affected.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @description Why the data is erased; recorded in the audit log. Required from operators. */
+                        reason?: string;
+                    } | null;
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            id: string;
+                            state: string;
+                            connectionId: string | null;
+                            threadId: string | null;
+                            externalId: string | null;
+                            templateId: string | null;
+                            verified: boolean | null;
+                            disclosed: {
+                                [key: string]: {
+                                    [key: string]: string;
+                                };
+                            } | null;
+                            errorMessage: string | null;
+                            biometric: {
+                                /** @enum {boolean} */
+                                required: true;
+                                /** @enum {string} */
+                                status: "pending" | "passed" | "failed" | "expired" | "cancelled";
+                                attempts: number;
+                                attemptsRemaining: number;
+                                livenessScore: number | null;
+                                matchScore: number | null;
+                                reason: string | null;
+                                /** Format: date-time */
+                                expiresAt: string;
+                                decidedAt: string | null;
+                            } | null;
+                            erasedAt: string | null;
+                            /** Format: date-time */
+                            createdAt: string;
+                            /** Format: date-time */
+                            updatedAt: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/connections/{id}/erase": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Erase a connection and every exchange on it
+         * @description Removes the personal data of this connection (the holder's label) and of every credential and proof exchange on it everywhere the platform holds it (the exchange record in the agent, webhook delivery bodies, biometric scores) and keeps the record itself with its ids, state and timestamps, so lists and history stay whole. Only finished exchanges (`done`, `abandoned`, `declined`) can be erased; a running one answers 409. Repeating the call is harmless. A `record.erased` webhook follows. The credential in the holder's wallet is not affected. The agent drops the connection, so the holder can no longer reach this tenant through it. `erasedExchanges` lists the exchanges erased along with it.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @description Why the data is erased; recorded in the audit log. Required from operators. */
+                        reason?: string;
+                    } | null;
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            id: string;
+                            state: string;
+                            invitationId: string | null;
+                            theirLabel: string | null;
+                            externalId: string | null;
+                            erasedAt: string | null;
+                            /** Format: date-time */
+                            createdAt: string;
+                            /** Format: date-time */
+                            updatedAt: string;
+                            erasedExchanges: {
+                                credentials: string[];
+                                proofs: string[];
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -1478,6 +1852,157 @@ export interface paths {
                         "application/json": {
                             error: string;
                             reason: string;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/data-retention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the retention period
+         * @description How long the personal data of a finished exchange is kept before it is scrubbed: credential attribute values, disclosed proof values, webhook delivery bodies and biometric scores. The exchange records themselves stay. Changed in the console.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @description The period in force, in days; 0 = kept until erased on request. */
+                            retentionDays: number;
+                            /** @description The tenant's own setting; null = the platform default applies. */
+                            tenantSetting: number | null;
+                            platformDefault: number;
+                        };
+                    };
+                };
+            };
+        };
+        /** Set the retention period */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @description Days; 0 = keep until erased on request; null = the platform default. */
+                        retentionDays: number | null;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @description The period in force, in days; 0 = kept until erased on request. */
+                            retentionDays: number;
+                            /** @description The tenant's own setting; null = the platform default applies. */
+                            tenantSetting: number | null;
+                            platformDefault: number;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/erasures": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List erasures
+         * @description Erasures made on request, newest first, paged. Scrubs made by the retention period are not listed; the exchange shows `erasedAt`.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    page?: number;
+                    /** @description 25, 50 or 100. */
+                    pageSize?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items: {
+                                id: number;
+                                /** @enum {string} */
+                                recordType: "connection" | "credential" | "proof";
+                                recordId: string;
+                                /** @description `api_key` or `console`. */
+                                via: string;
+                                /** @description The API key id, or the console user id. */
+                                actor: string;
+                                role: string | null;
+                                reason: string | null;
+                                /** Format: date-time */
+                                at: string;
+                            }[];
+                            total: number;
+                            page: number;
+                            pageSize: number;
                         };
                     };
                 };
@@ -2949,7 +3474,7 @@ export interface paths {
                     content: {
                         "application/json": {
                             url: string;
-                            events: ("connection.state_changed" | "credential.state_changed" | "proof.state_changed" | "wallet.sync_requested" | "biometric.check_completed")[] | null;
+                            events: ("connection.state_changed" | "credential.state_changed" | "proof.state_changed" | "wallet.sync_requested" | "biometric.check_completed" | "record.erased")[] | null;
                             /** Format: date-time */
                             createdAt: string;
                             /** Format: date-time */
@@ -2987,7 +3512,7 @@ export interface paths {
                     "application/json": {
                         /** Format: uri */
                         url: string;
-                        events?: ("connection.state_changed" | "credential.state_changed" | "proof.state_changed" | "wallet.sync_requested" | "biometric.check_completed")[];
+                        events?: ("connection.state_changed" | "credential.state_changed" | "proof.state_changed" | "wallet.sync_requested" | "biometric.check_completed" | "record.erased")[];
                     };
                 };
             };
@@ -3000,7 +3525,7 @@ export interface paths {
                     content: {
                         "application/json": {
                             url: string;
-                            events: ("connection.state_changed" | "credential.state_changed" | "proof.state_changed" | "wallet.sync_requested" | "biometric.check_completed")[] | null;
+                            events: ("connection.state_changed" | "credential.state_changed" | "proof.state_changed" | "wallet.sync_requested" | "biometric.check_completed" | "record.erased")[] | null;
                             /** Format: date-time */
                             createdAt: string;
                             /** Format: date-time */
@@ -3163,7 +3688,7 @@ export interface paths {
                     /** @description Created before this instant (ISO 8601). */
                     to?: string;
                     status?: "pending" | "sending" | "delivered" | "dead";
-                    eventType?: "connection.state_changed" | "credential.state_changed" | "proof.state_changed" | "wallet.sync_requested" | "biometric.check_completed";
+                    eventType?: "connection.state_changed" | "credential.state_changed" | "proof.state_changed" | "wallet.sync_requested" | "biometric.check_completed" | "record.erased";
                 };
                 header?: never;
                 path?: never;
@@ -3192,6 +3717,7 @@ export interface paths {
                                 /** Format: date-time */
                                 createdAt: string;
                                 deliveredAt: string | null;
+                                erasedAt: string | null;
                             }[];
                             total: number;
                             page: number;
@@ -3248,6 +3774,7 @@ export interface paths {
                             /** Format: date-time */
                             createdAt: string;
                             deliveredAt: string | null;
+                            erasedAt: string | null;
                             body: string;
                         };
                     };
@@ -3315,6 +3842,7 @@ export interface paths {
                             /** Format: date-time */
                             createdAt: string;
                             deliveredAt: string | null;
+                            erasedAt: string | null;
                         };
                     };
                 };
@@ -3332,6 +3860,18 @@ export interface paths {
                 };
                 /** @description Default Response */
                 404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -3388,6 +3928,7 @@ export interface paths {
                                 id: string;
                                 label: string;
                                 prefix: string;
+                                createdByRole: string | null;
                                 /** Format: date-time */
                                 createdAt: string;
                                 lastUsedAt: string | null;
@@ -3443,6 +3984,7 @@ export interface paths {
                             id: string;
                             label: string;
                             prefix: string;
+                            createdByRole: string | null;
                             /** Format: date-time */
                             createdAt: string;
                             lastUsedAt: string | null;
@@ -3503,6 +4045,7 @@ export interface paths {
                             id: string;
                             label: string;
                             prefix: string;
+                            createdByRole: string | null;
                             /** Format: date-time */
                             createdAt: string;
                             lastUsedAt: string | null;
@@ -4496,7 +5039,7 @@ export interface paths {
                     /** @description Created before this instant (ISO 8601). */
                     to?: string;
                     status?: "pending" | "sending" | "delivered" | "dead";
-                    eventType?: "connection.state_changed" | "credential.state_changed" | "proof.state_changed" | "wallet.sync_requested" | "biometric.check_completed";
+                    eventType?: "connection.state_changed" | "credential.state_changed" | "proof.state_changed" | "wallet.sync_requested" | "biometric.check_completed" | "record.erased";
                     tenantId?: string;
                 };
                 header?: never;
@@ -4526,6 +5069,7 @@ export interface paths {
                                 /** Format: date-time */
                                 createdAt: string;
                                 deliveredAt: string | null;
+                                erasedAt: string | null;
                                 tenantId: string;
                             }[];
                             total: number;

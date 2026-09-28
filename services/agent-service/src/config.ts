@@ -60,6 +60,11 @@ const configSchema = z.object({
   RECONCILE_TTL_MS: z.coerce.number().int().positive().default(24 * 3600 * 1000),
   RECONCILE_INTERVAL_MS: z.coerce.number().int().positive().default(5 * 60 * 1000),
 
+  // Outbox retention (Phase 7 H1): acknowledged rows are deleted this many days after the platform
+  // read them; 0 keeps them forever.
+  OUTBOX_RETENTION_DAYS: z.coerce.number().int().min(0).default(30),
+  OUTBOX_PRUNE_INTERVAL_MS: z.coerce.number().int().positive().default(60 * 60 * 1000),
+
   // Graceful shutdown (T3b): must be shorter than the container's stop grace period.
   DRAIN_DEADLINE_MS: z.coerce.number().int().positive().default(15_000),
 })

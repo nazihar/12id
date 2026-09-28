@@ -21,6 +21,11 @@ export const tenants = pgTable('tenants', {
   lastError: text('last_error'),
   /** Operator override of the per-API-key request limit (review M4); null = RATE_LIMIT_API_KEY_PER_MIN. */
   rateLimitPerMin: integer('rate_limit_per_min'),
+  /**
+   * Days after an exchange finishes before its personal data is scrubbed (Phase 7 H1); null = RETENTION_DAYS,
+   * 0 = keep until erased by request.
+   */
+  retentionDays: integer('retention_days'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [uniqueIndex('tenants_agent_tenant_unique').on(table.agentTenantId)])
@@ -32,6 +37,10 @@ export const apiKeys = pgTable('api_keys', {
   prefix: text('prefix').notNull(),
   keyHash: text('key_hash').notNull(),
   label: text('label').notNull(),
+  /** Who created it through the console (actor id), or 'admin-token'. Null for keys from before Phase 7 H1. */
+  createdBy: text('created_by'),
+  /** The console role at creation: an 'operator' key is flagged to the tenant, which was told by mail. */
+  createdByRole: text('created_by_role'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
@@ -82,6 +91,9 @@ export const connections = pgTable('connections', {
   theirLabel: text('their_label'),
   threadId: text('thread_id'),
   externalId: text('external_id'),
+  /** Personal data scrubbed (Phase 7 H1): by request (`erased_by` names who) or by retention ('retention'). The row stays for history and dashboards. */
+  erasedAt: timestamp('erased_at', { withTimezone: true }),
+  erasedBy: text('erased_by'),
   lastOutboxId: bigint('last_outbox_id', { mode: 'number' }).notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -107,7 +119,15 @@ export const credentials = pgTable('credentials', {
   /** Unqualified cred def id, as offered on the wire. */
   credentialDefinitionId: text('credential_definition_id'),
   attributes: jsonb('attributes').$type<Record<string, string>>(),
+  /**
+   * The mandatory `expiresAt` attribute as a timestamp (Phase 7 H1): a validity date, not personal data,
+   * kept after the attributes are scrubbed so the dashboard's expiry counts stay right.
+   */
+  expiresAt: timestamp('expires_at', { withTimezone: true }),
   errorMessage: text('error_message'),
+  /** Personal data scrubbed (Phase 7 H1): by request (`erased_by` names who) or by retention ('retention'). The row stays for history and dashboards. */
+  erasedAt: timestamp('erased_at', { withTimezone: true }),
+  erasedBy: text('erased_by'),
   lastOutboxId: bigint('last_outbox_id', { mode: 'number' }).notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -118,6 +138,7 @@ export const credentials = pgTable('credentials', {
   // State filter with the fixed list order; external-id contains search (Phase 4 C9).
   index('credentials_tenant_state_created_idx').on(table.tenantId, table.state, table.createdAt.desc(), table.recordId.desc()),
   index('credentials_external_id_trgm_idx').using('gin', table.externalId.op('gin_trgm_ops')),
+  index('credentials_tenant_expires_idx').on(table.tenantId, table.expiresAt).where(sql`${table.state} = 'done'`),
 ])
 
 export const proofs = pgTable('proofs', {
@@ -132,6 +153,9 @@ export const proofs = pgTable('proofs', {
   /** Revealed attributes by group, filled when the exchange reaches `done`. */
   disclosed: jsonb('disclosed').$type<Record<string, Record<string, string>>>(),
   errorMessage: text('error_message'),
+  /** Personal data scrubbed (Phase 7 H1): by request (`erased_by` names who) or by retention ('retention'). The row stays for history and dashboards. */
+  erasedAt: timestamp('erased_at', { withTimezone: true }),
+  erasedBy: text('erased_by'),
   lastOutboxId: bigint('last_outbox_id', { mode: 'number' }).notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -181,6 +205,9 @@ export const webhookDeliveries = pgTable('webhook_deliveries', {
   tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
   eventId: uuid('event_id').notNull().defaultRandom(),
   eventType: text('event_type').notNull(),
+  /** The exchange the event is about (Phase 7 H1), so erasing a record can find its deliveries. */
+  recordType: text('record_type'),
+  recordId: text('record_id'),
   /** The full signed body (envelope), serialised once so retries sign identical bytes. */
   body: text('body').notNull(),
   /** Where the last attempt went. Each attempt posts to the endpoint's current URL (review M8). */
@@ -192,7 +219,10 @@ export const webhookDeliveries = pgTable('webhook_deliveries', {
   lastError: text('last_error'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   deliveredAt: timestamp('delivered_at', { withTimezone: true }),
+  /** Personal data removed from `body` (Phase 7 H1); such a delivery is never sent again. */
+  erasedAt: timestamp('erased_at', { withTimezone: true }),
 }, (table) => [
+  index('webhook_deliveries_record_idx').on(table.tenantId, table.recordId),
   index('webhook_deliveries_due_idx').on(table.nextAttemptAt).where(sql`${table.status} in ('pending', 'sending')`),
   // Delivery lists, newest first (Phase 4 C9): per tenant, and the operator's cross-tenant dead letters.
   index('webhook_deliveries_tenant_created_idx').on(table.tenantId, table.createdAt.desc(), table.id.desc()),
@@ -238,6 +268,8 @@ export const consoleAudit = pgTable('console_audit', {
   route: text('route').notNull(),
   statusCode: integer('status_code').notNull(),
   requestId: text('request_id').notNull(),
+  /** Why: required for an operator's erasure and for revealing personal data (Phase 7 H1). */
+  reason: text('reason'),
 }, (table) => [index('console_audit_at_idx').on(table.at), index('console_audit_tenant_idx').on(table.tenantId, table.at), index('console_audit_actor_idx').on(table.actor, table.at.desc())])
 
 // --- Biometric gate (Phase 6, implement/15-phase-6-biometric.md B3) ------------------------
@@ -287,6 +319,8 @@ export const exchangeGates = pgTable('exchange_gates', {
   holdReachedAt: timestamp('hold_reached_at', { withTimezone: true }),
   decidedAt: timestamp('decided_at', { withTimezone: true }),
   settledAt: timestamp('settled_at', { withTimezone: true }),
+  /** Scores and vendor session ids removed from the gate and its log (Phase 7 H1). */
+  erasedAt: timestamp('erased_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
@@ -298,7 +332,7 @@ export const exchangeGates = pgTable('exchange_gates', {
 export const GATE_EVENT_TYPES = ['gate_created', 'session_started', 'attempt_completed', 'hold_reached', 'issued', 'accepted', 'declined', 'expired', 'cancelled'] as const
 export type GateEventType = (typeof GATE_EVENT_TYPES)[number]
 
-/** The biometric log (append-only): what the console shows next to an exchange. Kept until Phase 7 H1 adds retention. */
+/** The biometric log (append-only): what the console shows next to an exchange. Scores and vendor ids are scrubbed with the exchange (Phase 7 H1). */
 export const exchangeGateEvents = pgTable('exchange_gate_events', {
   id: bigserial('id', { mode: 'number' }).primaryKey(),
   gateId: uuid('gate_id').notNull().references(() => exchangeGates.id),
@@ -319,3 +353,25 @@ export const exchangeGateEvents = pgTable('exchange_gate_events', {
   index('exchange_gate_events_gate_idx').on(table.gateId, table.id),
   uniqueIndex('exchange_gate_events_session_started_unique').on(table.sessionId).where(sql`${table.type} = 'session_started'`),
 ])
+
+export const ERASURE_RECORD_TYPES = ['connection', 'credential', 'proof'] as const
+export type ErasureRecordType = (typeof ERASURE_RECORD_TYPES)[number]
+
+/**
+ * Erasures made on request (Phase 7 H1): who, when, which record and why. Never the data itself.
+ * Retention scrubs are marked on the row (`erased_by = 'retention'`) and are not listed here.
+ */
+export const erasures = pgTable('erasures', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+  recordType: text('record_type', { enum: ERASURE_RECORD_TYPES }).notNull(),
+  recordId: text('record_id').notNull(),
+  /** 'api_key' or 'console'. */
+  via: text('via').notNull(),
+  /** The API key id, or the console user id. */
+  actor: text('actor').notNull(),
+  /** The console role (owner, admin, operator); null for an API key. */
+  role: text('role'),
+  reason: text('reason'),
+  at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [index('erasures_tenant_at_idx').on(table.tenantId, table.at.desc())])

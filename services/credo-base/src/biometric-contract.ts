@@ -137,7 +137,8 @@ export const checkResponse = z.object({
     z.object({
       sessionId: z.string().uuid(),
       attempt: z.number().int(),
-      vendorSessionId: z.string(),
+      /** null once the check was erased (Phase 7 H1). */
+      vendorSessionId: z.string().nullable(),
       status: z.enum(['started', 'completing', 'completed']),
       startedAt: z.string(),
       completedAt: z.string().nullable(),

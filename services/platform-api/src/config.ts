@@ -73,6 +73,9 @@ const configSchema = z.object({
   MEDIATOR_INVITATION_TTL_HOURS: z.coerce.number().int().min(1).default(24),
   /** Messages queued at the mediator longer than this many days are deleted (their holder is gone). */
   MEDIATOR_QUEUE_TTL_DAYS: z.coerce.number().int().min(1).default(30),
+  // Personal data of finished exchanges is scrubbed this many days after they finish (Phase 7 H1);
+  // a tenant may set its own period; 0 keeps it until erased on request.
+  RETENTION_DAYS: z.coerce.number().int().min(0).max(3650).default(90),
   IDEMPOTENCY_TTL_MS: z.coerce.number().int().positive().default(24 * 3600 * 1000),
   /** Graceful shutdown: stop taking work, finish in-flight deliveries, then close (< stop_grace_period). */
   DRAIN_DEADLINE_MS: z.coerce.number().int().positive().default(15_000),

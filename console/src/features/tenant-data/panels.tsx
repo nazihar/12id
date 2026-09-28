@@ -15,12 +15,16 @@ import { DateRangeFilter, MultiFilter, SelectFilter } from '@/components/data-ta
 import { PageHeader } from '@/components/page-header'
 import { RowAction, RowActions } from '@/components/row-action'
 import { StateBadge } from '@/components/state-badge'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { formatDateTime } from '@/lib/format'
 import { type Page, type PageSize, isFiltered, pagingFor, resetFor } from '@/lib/list-search'
 
 import { CreateApiKeyDialog } from './create-api-key-dialog'
+import { EraseAction, type Eraser, StateWithErasure, isFinished } from './data-protection'
 import {
   type ApiKeySearch,
   type DeliverySearch,
@@ -49,13 +53,20 @@ const mono = (value: string | null) => <span className="font-mono text-xs">{valu
 // --- exchanges ----------------------------------------------------------------------------
 
 const connectionColumn = createColumnHelper<DataTableFeatures, ConnectionRow>()
-const connectionColumns = connectionColumn.columns([
-  connectionColumn.accessor('theirLabel', { header: 'Holder label', cell: ({ getValue }) => getValue() ?? '—' }),
-  connectionColumn.accessor('state', { header: 'State', cell: ({ getValue }) => <StateBadge state={getValue()} /> }),
-  connectionColumn.accessor('externalId', { header: 'External id', cell: ({ getValue }) => mono(getValue()) }),
-  connectionColumn.accessor('id', { header: 'Connection', cell: ({ getValue }) => mono(getValue()) }),
-  connectionColumn.accessor('updatedAt', { header: 'Updated', cell: ({ getValue }) => formatDateTime(getValue()) }),
-])
+function connectionColumnsWith(eraser?: Eraser) {
+  return connectionColumn.columns([
+    connectionColumn.accessor('theirLabel', { header: 'Holder label', cell: ({ getValue }) => getValue() ?? '—' }),
+    connectionColumn.accessor('state', { header: 'State', cell: ({ row }) => <StateWithErasure state={row.original.state} erasedAt={row.original.erasedAt} /> }),
+    connectionColumn.accessor('externalId', { header: 'External id', cell: ({ getValue }) => mono(getValue()) }),
+    connectionColumn.accessor('id', { header: 'Connection', cell: ({ getValue }) => mono(getValue()) }),
+    connectionColumn.accessor('updatedAt', { header: 'Updated', cell: ({ getValue }) => formatDateTime(getValue()) }),
+    connectionColumn.display({
+      id: 'actions',
+      header: '',
+      cell: ({ row }) => (eraser && !row.original.erasedAt ? <RowActions><EraseAction kind="connection" id={row.original.id} eraser={eraser} /></RowActions> : null),
+    }),
+  ])
+}
 
 type Biometric = CredentialRow['biometric']
 /** Loads one exchange's biometric log (Phase 6); each read is audited by platform-api. */
@@ -73,10 +84,10 @@ function BiometricCell({ biometric }: { biometric: Biometric }) {
 }
 
 const credentialColumn = createColumnHelper<DataTableFeatures, CredentialRow>()
-function credentialColumnsWith(onLog?: (id: string) => void) {
+function credentialColumnsWith(onLog?: (id: string) => void, eraser?: Eraser) {
   return credentialColumn.columns([
     credentialColumn.accessor('externalId', { header: 'External id', cell: ({ getValue }) => mono(getValue()) }),
-    credentialColumn.accessor('state', { header: 'State', cell: ({ getValue }) => <StateBadge state={getValue()} /> }),
+    credentialColumn.accessor('state', { header: 'State', cell: ({ row }) => <StateWithErasure state={row.original.state} erasedAt={row.original.erasedAt} /> }),
     credentialColumn.accessor('biometric', { header: 'Biometric', cell: ({ getValue }) => <BiometricCell biometric={getValue()} /> }),
     credentialColumn.accessor('credentialDefinitionId', { header: 'Credential definition', cell: ({ getValue }) => mono(getValue()) }),
     credentialColumn.accessor('errorMessage', { header: 'Error', cell: ({ getValue }) => getValue() ?? '' }),
@@ -84,16 +95,16 @@ function credentialColumnsWith(onLog?: (id: string) => void) {
     credentialColumn.display({
       id: 'actions',
       header: '',
-      cell: ({ row }) => (onLog && row.original.biometric ? <RowActions><RowAction label="Biometric log" icon={ScanFaceIcon} onClick={() => onLog(row.original.id)} /></RowActions> : null),
+      cell: ({ row }) => <ExchangeActions kind="credential" row={row.original} onLog={onLog} eraser={eraser} />,
     }),
   ])
 }
 
 const proofColumn = createColumnHelper<DataTableFeatures, ProofRow>()
-function proofColumnsWith(onLog?: (id: string) => void) {
+function proofColumnsWith(onLog?: (id: string) => void, eraser?: Eraser) {
   return proofColumn.columns([
     proofColumn.accessor('externalId', { header: 'External id', cell: ({ getValue }) => mono(getValue()) }),
-    proofColumn.accessor('state', { header: 'State', cell: ({ getValue }) => <StateBadge state={getValue()} /> }),
+    proofColumn.accessor('state', { header: 'State', cell: ({ row }) => <StateWithErasure state={row.original.state} erasedAt={row.original.erasedAt} /> }),
     proofColumn.accessor('biometric', { header: 'Biometric', cell: ({ getValue }) => <BiometricCell biometric={getValue()} /> }),
     proofColumn.accessor('verified', { header: 'Verified', cell: ({ getValue }) => (getValue() === null ? '—' : getValue() ? 'yes' : 'no') }),
     // Attribute names only: disclosed values are personal data.
@@ -102,9 +113,22 @@ function proofColumnsWith(onLog?: (id: string) => void) {
     proofColumn.display({
       id: 'actions',
       header: '',
-      cell: ({ row }) => (onLog && row.original.biometric ? <RowActions><RowAction label="Biometric log" icon={ScanFaceIcon} onClick={() => onLog(row.original.id)} /></RowActions> : null),
+      cell: ({ row }) => <ExchangeActions kind="proof" row={row.original} onLog={onLog} eraser={eraser} />,
     }),
   ])
+}
+
+/** Biometric log (gated exchanges) and erasure (finished, not yet erased exchanges). */
+function ExchangeActions({ kind, row, onLog, eraser }: { kind: ExchangeKind; row: CredentialRow | ProofRow; onLog?: (id: string) => void; eraser?: Eraser }) {
+  const log = onLog && row.biometric ? onLog : undefined
+  const erase = eraser && !row.erasedAt && isFinished(row.state) ? eraser : undefined
+  if (!log && !erase) return null
+  return (
+    <RowActions>
+      {log && <RowAction label="Biometric log" icon={ScanFaceIcon} onClick={() => log(row.id)} />}
+      {erase && <EraseAction kind={kind} id={row.id} eraser={erase} />}
+    </RowActions>
+  )
 }
 
 /** One page of the exchange kind the tab names, as the list server function returns it. */
@@ -116,10 +140,22 @@ const TAB_LABELS: Record<ExchangeTab, string> = { connections: 'Connections', cr
  * Connections, credential exchanges and proof exchanges as three tabs (Phase 4 C9), each paged on
  * the server with its own external-id search, state filter and created-date range in the URL.
  */
-export function ExchangeLists({ data, search, onSearch, fetching, loadBiometricLog }: ListProps<ExchangePage, ExchangeSearch> & { loadBiometricLog?: BiometricLogLoader }) {
+export function ExchangeLists({
+  data,
+  search,
+  onSearch,
+  fetching,
+  loadBiometricLog,
+  eraser,
+}: ListProps<ExchangePage, ExchangeSearch> & {
+  loadBiometricLog?: BiometricLogLoader
+  /** Phase 7 H1: omit when the viewer may not erase personal data. */
+  eraser?: Eraser
+}) {
   const [viewing, setViewing] = useState<{ kind: ExchangeKind; id: string } | null>(null)
-  const credentialColumns = useMemo(() => credentialColumnsWith(loadBiometricLog ? (id) => setViewing({ kind: 'credential', id }) : undefined), [loadBiometricLog])
-  const proofColumns = useMemo(() => proofColumnsWith(loadBiometricLog ? (id) => setViewing({ kind: 'proof', id }) : undefined), [loadBiometricLog])
+  const connectionColumns = useMemo(() => connectionColumnsWith(eraser), [eraser])
+  const credentialColumns = useMemo(() => credentialColumnsWith(loadBiometricLog ? (id) => setViewing({ kind: 'credential', id }) : undefined, eraser), [loadBiometricLog, eraser])
+  const proofColumns = useMemo(() => proofColumnsWith(loadBiometricLog ? (id) => setViewing({ kind: 'proof', id }) : undefined, eraser), [loadBiometricLog, eraser])
   const tab = search.tab ?? 'connections'
   // While another tab loads, the previous tab's rows must not render under the new tab's columns.
   const loading = data.tab !== tab
@@ -297,7 +333,19 @@ export function ApiKeysPanel({
   revokeKey?: (apiKeyId: string) => Promise<unknown>
 }) {
   const columns = keyColumn.columns([
-    keyColumn.accessor('label', { header: 'Label' }),
+    keyColumn.accessor('label', {
+      header: 'Label',
+      cell: ({ row }) => (
+        <span className="flex items-center gap-1.5">
+          {row.original.label}
+          {row.original.createdByRole === 'operator' && (
+            <Badge variant="outline" title="Created by a 12iD operator; your owners were told by mail" data-testid="operator-key-badge">
+              Created by operator
+            </Badge>
+          )}
+        </span>
+      ),
+    }),
     keyColumn.accessor('prefix', { header: 'Key', cell: ({ getValue }) => <span className="font-mono text-xs">{getValue()}…</span> }),
     keyColumn.accessor((row) => (row.revokedAt ? 'revoked' : 'active'), { id: 'status', header: 'Status', cell: ({ getValue }) => <StateBadge state={getValue()} /> }),
     keyColumn.accessor('createdAt', { header: 'Created', cell: ({ getValue }) => formatDateTime(getValue()) }),
@@ -369,10 +417,13 @@ export function DeliveriesPanel({
   fetching,
   invalidateKey,
   loadBody,
+  revealBody,
   retryDelivery,
 }: ListProps<Page<DeliveryRow>, DeliverySearch> & {
   invalidateKey: QueryKey
   loadBody: (deliveryId: number) => Promise<DeliveryDetail>
+  /** Operators (Phase 7 H1): the body comes back masked; this loads it unmasked for a reason, which is audited. */
+  revealBody?: (deliveryId: number, reason: string) => Promise<DeliveryDetail>
   /** Omit when the viewer may not retry. */
   retryDelivery?: (deliveryId: number) => Promise<unknown>
 }) {
@@ -380,7 +431,7 @@ export function DeliveriesPanel({
 
   const columns = deliveryColumn.columns([
     deliveryColumn.accessor('eventType', { header: 'Event' }),
-    deliveryColumn.accessor('status', { header: 'Status', cell: ({ getValue }) => <StateBadge state={getValue()} /> }),
+    deliveryColumn.accessor('status', { header: 'Status', cell: ({ row }) => <StateWithErasure state={row.original.status} erasedAt={row.original.erasedAt} /> }),
     deliveryColumn.accessor('attempts', { header: 'Attempts' }),
     deliveryColumn.accessor((row) => row.lastError ?? (row.lastStatusCode ? `HTTP ${row.lastStatusCode}` : ''), { id: 'lastResult', header: 'Last result' }),
     deliveryColumn.accessor('createdAt', { header: 'Created', cell: ({ getValue }) => formatDateTime(getValue()) }),
@@ -390,7 +441,7 @@ export function DeliveriesPanel({
       cell: ({ row }) => (
         <RowActions>
           <RowAction label="View body" icon={EyeIcon} onClick={() => setViewing(row.original.id)} />
-          {retryDelivery && (row.original.status === 'dead' || row.original.status === 'pending') && <RetryDeliveryAction delivery={row.original} retry={() => retryDelivery(row.original.id)} invalidateKey={invalidateKey} />}
+          {retryDelivery && !row.original.erasedAt && (row.original.status === 'dead' || row.original.status === 'pending') && <RetryDeliveryAction delivery={row.original} retry={() => retryDelivery(row.original.id)} invalidateKey={invalidateKey} />}
         </RowActions>
       ),
     }),
@@ -415,7 +466,7 @@ export function DeliveriesPanel({
           </>
         }
       />
-      <DeliveryBodyDialog deliveryId={viewing} invalidateKey={invalidateKey} loadBody={loadBody} onClose={() => setViewing(null)} />
+      <DeliveryBodyDialog deliveryId={viewing} invalidateKey={invalidateKey} loadBody={loadBody} revealBody={revealBody} onClose={() => setViewing(null)} />
     </section>
   )
 }
@@ -443,7 +494,19 @@ function RetryDeliveryAction({ delivery, retry, invalidateKey }: { delivery: Del
   )
 }
 
-function DeliveryBodyDialog({ deliveryId, invalidateKey, loadBody, onClose }: { deliveryId: number | null; invalidateKey: QueryKey; loadBody: (id: number) => Promise<DeliveryDetail>; onClose: () => void }) {
+function DeliveryBodyDialog({
+  deliveryId,
+  invalidateKey,
+  loadBody,
+  revealBody,
+  onClose,
+}: {
+  deliveryId: number | null
+  invalidateKey: QueryKey
+  loadBody: (id: number) => Promise<DeliveryDetail>
+  revealBody?: (id: number, reason: string) => Promise<DeliveryDetail>
+  onClose: () => void
+}) {
   // Loaded only when opened: the body carries credential attributes and each read is audited.
   const delivery = useQuery({
     queryKey: [...invalidateKey, 'body', deliveryId],
@@ -452,16 +515,24 @@ function DeliveryBodyDialog({ deliveryId, invalidateKey, loadBody, onClose }: { 
     staleTime: 0,
     gcTime: 0,
   })
+  const [reason, setReason] = useState('')
+  const reveal = useMutation({ mutationFn: () => revealBody!(deliveryId as number, reason.trim()) })
+  const shown = reveal.data ?? delivery.data
   let pretty = ''
-  if (delivery.data) {
+  if (shown) {
     try {
-      pretty = JSON.stringify(JSON.parse(delivery.data.body), null, 2)
+      pretty = JSON.stringify(JSON.parse(shown.body), null, 2)
     } catch {
-      pretty = delivery.data.body
+      pretty = shown.body
     }
   }
+  const close = () => {
+    setReason('')
+    reveal.reset()
+    onClose()
+  }
   return (
-    <Dialog open={deliveryId !== null} onOpenChange={(open) => !open && onClose()}>
+    <Dialog open={deliveryId !== null} onOpenChange={(open) => !open && close()}>
       <DialogContent className="max-h-[calc(100svh-2rem)] overflow-y-auto overscroll-contain sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Delivery {deliveryId}</DialogTitle>
@@ -472,6 +543,27 @@ function DeliveryBodyDialog({ deliveryId, invalidateKey, loadBody, onClose }: { 
         ) : (
           <pre className="max-h-96 overflow-auto rounded-md bg-muted p-3 font-mono text-xs">{delivery.isPending ? 'Loading…' : pretty}</pre>
         )}
+        {revealBody && !reveal.data && delivery.data && !delivery.data.erasedAt && (
+          <form
+            noValidate
+            method="post"
+            className="space-y-2"
+            onSubmit={(event) => {
+              event.preventDefault()
+              if (reason.trim().length >= 3) reveal.mutate()
+            }}
+          >
+            <p className="text-sm text-muted-foreground">Personal data is masked for operators. To see it, give the reason: the organisation's request or ticket. The reveal is recorded with the reason in the audit log.</p>
+            <div className="flex gap-2">
+              <Input aria-label="Reason to reveal" value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} placeholder="e.g. ticket 812: debugging a failed delivery" />
+              <Button type="submit" variant="outline" disabled={reason.trim().length < 3 || reveal.isPending}>
+                Reveal
+              </Button>
+            </div>
+            {reveal.error && <p className="text-sm text-destructive">{reveal.error.message}</p>}
+          </form>
+        )}
+        {delivery.data?.erasedAt && <p className="text-sm text-muted-foreground">The personal data in this delivery was erased {formatDateTime(delivery.data.erasedAt)}.</p>}
       </DialogContent>
     </Dialog>
   )

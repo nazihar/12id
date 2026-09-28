@@ -18,11 +18,21 @@ import { containsI, listPage, pageOf, pageQuery, searchQuery } from '../list.ts'
 export const CONSOLE_ONLY_TAG = 'console-only'
 
 const errorBody = z.object({ error: z.string(), reason: z.string() })
-const apiKeyView = z.object({ id: z.string(), label: z.string(), prefix: z.string(), createdAt: z.iso.datetime(), lastUsedAt: z.iso.datetime().nullable(), revokedAt: z.iso.datetime().nullable() })
+const apiKeyView = z.object({
+  id: z.string(),
+  label: z.string(),
+  prefix: z.string(),
+  /** The console role that created the key; 'operator' keys are flagged to the tenant (Phase 7 H1). Null for older keys. */
+  createdByRole: z.string().nullable(),
+  createdAt: z.iso.datetime(),
+  lastUsedAt: z.iso.datetime().nullable(),
+  revokedAt: z.iso.datetime().nullable(),
+})
 const toApiKeyView = (row: typeof apiKeys.$inferSelect) => ({
   id: row.id,
   label: row.label,
   prefix: row.prefix,
+  createdByRole: row.createdByRole,
   createdAt: row.createdAt.toISOString(),
   lastUsedAt: row.lastUsedAt?.toISOString() ?? null,
   revokedAt: row.revokedAt?.toISOString() ?? null,
@@ -41,7 +51,11 @@ export const consoleRoutes = (deps: { db: Database }): FastifyPluginAsyncZod => 
     async (request, reply) => {
       const t = tenant(request)
       const apiKey = generateSecret(API_KEY_PREFIX)
-      const [row] = await deps.db.insert(apiKeys).values({ tenantId: t.id, prefix: lookupPrefix(apiKey), keyHash: hashSecret(apiKey), label: request.body.label }).returning()
+      const principal = t.principal.kind === 'console' ? t.principal : null
+      const [row] = await deps.db
+        .insert(apiKeys)
+        .values({ tenantId: t.id, prefix: lookupPrefix(apiKey), keyHash: hashSecret(apiKey), label: request.body.label, createdBy: principal?.actor ?? null, createdByRole: principal?.role ?? null })
+        .returning()
       return reply.code(201).send({ ...toApiKeyView(row), apiKey })
     }
   )

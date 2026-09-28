@@ -1,6 +1,6 @@
 # SSI Platform — System Architecture and Implementation Plan
 
-**Status:** Design handover document — **revised after Phase 0 (Android pass), Phase 1 (staging infrastructure), Phase 2 (agent services on staging), Phase 3 (platform API on staging), Phase 4 (console) and Phase 5 (Android holder SDK); Phase 6 (biometric gate) on staging with the mock provider**
+**Status:** Design handover document — **revised after Phase 0 (Android pass), Phase 1 (staging infrastructure), Phase 2 (agent services on staging), Phase 3 (platform API on staging), Phase 4 (console) and Phase 5 (Android holder SDK); Phase 6 (biometric gate) on staging with the mock provider; Phase 9 (production) planned 2026-09-28**
 **Audience:** Implementation engineer / coding agent
 **Stack decision:** Credo-TS 0.7 + DIDComm v1 + AnonCreds + Hyperledger Indy
 **Evidence:** every Phase 0 claim below is backed by a run or a source read recorded in [`3-phase-0-findings.md`](3-phase-0-findings.md). The pre-Phase-0 version of this document is kept at [`init.pre-phase0.md`](init.pre-phase0.md).
@@ -77,6 +77,8 @@ Phase 0 ran the stack end to end on Android. Content now falls into these tiers,
 **Not yet tested (Phase 6):**
 - screen-replay (video) attacks; the liveness default of 90 is close to one genuine score (93.2);
 - the Kotlin holder's handling of the `issuance-abandoned` problem report.
+
+**Production planned 2026-09-28 (Phase 9).** [`18-phase-9-production.md`](18-phase-9-production.md) records the production decisions: our own Indy network (§12.1), one VM on `*.12id.com`, file secrets, pulled off-site backups, and prebuilt GHCR images (§12.18). **Confirmed while planning (source read):** von-network is built from fixed test seeds. Its Trustee seed `000000000000000000000000Trustee1` is public, and the client ports have to be public for phones, so anyone can write to the staging ledger as Trustee (`17-phase-7.md` L16). von-network is staging-only.
 
 Phase 0 found that the architecture holds. It also found that **three configuration switches, two holder fork changes and one mediator setting** must all be right, and each fails silently when wrong (§2.7.1, §2.7.4, §2.3). Treat those as load-bearing.
 
@@ -527,7 +529,7 @@ Every step writes a row to the biometric log (`exchange_gate_events`), which the
 | Device (Askar/SQLite) | User's keys, link secret, credentials, connections, cached genesis file | Askar, key in Keychain/Keystore |
 | Indy ledger | DIDs, schemas, cred defs | Public, unencrypted, immutable |
 | Biometric database (Postgres `biometric` on `agent-postgres`) — **planned, Phase 6** | Tenant vendor config; reference images for the ~30-min check window only; sessions; scores and decisions with image hashes | Per-tenant AES-256-GCM (master key in SOPS); images wiped at the decision |
-| Platform database, biometric part — **planned, Phase 6** | Biometric policies; `exchange_gates` and the biometric log `exchange_gate_events` (scores, decisions, AWS session ids, no images) | Standard DB encryption; no automatic deletion until Phase 7 H1 |
+| Platform database, biometric part — **planned, Phase 6** | Biometric policies; `exchange_gates` and the biometric log `exchange_gate_events` (scores, decisions, AWS session ids, no images) | Standard DB encryption; scores and vendor session ids scrubbed with the exchange (retention or request, Phase 7 H1) |
 
 **Never store on the ledger:** personal data, credential attribute values, connection records, presentation records, hashes of personal data.
 
@@ -554,6 +556,12 @@ Because no personal data touches the ledger, the usual "blockchain vs right to e
 
 Write this up once as a customer-facing document — every enterprise customer's legal team will ask.
 
+**Phase 7 update (2026-09-28, H1):** written: [`services/platform-api/docs/data-protection.md`](../services/platform-api/docs/data-protection.md). It describes what is now built:
+- **Retention.** Personal data of finished exchanges is scrubbed after a period, 90 days by default and set per tenant: attribute values, disclosed values, webhook bodies, biometric scores and the Credo exchange records.
+- **Erasure on request**, per exchange or per connection, with a `record.erased` webhook and an erasure log.
+- **Rows are kept** without their personal data, so dashboards and history stay whole.
+- **Operators** see personal data masked unless they give an audited reason.
+
 ---
 
 ## 6. Security notes
@@ -570,7 +578,7 @@ Write this up once as a customer-facing document — every enterprise customer's
 - **No revocation in v1** means a leaked or wrongly issued credential cannot be invalidated before its expiry attribute passes (§4.7).
 - **Biometric data is special-category personal data** (GDPR Art. 9, BIPA; planned, Phase 6):
   - Reference images are encrypted per tenant, kept only for the check window, and wiped at the decision. They are never logged, never in webhooks, never in the console.
-  - The biometric log keeps scores, decisions and AWS session ids with no automatic deletion until Phase 7 H1.
+  - The biometric log keeps scores, decisions and AWS session ids for the tenant's retention period; then, or on an erasure request, the scores and session ids are scrubbed and the decision stays (Phase 7 H1, 2026-09-28).
   - The `biometric` database shares `agent-postgres` but is owned by its own non-superuser role (Phase 7 H3); no other service can connect to it.
   - The pass/fail result is always fetched from the vendor server-side; the device is never trusted to report it.
   - Tenants are the controllers and must collect the end user's consent. Say so in the customer-facing documents.
@@ -947,7 +955,12 @@ Findings and the ordered fix set: [`17-phase-7.md`](17-phase-7.md) §10 (this wa
   9. ✅ M12: nonce CSP. **Done on staging 2026-09-22:** a per-request nonce with `strict-dynamic`; next-themes gets the nonce; `e2e:staging` fails on any violation (0);
   10. ✅ M14: SDK log floor. **Done 2026-09-22:** `minLogLevel` (Info by default) and an https-only `apiBaseUrl`; 44/44 JVM tests, `apiCheck` green; phone smoke not run;
   11. ✅ M16: application alerts. **Done on staging 2026-09-23:** 7 new rules (webhook dead letters and backlog, outbox lag, endorser refusals, edge 5xx, mediator OOB growth, idempotency size), each fired once deliberately; the owner confirms the mails.
-- [ ] **H1:** deletion routes and a retention job.
+- [x] **H1: deletion routes and a retention job. Done on staging 2026-09-28** (`17-phase-7.md` §2 H1):
+  - erase routes per exchange and per connection (scrub, rows kept), a retention job (90 d default, per tenant), `record.erased` and an erasure log;
+  - operator masking with an audited reveal, and flagged operator keys;
+  - the §5.3 customer document;
+  - L5 fixed along the way;
+  - staging probe: 0 matches for the erased values, the agent's Credo records gone; smokes green.
 - **Kept open by the owner:**
   - M13: off-site backups, later (2026-09-22);
   - M17: image tags and CI, in the publishing phase (2026-09-22);
@@ -955,12 +968,28 @@ Findings and the ordered fix set: [`17-phase-7.md`](17-phase-7.md) §10 (this wa
 
 ### Phase 8 — Hardening
 
+Planned in detail as Phase 9 workstream W4 ([`18-phase-9-production.md`](18-phase-9-production.md)). It is part of the go-live gate.
+
 - [ ] Load test the mediator with the real profile: N open wallets each polling every 10 s (`PickUpV1`), plus one webhook per queued message
 - [ ] Failover test: kill one Indy validator, confirm reads and writes continue
 - [ ] Multi-instance mediator: confirm queued messages and webhooks survive instance loss
 - [ ] Key rotation runbook
 - [ ] Disaster recovery: what happens if we lose the Endorser key, a wallet database, the mediator queue
 - [ ] Document the wallet-recovery and no-revocation stories for customers
+
+### Phase 9 — Production — **planned 2026-09-28**
+
+Plan: [`18-phase-9-production.md`](18-phase-9-production.md); evidence (when started): `19-phase-9-production-findings.md`. Decisions: §12.1, §12.18.
+
+- [x] W0: plan recorded; §12.1 decided; §12.18; `17-phase-7.md` L16
+- [ ] W1: close Phase 7. **H1 done 2026-09-28** (and L5); the Low batch and the staging leftovers remain
+- [ ] W2: production-capable infra: per-environment config, file secrets (M11), image-only compose and a release bundle (M17), pulled off-site backups + a second age recipient (M13), `indy-node-container` ledger stack with a genesis ceremony and a trustee-signed endorser bootstrap
+- [ ] W3: Android SDK release (5b): rebuilt wrappers, configurable minisign trust anchor (M15), `maven.12id.com`, CI publishing to GHCR
+- [ ] W4: Phase 8 Hardening (load, failover, key rotation, DR drill)
+- [ ] W5: production bring-up on `*.12id.com` from one release `vX.Y.Z`, pinned by digest
+- [ ] W6: iOS (blocked on a Mac, an Apple developer account and an iPhone)
+- [ ] W7: customer-facing documents (§5.3, no revocation, wallet recovery, §5.2)
+- [ ] Go-live gate: see the plan
 
 ---
 
@@ -1077,7 +1106,17 @@ Findings and the ordered fix set: [`17-phase-7.md`](17-phase-7.md) §10 (this wa
 
 ## 12. Decisions
 
-### 12.1 Indy node count and operators — deferred (Phase 1 decision)
+### 12.1 Indy node count and operators — decided: our own network, 4 nodes on the app VM for now (Phase 9, 2026-09-28)
+
+**Decision (2026-09-28, owner): option (a), full control.** No third-party network.
+- Official `indy-node-container` images.
+- Fresh random node and steward keys from a genesis ceremony; trustee keys kept offline.
+- No TAA on our own network.
+- **All 4 validators run on the production app VM for now.** The keys are secure, but there is no fault tolerance: if the VM is lost, so is the ledger.
+- Moving validators to their own hosts later is a NODE transaction plus a genesis rotation.
+- The production did:indy namespace is ours (proposed `twelveid`).
+
+**von-network is staging-only.** Its genesis comes from public test seeds, so anyone can write as Trustee (§0.1, `17-phase-7.md` L16). It also has an unauthenticated `/register` and no upgrade or backup procedure. Plan: [`18-phase-9-production.md`](18-phase-9-production.md) W2.5, W5.3.
 
 **Status after Phase 1:** deliberately deferred. Staging runs von-network (4 nodes on one VM) behind a signed, versioned genesis URL (`https://genesis.<domain>/v1/pool_transactions_genesis`, minisign-signed). Every agent, tool and (later) the SDK is configured from that URL plus a sha256, so moving to option (a), (b) or (c) below means publishing a new genesis version and updating one pinned URL/hash, not rebuilding components (`infra/runbooks/genesis-rotation.md`). Decide before any production deployment; the §12.9 hedge is already built, so corporate-network blocking no longer gates this decision.
 
@@ -1202,6 +1241,21 @@ An optional liveness + face-match gate on issuance and proof results (§2.8, §4
 | Log retention | No automatic deletion in Phase 6; part of Phase 7 H1 |
 
 Rejected for Phase 6: hosted web capture (weaker against injection; revisit if app releases per vendor switch hurt), 12id-managed vendor accounts, stored per-subject reference images, credential-embedded photos.
+
+### 12.18 Production environment — decided (new, Phase 9 planning, 2026-09-28)
+
+Planned in [`18-phase-9-production.md`](18-phase-9-production.md). Decided by the owner:
+
+| Item | Decision |
+|---|---|
+| Host | One fresh, dedicated VM, self-hosted (no outside vendor), with the same Compose + Caddy stacks as staging. Sized after the Phase 8 load test |
+| Domain | `12id.com` subdomains: `api.`, `agent.`, `mediator.`, `genesis.`, `vdr.`, `maven.`, `console.` (the apex is the marketing site). The mediator and agent hostnames, the genesis URL, the namespace, the endorser DID and the minisign keys are frozen before the first real wallet |
+| Secrets (Phase 7 M11) | Root-only files on disk (`/opt/12id/run-secrets`); services read `*_FILE`; unattended restart after a reboot |
+| Backups (Phase 7 M13) | A backup machine at another site pulls nightly over SSH, read-only to `/opt/12id/backups`, keeping 30 daily + 12 monthly; a second age recipient with its key offline |
+| Images (Phase 7 M17) | Prebuilt by CI only, on GHCR. `sha-<short>` on each merge to main, `X.Y.Z` on a release tag. One platform version for every server image; the SDKs have their own semver. Production pulls `X.Y.Z@sha256:…`; rollback = previous digest |
+| Self-hosting (§12.15) | Production deploys from the same release bundle (image-only compose + env template + `release.env`) a self-hosting customer gets. `init` command and guide in a later packaging phase |
+| SDK trust anchor | Configurable minisign keys in the SDK config; the default is 12id's production keys (primary + backup), compiled in |
+| Go-live gate | H1, Android SDK release (5b), Phase 8 load + DR, iOS (blocked on hardware) |
 
 ## Appendix A — Repository reference
 

@@ -218,6 +218,14 @@ Routes: `/login`, `/2fa`, `/ops` (dashboard since C8; the tenants table until th
   - Ordering and retry-safety: the tenant is created first. If organization creation fails, the tenant page shows "no organization" with a create action. An organization is never created without a tenant id.
 - **Tenant detail (read views through the console scope):**
   - API keys: create (shown once), revoke, last used.
+
+  > **Phase 7 update (2026-09-28, review H1):**
+  > - The exchange lists gain "Erase personal data" (owners and admins; operators with a required reason) and an "erased" badge.
+  > - A **Data protection** page (retention period, erasure log) exists in the portal and in the operator's tenant view.
+  > - Operators see personal data masked, and reveal a delivery body with an audited reason.
+  > - A key created by an operator is flagged, and the owners are mailed.
+  > - Expired Better Auth rows are purged hourly.
+  > - See [`17-phase-7.md`](17-phase-7.md) H1.
   - Catalogue: schemas and credential definitions with **both** unqualified and qualified ids, and status.
   - Templates; connections, credentials and proofs (filters by state, `externalId`; proof `verified` + `disclosed`); wallets.
   - Webhook endpoint; deliveries with body and retry.

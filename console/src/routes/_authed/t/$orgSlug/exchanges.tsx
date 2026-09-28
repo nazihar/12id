@@ -1,12 +1,14 @@
 import { useSuspenseQuery } from '@tanstack/react-query'
+import { useMemo } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 
 import { useListPending } from '@/components/data-table/use-list-pending'
 import { PageHeader } from '@/components/page-header'
 import { RouteError } from '@/components/route-error'
 import { ConnectionInvitationDialog } from '@/features/portal/connection-invitation-dialog'
-import { portalExchangesQuery } from '@/features/portal/portal.queries'
-import { getPortalBiometricLog } from '@/features/portal/portal-data.functions'
+import { portalExchangesQuery, portalKey } from '@/features/portal/portal.queries'
+import { erasePortalRecord, getPortalBiometricLog } from '@/features/portal/portal-data.functions'
+import type { Eraser } from '@/features/tenant-data/data-protection'
 import { type ExchangeSearch, exchangeSearch } from '@/features/tenant-data/list.schemas'
 import { ExchangeLists } from '@/features/tenant-data/panels'
 import { parseListSearch, searchPatcher } from '@/lib/list-search'
@@ -26,14 +28,19 @@ function PortalExchangesPage() {
   const search = Route.useSearch()
   const onSearch = searchPatcher<ExchangeSearch>(Route.useNavigate())
   const { data } = useSuspenseQuery(portalExchangesQuery(orgSlug, search))
+  const canErase = tenantCan(organization.role, { exchange: ['erase'] })
+  const eraser = useMemo<Eraser | undefined>(
+    () => (canErase ? { erase: (kind, id, reason) => erasePortalRecord({ data: { organizationId: organization.id, kind, id, reason } }), reasonRequired: false, invalidateKey: portalKey(orgSlug) } : undefined),
+    [canErase, organization.id, orgSlug]
+  )
   return (
     <div className="space-y-6">
       <PageHeader
         title="Exchanges"
-        description="Connections, credential exchanges and proof exchanges, newest first. Search by your external id, filter by state and creation date. Credential attribute values are not shown."
+        description="Connections, credential exchanges and proof exchanges, newest first. Search by your external id, filter by state and creation date. Credential attribute values are not shown. Erase removes a finished exchange's personal data, or a person's whole connection."
         actions={tenantCan(organization.role, { exchange: ['create'] }) && <ConnectionInvitationDialog organizationId={organization.id} orgSlug={orgSlug} />}
       />
-      <ExchangeLists data={data} search={search} onSearch={onSearch} fetching={useListPending()} loadBiometricLog={(kind, id) => getPortalBiometricLog({ data: { kind, id } })} />
+      <ExchangeLists data={data} search={search} onSearch={onSearch} fetching={useListPending()} loadBiometricLog={(kind, id) => getPortalBiometricLog({ data: { kind, id } })} eraser={eraser} />
     </div>
   )
 }

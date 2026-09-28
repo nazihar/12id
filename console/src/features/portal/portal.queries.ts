@@ -15,8 +15,7 @@ import {
   listPortalDeliveries,
   listPortalExchanges,
   listPortalTemplates,
-  listPortalWallets,
-} from './portal-data.functions'
+  listPortalWallets, getPortalRetention, listPortalErasures } from './portal-data.functions'
 import { listMyOrganizations } from './portal-session.functions'
 
 // Keyed by organization slug: the server functions resolve the tenant from the active organization,
@@ -48,3 +47,8 @@ export const portalMembersQuery = (slug: string, search: MemberSearch = {}) =>
   queryOptions({ queryKey: portalKey(slug, 'members', search), queryFn: () => listMembers({ data: search }), ...list })
 export const portalBiometricsQuery = (slug: string) => queryOptions({ queryKey: portalKey(slug, 'biometrics'), queryFn: () => getPortalBiometrics() })
 export const portalBiometricAdoptionQuery = (slug: string) => queryOptions({ queryKey: portalKey(slug, 'biometrics', 'adoption'), queryFn: () => getPortalBiometricAdoption() })
+
+// Phase 7 H1: the retention period and the erasure log.
+export const portalRetentionQuery = (slug: string) => queryOptions({ queryKey: portalKey(slug, 'data-protection', 'retention'), queryFn: () => getPortalRetention() })
+export const portalErasuresQuery = (slug: string, page = 1) =>
+  queryOptions({ queryKey: portalKey(slug, 'data-protection', 'erasures', page), queryFn: () => listPortalErasures({ data: { page } }), ...list })

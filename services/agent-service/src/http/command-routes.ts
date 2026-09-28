@@ -21,6 +21,8 @@ import {
   getCredentialExchange,
   abandonExchange,
   acceptPresentation,
+  eraseConnection,
+  eraseExchange,
   getProofExchange,
   issueCredential,
   listConnections,
@@ -221,6 +223,18 @@ export const commandRoutes = (deps: CommandDeps): FastifyPluginAsyncZod => async
   )
   app.post('/tenants/:tenantId/proofs/:id/abandon', { schema: { params: exchangeParams, body: abandonBody, response: { 200: transition, 404: errorBody } } }, async (request) =>
     abandonExchange(deps.exchanges, request.params.tenantId, 'proof', request.params.id, request.body.reason)
+  )
+
+  // --- erasure (Phase 7 H1): finished exchanges and connections --------------------
+  const erased = z.object({ id: z.string(), erased: z.boolean() })
+  app.post('/tenants/:tenantId/credentials/:id/erase', { schema: { params: exchangeParams, response: { 200: erased, 409: errorBody } } }, async (request) =>
+    eraseExchange(deps.exchanges, request.params.tenantId, 'credential', request.params.id)
+  )
+  app.post('/tenants/:tenantId/proofs/:id/erase', { schema: { params: exchangeParams, response: { 200: erased, 409: errorBody } } }, async (request) =>
+    eraseExchange(deps.exchanges, request.params.tenantId, 'proof', request.params.id)
+  )
+  app.post('/tenants/:tenantId/connections/:id/erase', { schema: { params: exchangeParams, response: { 200: erased } } }, async (request) =>
+    eraseConnection(deps.exchanges, request.params.tenantId, request.params.id)
   )
 
   // --- outbox feed for the platform API (Phase 3 P0) --------------------------------

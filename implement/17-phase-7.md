@@ -9,6 +9,8 @@
   - A new finding, **K1** (setup routes become console only), was added by owner decision.
   - The §10 order was rewritten.
 - **Kept open by owner decision (2026-09-22):** M13 (off-site backups, later) and M17 (tags and CI, in the publishing phase).
+- **Fixed since: H1 (and L5), on staging 2026-09-28** (§2 H1 status; customer document `services/platform-api/docs/data-protection.md`).
+- **Added 2026-09-28:** L16 (the staging ledger's trustee seed is public), found while planning Phase 9 ([`18-phase-9-production.md`](18-phase-9-production.md)). Phase 9 also closes the owner-held M11, M13 and M17.
 - Everything else is open.
 
 Every finding names its file and line. The evidence marker on each finding says how it was checked:
@@ -27,7 +29,7 @@ Severity is exploitability × impact against the **production** threat model (cu
 
 | ID | Sev | Component | Finding | Effort |
 |---|---|---|---|---|
-| H1 | High | platform-api, agent-service | Personal data is retained forever in five places and there is no deletion path; §5.3 promises one | 2–3 d |
+| H1 | High | platform-api, agent-service | **Done 2026-09-28.** Personal data is retained forever in five places and there is no deletion path; §5.3 promises one | 2–3 d |
 | H2 | High | infra | **Done 2026-09-22.** One shared internal token and a shared Docker network let platform-api call endorser-service directly (undoes §12.10) | 0.5 d |
 | H3 | High | infra | **Done 2026-09-22.** Every service is a Postgres superuser; the endorser store lives in the internet-facing mediator's Postgres with its password | 1 d |
 | K1 | Med | platform-api | **Done 2026-09-22.** *Added 2026-09-22.* Every API key can do everything the console can for its tenant: publish to the ledger, change the webhook URL and secret, edit templates and policy. Setup becomes console only | 0.5 d |
@@ -53,7 +55,7 @@ Severity is exploitability × impact against the **production** threat model (cu
 | L2 | Low | edge | Grafana and the von-network browser are public login/info surfaces | 1 h |
 | L3 | Low | platform-api | **Done 2026-09-24 (Phase 4 C9).** List routes cap at 200 with no cursor; no `(tenant_id, created_at)` index on the three mirror tables | 0.5 d |
 | L4 | Low | platform-api | Offer `attributes` unbounded in count/key/value size inside the 1 MB body; propagates to agent, outbox, webhooks | 1 h |
-| L5 | Low | platform-api | `POST /v1/webhook/deliveries/:id/retry` re-sends already-delivered events | 1 h |
+| L5 | Low | platform-api | **Done 2026-09-28 (with H1).** `POST /v1/webhook/deliveries/:id/retry` re-sends already-delivered events | 1 h |
 | L6 | Low | mediator | The open multi-use startup invitation is still created and printed to logs | 2 h |
 | L7 | Low | mediator | `webhook-sink` debug container runs permanently in the stack | 10 min |
 | L8 | Low | dev machine | `console/.staging/` holds a live staging API key, owner password and TOTP secrets in plaintext (git-ignored) | rotate |
@@ -64,6 +66,7 @@ Severity is exploitability × impact against the **production** threat model (cu
 | L13 | Low | mediator | Valkey runs `noeviction` for what is now a pure cache (streams unused since multi-instance delivery is `none`): it refuses writes instead of evicting when full (§8) | 10 min |
 | L14 | Low | platform-api | Every credential offer and proof request makes an internal HTTP round trip to agent-service for the rarely-changing catalogue; no cache (§8) | 2 h |
 | L15 | Low | platform-api | `GET /v1/ledger` is static config served with no `Cache-Control`, though every SDK installation fetches it (§8) | 10 min |
+| L16 | Low | ledger (staging) | *Added 2026-09-28.* von-network's genesis uses public test seeds (Trustee `000000000000000000000000Trustee1`) and its client ports are public: anyone can write to the staging ledger as Trustee. Staging only; production uses its own network (Phase 9) | with Phase 9 W2 |
 | I1 | Info | agent-service | `isProduction: false` in the Indy VDR network config; production checklist item | — |
 | I2 | Info | edge | `per_ip_limit` exempts all of `10.0.0.0/8` (provider hairpin); harmless on this host, wrong on a multi-tenant provider network | — |
 
@@ -82,6 +85,59 @@ Severity is exploitability × impact against the **production** threat model (cu
 **Impact:** §5.3 tells customers "delete our platform records" answers an erasure request; today nothing can. Every enterprise legal review will ask. Also unbounded table growth.
 **Fix:** (a) `DELETE /v1/credentials/{id}`, `/v1/proofs/{id}`, `/v1/connections/{id}` that scrub `attributes`/`disclosed`, null the delivery bodies for that record, and call a new agent-service route that deletes the Credo exchange record; (b) a tenant-level retention setting (default e.g. 90 d after `done`/`abandoned`) enforced by a nightly job over the mirror tables, `webhook_deliveries` (keep metadata, null the body) and `outbox`; (c) write the customer-facing §5.3 document from what (a)+(b) actually do. Test: unit test per table + a staging run that issues, deletes, and greps every store for the value.
 **Added by Phase 6 (biometric gate):** (a) and (b) must also cover the biometric log. That means platform-api `exchange_gates` and `exchange_gate_events` (scores, decisions, AWS session ids) and biometric-service `checks`, `sessions` and `results`. Phase 6 deliberately ships **no automatic deletion** of these; face images themselves are already deleted at decision time.
+
+**Owner decisions (2026-09-28):**
+- **Scrub, never delete.** The rows stay with their ids, state, dates and external id, so dashboards and history keep adding up.
+- **Default retention 90 days** (`RETENTION_DAYS`, 0 = keep), with an override per tenant in the console.
+- **Who may erase:** API keys, tenant owners and admins, and operators with a required reason. Members may not.
+- **Two additions to the finding:**
+  - operators see personal data **masked**, and a reveal needs a reason, which is audited;
+  - an API key created by an operator is **flagged**, and the tenant's owners get a mail.
+
+**Status (2026-09-28): done on staging.**
+- **Erasure on request.** Three routes, open to an API key or the console:
+  - `POST /v1/credentials/{id}/erase` and `POST /v1/proofs/{id}/erase`, for finished exchanges only (409 otherwise);
+  - `POST /v1/connections/{id}/erase`, the connection plus every exchange on it.
+  - An erasure scrubs, everywhere the platform holds the data:
+    - `attributes`, `disclosed` and `their_label`;
+    - the webhook delivery bodies (pending ones become dead and are never sent);
+    - the gate's scores and vendor session ids.
+  - It also has the agent delete the Credo exchange record with its DIDComm messages (new agent-service `…/erase` routes), and biometric-service erase its copy of the check (new `POST /checks/:id/erase`; migration `0001_erasure` makes the hash and session-id columns nullable).
+  - Every erasure writes a row to the new `erasures` table (who, why, never the data) and sends a `record.erased` webhook. `GET /v1/erasures` lists them.
+  - Code: `platform-api/src/erasure.ts`.
+- **Retention.** `platform-api/src/retention.ts` runs on the sweep timer and scrubs exactly as a request would, marked `erased_by = 'retention'`. It sends no webhook.
+  - The period is `tenants.retention_days`, else `RETENTION_DAYS` (default 90; 0 = keep).
+  - It is set through `GET/PUT /v1/data-retention` (PUT is console only, and members get 403).
+  - agent-service prunes acknowledged outbox rows after `OUTBOX_RETENTION_DAYS` (30).
+  - The console purges expired Better Auth sessions, verification rows and idle rate-limit rows hourly (`console/src/server/data-protection.server.ts`).
+- **The dashboards stay right:** the new column `credentials.expires_at` (backfilled) replaces `attributes->>'expiresAt'` in the expiry counts.
+- **Migration `0009_data_protection`:**
+  - `erased_at`/`erased_by` on the mirror tables;
+  - `record_type`/`record_id` on deliveries (backfilled from the body);
+  - `retention_days`, `erasures`, `console_audit.reason`, `api_keys.created_by(_role)`.
+- **Operator masking.** For the console operator role, platform-api masks attribute values, disclosed values, holder labels and delivery bodies. The `x-console-reveal-reason` header unmasks them and is audited with the reason. The console's delivery dialog has a Reveal form.
+- **Console:**
+  - "Erase personal data" on finished exchanges and connections (owners and admins; operators with a required reason);
+  - an "erased" badge;
+  - a **Data protection** page (retention card and erasure log) in the tenant portal and in the operator's tenant view;
+  - a "Created by operator" badge on keys, with a mail to the owners.
+- **§5.3 customer document:** [`services/platform-api/docs/data-protection.md`](../services/platform-api/docs/data-protection.md). `docs/api.md` gains the erase routes and `record.erased`.
+- **Also fixed:** L5. A retry now requires a dead or pending delivery, and an erased one is never retried (409).
+- **Evidence:**
+  - Tests: platform-api 91/91 (new `data-protection.test.ts`, 10 cases); agent-service 58/58 (new `erase.test.ts`); biometric-service 32/32; console `tsc`, Vitest 29/29, build and `check:client`.
+  - Migration on staging: 63/63 credentials got `expires_at`, and 435/435 exchange and biometric deliveries got their record id.
+  - Staging probe from the internet with an API key, on a fresh `smoke:platform-credo` connection:
+    - the connection erase answered 200 and listed the credential and the proof;
+    - afterwards `attributes`/`disclosed`/`theirLabel` were `null`, with state, `verified` and the external id kept;
+    - three `record.erased` webhooks arrived;
+    - an unknown id answered 404, and `PUT /v1/data-retention` answered 403.
+  - A search of the platform rows and delivery bodies for those records found 0 matches for the values, with 10/10 deliveries scrubbed. The agent answered 404 for all three Credo records.
+  - The operator view on staging was masked, and a reveal was audited with its reason.
+  - `e2e:staging` 3/3, `smoke:platform-credo` PASSED, `smoke:biometric-credo` 18/18.
+- **Not covered:**
+  - backups keep erased data until they rotate out (7 days). The customer document says so;
+  - a restore loses erasures made after the backup (the document says customers repeat them from their `record.erased` webhooks);
+  - the mediator never held personal data in clear.
 
 ### K1 · Medium · API keys hold setup powers the console already covers (added 2026-09-22)
 **Where:** `services/platform-api/src/http/app.ts:133-144` (one customer scope for API keys and the console), `http/auth.ts:91-107` (an API key has no scopes and no expiry). Only three things are console only today: API keys (`routes/console.ts:34`), stats (`routes/stats.ts:188`), and the tenant-wide biometric settings (`routes/biometrics.ts:142-146`).
@@ -521,6 +577,12 @@ Confirm the exact predicate shapes with `auto_explain` / `pg_stat_statements` on
 ### L2 · Low · Grafana and the ledger browser are public
 Grafana has its own login and rate limit; the von-network browser exposes `/status` (node versions, uptime) and all ledger reads. Both are staging-only components, but they will be copied to production unless the runbook says otherwise. Fix: `basic_auth` or an IP allowlist in Caddy for both; production should have neither.
 
+### L16 · Low · The staging ledger's trustee seed is public (added 2026-09-28)
+**Where:** von-network. `phase0/von-network/bin/von_generate_transactions:98` runs `generate_indy_pool_transactions`, which uses fixed test seeds. `manage:922` defaults `LEDGER_SEED` to `000000000000000000000000Trustee1`, and `docs/AddNewNode.md:825` publishes it with DID `V4SGRU86Z58d6TV7PBUe6f`. The client ports 9702–9708 are open to the internet by design, because phones read the ledger.
+**Evidence:** *source read* (2026-09-28, while planning Phase 9). Not exercised against staging.
+**Impact:** anyone can sign ledger writes as Trustee on staging: create stewards and endorsers, publish schemas and credential definitions under any DID, change the pool configuration. It affects staging data only. It rules von-network out for production.
+**Fix:** production runs its own `indy-node-container` network, set up by a genesis ceremony (random seeds, trustee keys offline): [`18-phase-9-production.md`](18-phase-9-production.md) W2.5, `4-init-post-phase-0.md` §12.1. Staging can move to the same tooling after production is up (owner call).
+
 ### L6 · Low · The open startup invitation still exists
 `compose.mediator.yml` `CREATE_NEW_INVITATION: "false"` reuses a **multi-use open-mediation** invitation the image prints at startup; `/invite` is blocked at the edge but the URL is in every replica's log. Fix: patch `index.js` to skip invitation creation when `ADMIN_API_TOKEN` is set, or accept it and restrict log access.
 
@@ -712,8 +774,8 @@ Two cheap adjacent wins while in here: `GET /v1/ledger` returns static, env-deri
 | 10 | ✅ **Done 2026-09-22.** M12: nonce CSP | Playwright CSP spec. **Passed:** `e2e:staging` 3/3 with the CSP guard, 0 violations |
 | 11 | ✅ **Done 2026-09-22.** M14: SDK log floor + https check | JVM tests; `apiDump`. **Passed:** 44/44, `apiCheck` green. Phone smoke not run |
 | 12 | ✅ **Done 2026-09-23.** M16: application alerts (SQL + Caddy metrics) | each fired once. **Passed:** 7 new rules fired to Alertmanager and were restored; 26 rules, 22/22 targets up |
-| 13 | H1: deletion routes + retention job + the §5.3 customer document (2–3 d) | staging issue → delete → grep every store |
-| 14 | L1, L4, L5, L6, L7, L13, L14, L15, I2 | probes / unit tests; `valkey-cli config get maxmemory-policy` returns `allkeys-lru`; one agent-service call per offer instead of two; `curl -I /v1/ledger` shows `Cache-Control` |
+| 13 | ✅ **Done 2026-09-28.** H1: deletion routes + retention job + the §5.3 customer document (2–3 d); plus operator masking and flagged operator keys (owner) | staging issue → delete → grep every store. **Passed:** erase probe over the public API, 0 matches in platform rows and bodies, agent 404 for the Credo records, masked operator view with an audited reveal, `e2e:staging` 3/3, both smokes |
+| 14 | L1, L4, L6, L7, L13, L14, L15, I1, I2 (L5 done with H1) | probes / unit tests; `valkey-cli config get maxmemory-policy` returns `allkeys-lru`; one agent-service call per offer instead of two; `curl -I /v1/ledger` shows `Cache-Control` |
 
 **Order revised 2026-09-22** after the re-validation: K1 added; M5 and the webhook bundle moved up; M7 and M16 given their own rows.
 

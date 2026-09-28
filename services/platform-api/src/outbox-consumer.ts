@@ -16,7 +16,7 @@ import type { AgentClient, OutboxRow } from './agent-client.ts'
 import type { GateEngine } from './biometric/gate.ts'
 import type { Database } from './db/client.ts'
 import { connections, credentials, outboxCursor, proofs, tenants } from './db/schema.ts'
-import { toConnectionView, toCredentialView, toProofView } from './views.ts'
+import { expiryOf, toConnectionView, toCredentialView, toProofView } from './views.ts'
 import { type EndpointLookup, type EventType, enqueueEvent, outboxEventId } from './webhooks/events.ts'
 
 const CURSOR_ID = 'agent'
@@ -72,7 +72,8 @@ export async function applyRow(deps: ConsumerDeps, resolve: TenantResolver, row:
       })
       .returning()
     if (!updated) return null
-    if (row.state === 'completed' && !updated.theirLabel) {
+    // An erased connection (Phase 7 H1) never gets its label back.
+    if (row.state === 'completed' && !updated.theirLabel && !updated.erasedAt) {
       const detail = await deps.agent.getConnection(row.tenantId, row.recordId).catch(() => null)
       if (detail?.theirLabel) {
         updated.theirLabel = detail.theirLabel
@@ -95,13 +96,15 @@ export async function applyRow(deps: ConsumerDeps, resolve: TenantResolver, row:
     if (!updated) return null
     // Offered attributes come from the command path; a row first seen here (or an abandonment
     // reason) is completed from the agent's detail view.
-    if (!updated.credentialDefinitionId || row.state === 'abandoned') {
+    // Erased rows (Phase 7 H1) are never refilled; the agent no longer has the record anyway.
+    if (!updated.erasedAt && (!updated.credentialDefinitionId || row.state === 'abandoned')) {
       const detail = await deps.agent.getCredential(row.tenantId, row.recordId).catch(() => null)
       if (detail) {
         updated.credentialDefinitionId = detail.credentialDefinitionId
         updated.attributes = detail.attributes
         updated.errorMessage = detail.errorMessage
-        await deps.db.update(credentials).set({ credentialDefinitionId: detail.credentialDefinitionId, attributes: detail.attributes, errorMessage: detail.errorMessage }).where(sql`${credentials.tenantId} = ${tenantId} and ${credentials.recordId} = ${row.recordId}`)
+        updated.expiresAt = expiryOf(detail.attributes)
+        await deps.db.update(credentials).set({ credentialDefinitionId: detail.credentialDefinitionId, attributes: detail.attributes, expiresAt: updated.expiresAt, errorMessage: detail.errorMessage }).where(sql`${credentials.tenantId} = ${tenantId} and ${credentials.recordId} = ${row.recordId}`)
       }
     }
     const gate = deps.gates ? await deps.gates.onExchangeState(tenantId, 'credential', row.recordId, row.state) : undefined
@@ -118,7 +121,7 @@ export async function applyRow(deps: ConsumerDeps, resolve: TenantResolver, row:
     })
     .returning()
   if (!updated) return null
-  if (row.state === 'done' || row.state === 'abandoned') {
+  if ((row.state === 'done' || row.state === 'abandoned') && !updated.erasedAt) {
     const detail = await deps.agent.getProof(row.tenantId, row.recordId).catch(() => null)
     if (detail) {
       updated.verified = detail.isVerified

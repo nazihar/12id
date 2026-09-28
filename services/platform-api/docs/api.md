@@ -113,6 +113,18 @@ What happens next:
 
 You are the controller of the reference images and must have the user's consent for the check.
 
+### `record.erased`
+
+Sent after an exchange's or a connection's personal data was erased on request (`data.recordType`, `data.recordId`, `data.erasedAt`, `data.initiator`: `api_key`, `tenant_member` or `operator`). Delete your own copies of that record's data. Erasure by the retention period sends no event.
+
 ## Data protection
 
-No personal data is written to the ledger. The platform stores exchange state and disclosed attributes for your tenant; credentials themselves live only on the holder's device. The mediator sees encrypted messages and their timing only.
+No personal data is written to the ledger. Credentials live only on the holder's device. The mediator sees encrypted messages and their timing only. The platform keeps exchange state and, for the **retention period** (90 days by default, set in the console), the attribute values, disclosed values and webhook bodies; then it erases them automatically. `GET /v1/data-retention` returns the period in force.
+
+To erase on a user's request:
+- `POST /v1/credentials/{id}/erase` or `POST /v1/proofs/{id}/erase` for one finished exchange (409 while it is still running);
+- `POST /v1/connections/{id}/erase` for a person's whole relationship with you: the connection and every exchange on it.
+
+The record stays, with `erasedAt` set and its personal data `null`. `GET /v1/erasures` lists every erasure made on request. Erasing does not invalidate an issued credential: it stays usable until its `expiresAt`.
+
+The full description, for your privacy and legal teams: [`data-protection.md`](data-protection.md).

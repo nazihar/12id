@@ -98,6 +98,9 @@ export function buildBiometricApi(options: BiometricApiOptions) {
     return reply.code(204).send()
   })
 
+  // Erasure (Phase 7 H1): the decision stays, the person's data goes.
+  app.post('/checks/:id/erase', { schema: { params: idParams, response: { 200: z.object({ erased: z.boolean() }) } } }, async (request) => service.eraseCheck(request.params.id))
+
   app.post('/checks/:id/sessions', { schema: { params: idParams, response: { 201: startSessionResponse, ...errors } } }, async (request, reply) =>
     reply.code(201).send(await service.startSession(request.params.id))
   )
