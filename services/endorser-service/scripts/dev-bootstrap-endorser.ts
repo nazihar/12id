@@ -28,6 +28,7 @@ const config = {
   INDY_NAMESPACE: namespace,
   GENESIS_URL: process.env.GENESIS_URL ?? '',
   GENESIS_SHA256: process.env.GENESIS_SHA256 ?? '',
+  INDY_NETWORK_PRODUCTION: false,
   ENDORSER_DID: '',
   ASKAR_STORE_ID: process.env.ASKAR_STORE_ID ?? '',
   ASKAR_STORE_KEY: process.env.ASKAR_STORE_KEY ?? '',

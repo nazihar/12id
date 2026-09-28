@@ -50,7 +50,7 @@ Responses that carry a secret are never stored for replays:
 
 1. In the console: publish the schema and its credential definition (once per credential type/version), set the webhook endpoint, and create proof templates. Your backend reads the result with `GET /v1/credential-definitions` and `GET /v1/proof-templates`.
 2. `POST /v1/wallets` for each app installation; hand `walletToken` to the app.
-3. App/SDK: `GET /v1/ledger` (genesis URL + sha256 + signature), `GET /v1/wallet/mediator-invitation` (once, at first launch). The Android SDK does both itself; see `sdk-android/docs/integration.md`.
+3. App/SDK: `GET /v1/ledger` (genesis URL + sha256 + signature; cacheable for 5 minutes), `GET /v1/wallet/mediator-invitation` (once, at first launch). The Android SDK does both itself; see `sdk-android/docs/integration.md`.
 4. `POST /v1/connections/invitations` → show `invitationUrl` as a link or QR code → `connection.state_changed: completed`.
 5. `POST /v1/credentials/offer` → `credential.state_changed`.
 6. `POST /v1/proofs/request` with a template id → `proof.state_changed: done` with `verified` and `disclosed`.
@@ -61,7 +61,7 @@ Responses that carry a secret are never stored for replays:
 - Predicates (`>=`, `>`, `<=`, `<`) work only on attributes whose values are integers.
 - Every schema must contain `expiresAt` (epoch seconds). **Credentials cannot be revoked in v1**; every proof request automatically checks `expiresAt >= now`, so expiry is how a credential stops being accepted. `expiresAt` can therefore never be disclosed.
 - A schema cannot change. Adding a field means a new version; deprecate the old one to stop new offers while templates referencing the schema by name keep accepting both.
-
+- Size limits on an offer: at most 125 attributes, names up to 100 characters, each value up to 4 KB, and 64 KB for all names and values together (400 otherwise). Credentials are meant for claims, not documents; store a document elsewhere and put its hash or reference in an attribute.
 ## Webhooks
 
 Set the endpoint in the console (https only). The signing secret is shown once, when the endpoint is created or the secret is rotated. `GET /v1/webhook` returns the current URL and event filter. Each event is POSTed as:

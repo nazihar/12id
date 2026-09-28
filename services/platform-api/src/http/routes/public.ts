@@ -21,11 +21,16 @@ export const publicRoutes = (deps: { config: PlatformConfig; readiness: () => Pr
         response: { 200: ledgerView },
       },
     },
-    async () => ({
-      indyNamespace: deps.config.INDY_NAMESPACE,
-      genesis: { url: deps.config.GENESIS_URL, sha256: deps.config.GENESIS_SHA256, signatureUrl: deps.config.GENESIS_SIGNATURE_URL, signingPublicKey: deps.config.GENESIS_SIGNING_PUBLIC_KEY },
-      vdrProxyUrl: deps.config.VDR_PROXY_URL ?? null,
-    })
+    async (_request, reply) => {
+      // Static configuration every SDK installation fetches (review L15). Five minutes matches the
+      // genesis host's `current/` files, so a genesis rotation reaches clients as quickly.
+      reply.header('cache-control', 'public, max-age=300')
+      return {
+        indyNamespace: deps.config.INDY_NAMESPACE,
+        genesis: { url: deps.config.GENESIS_URL, sha256: deps.config.GENESIS_SHA256, signatureUrl: deps.config.GENESIS_SIGNATURE_URL, signingPublicKey: deps.config.GENESIS_SIGNING_PUBLIC_KEY },
+        vdrProxyUrl: deps.config.VDR_PROXY_URL ?? null,
+      }
+    }
   )
 
   app.get('/v1/health', { schema: { tags: ['ledger'], summary: 'Service health', response: { 200: z.object({ status: z.literal('ok') }), 503: z.object({ status: z.literal('degraded') }) } } }, async (_request, reply) => {

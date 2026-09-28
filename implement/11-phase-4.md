@@ -208,6 +208,11 @@ Rules on top:
 - **Tenant members:** `tenantId` comes from the org's `platformTenantId`, never from input. Operators pass `tenantId` explicitly, and `operatorMiddleware` checks the role.
 - **2FA:** Better Auth enables it per user, so `authMiddleware` enforces it globally. Operators must use TOTP, so an operator whose only method is email OTP is sent to setup.
 - **Sessions:** operators 12 h, no trusted devices; members 7 days with 24 h refresh, trusted device allowed. "Sign out all sessions" is available.
+  > **Phase 7 update (2026-09-28, review L11, owner decision):**
+  > - Seven days was a security concern. **Every session now ends 24 h after sign-in**, and activity does not extend it. Operators keep 12 h.
+  > - `authMiddleware` checks both caps on every call (`lib/permissions.ts` `sessionExpired`), so sessions issued under the old rule were cut too. Better Auth runs `expiresIn` 24 h with `disableSessionRefresh`.
+  > - The console never set a trusted-device cookie, so every sign-in asks for the second factor.
+  > - See [`17-phase-7.md`](17-phase-7.md) L11.
 
 ### C3 — Stage 4a: operator console
 Routes: `/login`, `/2fa`, `/ops` (dashboard since C8; the tenants table until then), `/ops/tenants` (C8), `/ops/tenants/$id/*`, `/ops/operators`, `/ops/audit`.

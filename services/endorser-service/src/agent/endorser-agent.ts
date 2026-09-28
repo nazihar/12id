@@ -34,7 +34,7 @@ export async function createEndorserAgent(config: EndorserServiceConfig, logger:
       }),
       indyVdr: new IndyVdrModule({
         indyVdr,
-        networks: [{ isProduction: false, indyNamespace: config.INDY_NAMESPACE, genesisTransactions, connectOnStartup: true }],
+        networks: [{ isProduction: config.INDY_NETWORK_PRODUCTION, indyNamespace: config.INDY_NAMESPACE, genesisTransactions, connectOnStartup: true }],
       }),
       dids: new DidsModule({ resolvers: [new IndyVdrIndyDidResolver()] }),
     },

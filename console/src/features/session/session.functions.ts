@@ -6,7 +6,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getCookie, getRequestHeaders, setResponseHeader } from '@tanstack/react-start/server'
 
-import { OPERATOR_ROLE, hasPlatformRole, operatorSessionExpired } from '@/lib/permissions'
+import { OPERATOR_ROLE, hasPlatformRole, sessionExpired } from '@/lib/permissions'
 import { auth } from '@/server/auth.server'
 
 export type Viewer = {
@@ -22,9 +22,9 @@ export const getViewer = createServerFn({ method: 'GET' }).handler(async (): Pro
   setResponseHeader('Cache-Control', 'no-store')
   const session = await auth.api.getSession({ headers: getRequestHeaders() })
   if (!session) return null
-  // The operator session cap is ours, not Better Auth's: without this the cookie still looks valid to
-  // the guards and every page would render, only for its server functions to refuse.
-  if (hasPlatformRole(session.user.role, OPERATOR_ROLE) && operatorSessionExpired(session.session.createdAt)) return null
+  // The session caps are ours, not Better Auth's: without this the cookie still looks valid to the
+  // guards and every page would render, only for its server functions to refuse.
+  if (sessionExpired(session.user.role, session.session.createdAt)) return null
   return {
     userId: session.user.id,
     name: session.user.name,

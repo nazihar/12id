@@ -103,6 +103,7 @@ Run from the workstation against **staging** (public genesis + client ports), wi
 2. **A1 Agent factory.**
    - Config from env, validated with zod.
    - Root agent: Askar Postgres, IndyVdr, AnonCreds, tenants, and DidCommModule with v1-only protocols, did:sov prefix, `autoAcceptConnections` on, credential/proof auto-accept **off** (the platform decides).
+     > **Phase 7 update (2026-09-28, review I1, L4):** the IndyVdr network's `isProduction` was hard-coded `false`, here and in endorser-service. Both now read `INDY_NETWORK_PRODUCTION` (default `false`; production sets `true`). The offer command also bounds `values` with the shared `@12id/credo-base/credential-values.ts` schema: 125 attributes, 100-character names, 4 KB values and 64 KB in all. See [`17-phase-7.md`](17-phase-7.md) I1, L4.
    - HTTP inbound plus HTTP+WS outbound.
    - `provision.ts` runs as a separate init job.
 3. **A2 Internal API (Fastify).**

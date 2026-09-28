@@ -705,7 +705,7 @@ export interface paths {
         put?: never;
         /**
          * Offer a credential
-         * @description Asynchronous. Returns the exchange immediately in state `offer-sent`; `credential-issued` means the holder received it, `done` that it acknowledged. Attribute values are strings; `expiresAt` is epoch seconds as a string and must be in the future. `credentialDefinitionId` accepts the catalogue id or the ledger id.
+         * @description Asynchronous. Returns the exchange immediately in state `offer-sent`; `credential-issued` means the holder received it, `done` that it acknowledged. Attribute values are strings; `expiresAt` is epoch seconds as a string and must be in the future. At most 125 attributes, names up to 100 characters, values up to 4 KB, and 64 KB in all. `credentialDefinitionId` accepts the catalogue id or the ledger id.
          */
         post: {
             parameters: {

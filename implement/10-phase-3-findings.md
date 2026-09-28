@@ -134,7 +134,7 @@ Housekeeping: the three smoke API keys were revoked after the runs; the SSH tunn
 | `POST https://mediator.<domain>/admin/invitations` from the internet | **404** (edge) |
 | Same route from platform-api (Docker network, token) | 200, `{ outOfBandId, invitationUrl }` |
 | Both replicas after the roll | healthy; only the benign Askar "Duplicate entry" provisioning line |
-| Startup invitation | unchanged; still only in logs |
+| Startup invitation | unchanged; still only in logs. *Phase 7 update (2026-09-28, review L6): gone. Image `-p6` neither creates nor logs it while `ADMIN_API_TOKEN` is set, and deleted the two old ones; see [`17-phase-7.md`](17-phase-7.md) L6* |
 
 The route is added to the built `apps/mediator/build/agent.js` after the `/invite` route (`infra/staging/mediator/patch/agent.js`, 23 lines). It uses the same `createInvitation` options as the startup invitation (`goalCode`, `goal`), with `multiUseInvitation: false`. There is no expiry on OOB records: an unused invitation stays valid on the mediator until used; the platform only hands each one out once and replaces it on the next call.
 

@@ -27,6 +27,12 @@ describe('loadConfig', () => {
     assert.deepEqual(config.AGENT_ROLES, ['issuer', 'verifier'])
     assert.equal(config.PROCESS_MESSAGES_CONCURRENTLY, false)
     assert.equal(config.DRAIN_DEADLINE_MS, 15_000)
+    assert.equal(config.INDY_NETWORK_PRODUCTION, false)
+  })
+
+  it('takes isProduction for the Indy network from the environment (review I1)', () => {
+    assert.equal(loadConfig({ ...valid, INDY_NETWORK_PRODUCTION: 'true' }).INDY_NETWORK_PRODUCTION, true)
+    assert.throws(() => loadConfig({ ...valid, INDY_NETWORK_PRODUCTION: 'maybe' }), /INDY_NETWORK_PRODUCTION/)
   })
 
   it('rejects namespaces Credo cannot parse', () => {

@@ -126,6 +126,12 @@ Based on `phase0/mediator/docker-compose.yml`; every §2.3 setting carries over.
 - `webhook-sink`: a tiny container that logs every POST with a timestamp.
 - `PUSH_NOTIFICATIONS__WEBHOOK_URL` points at it over the internal Docker network only.
 
+> **Phase 7 update (2026-09-28, review L6, L7, L13):**
+> - `CREATE_NEW_INVITATION` no longer matters: image `-p6` creates **no startup invitation** while `ADMIN_API_TOKEN` is set, and on its first start it deleted the two reusable ones left from 2026-09-13. Holders connect only through the platform's single-use invitations. Tools mint one with `infra/scripts/mediator-invitation.sh`.
+> - `webhook-sink` is in `profiles: [debug]` and no longer runs.
+> - Valkey is a cache only (multi-instance delivery stayed `none`), so it now runs `allkeys-lru` instead of `noeviction`.
+> - See [`17-phase-7.md`](17-phase-7.md) L6, L7, L13.
+
 > **Phase 7 update (2026-09-22, review H3):** the mediator no longer connects as `postgres`. Its own non-superuser role `mediator` owns `drizzle`, `message_pickup` and `mediator` only. The `endorser` store no longer lives on this instance: it moved to `agent-postgres`. Evidence: [`infra/runbooks/postgres-roles.md`](../infra/runbooks/postgres-roles.md). See [`17-phase-7.md`](17-phase-7.md) H3.
 
 ### W5 — Mediator verification matrix (the Phase 1 evidence)
@@ -145,6 +151,7 @@ Pin the resulting mode: expected **multi-instance redis**, since it gives both H
 ### W6 — Mediator abuse controls (Phase 1 portion of §2.3)
 - **Rate limiting** at the edge: per-IP limits on WS upgrades and POSTs. Needs a Caddy build with the `caddy-ratelimit` module (xcaddy); pin that image.
 - **Never expose the startup invitation.** It only appears in logs; ship logs to a restricted location.
+  > **Phase 7 update (2026-09-28, review L6):** it no longer exists. The `-p6` mediator neither creates nor logs it while `ADMIN_API_TOKEN` is set, and deleted the old ones. See [`17-phase-7.md`](17-phase-7.md) L6.
 - **Alerting** on mediation-record creation rate via a postgres_exporter custom query (see W7).
 - **Design note** (not built): per-user invitation gating is Phase 3 (`GET /mediator/invitation`).
   - Record the constraint: issuers must reach the same endpoint unauthenticated to forward, and payloads are encrypted, so a proxy cannot tell a mediation request from a forward.

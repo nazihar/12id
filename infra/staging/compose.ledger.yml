@@ -37,10 +37,12 @@ services:
   # inbound transport and reaches the mediator through the public wss:// URL, so the whole
   # TLS edge is exercised.
   #
-  #   MEDIATOR_INVITATION_URL=<from mediator logs> EXTRA_SECRETS=agent \
+  #   MEDIATOR_INVITATION_URL="$(infra/scripts/mediator-invitation.sh)" EXTRA_SECRETS=agent \
   #     infra/scripts/deploy.sh ledger run --rm smoke-credo
   #
-  # (EXTRA_SECRETS is only needed because this file's other service interpolates secrets.)
+  # (EXTRA_SECRETS is only needed because this file's other service interpolates secrets.) The
+  # mediator no longer logs a startup invitation (-p6, Phase 7 review L6); the script mints a
+  # single-use one.
   smoke-credo:
     image: 12id/ledger-tools:credo-0.7.0
     build: ../ledger

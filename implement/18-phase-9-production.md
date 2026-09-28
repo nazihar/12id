@@ -60,7 +60,19 @@ W2, W3 and W5 can partly run in parallel. W6 waits on hardware.
 ### W1 — Close Phase 7 (on staging) — ~4 d
 > **Status 2026-09-28: H1 done on staging, with L5.**
 > - Owner decisions: scrub, never delete; 90-day default retention; operators masked, with an audited reveal; operator-created keys flagged. Evidence in `17-phase-7.md` §2 H1.
-> - Left in W1: the Low batch (L1, L4, L6, L7, L13, L14, L15, I1, I2) and the staging leftovers.
+>
+> **Status 2026-09-28 (later): the Low batch is done on staging.** L1, L4, L6, L7, L13, L14, L15, I1 and I2 are done; each has its evidence in `17-phase-7.md`, with the summary in §10 row 14.
+> - Staging leftovers:
+>   - `AGENT_INTERNAL_TOKEN` is removed from `agent.sops.env` (VM and repo);
+>   - the owner's `CONSOLE_TOKEN` is back in the VM's `platform.sops.env`, which matches the repo.
+> - **Left in W1:**
+>   - drop the old `endorser` database on the mediator instance, not before 2026-09-29;
+>   - the owner's call on L10, which is half a day, so it is not "cheap".
+> - **L11 done the same day (owner decision: 7 days is a security concern).** Every console session now ends 24 h after sign-in, and operators keep 12 h. Activity does not extend a session. `e2e:staging` passed 3/3.
+> - **Found on staging while verifying.** Neither was caused by the Low batch; both were firing before it:
+>   - **`indy-vdr-proxy` does not recover from a failed pool start.** It logged `Pool timeout` and hung on every request from 2026-09-27 12:48 until a manual `docker restart`. `EndpointDown` fired all that time. For W2: give it a healthcheck on `/genesis` and a restart policy that acts on it (for example autoheal, or a probe that exits).
+>   - **cAdvisor's `/metrics` takes more than 20 s**, so `TargetDown` has flapped since about 2026-09-26 23:58. Not investigated; the container reports healthy.
+>   - `WebhookBacklogStuck` was 5 `record.erased` deliveries from the H1 staging test. They went to the biometric smoke tenant's URL, which answers 502 unless a smoke is running. They go dead on their own after 12 attempts, so this is expected on staging.
 >
 > The plan as written:
 

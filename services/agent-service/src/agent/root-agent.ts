@@ -65,7 +65,7 @@ function tenantModules(config: AgentServiceConfig, genesisTransactions: string, 
     indyVdr: new IndyVdrModule({
       indyVdr,
       networks: [
-        { isProduction: false, indyNamespace: config.INDY_NAMESPACE, genesisTransactions, connectOnStartup: true },
+        { isProduction: config.INDY_NETWORK_PRODUCTION, indyNamespace: config.INDY_NAMESPACE, genesisTransactions, connectOnStartup: true },
       ],
     }),
     anoncreds: new AnonCredsModule({ anoncreds, registries: [new IndyVdrAnonCredsRegistry()] }),

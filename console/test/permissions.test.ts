@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { OPERATOR_ROLE, hasPlatformRole, platformRoles, tenantRoles } from '../src/lib/permissions'
+import { OPERATOR_ROLE, hasPlatformRole, platformRoles, sessionExpired, tenantRoles } from '../src/lib/permissions'
 
 type TenantRequest = Parameters<(typeof tenantRoles)['member']['authorize']>[0]
 
@@ -33,5 +33,24 @@ describe('platform roles', () => {
     expect(hasPlatformRole('user, operator', OPERATOR_ROLE)).toBe(true)
     expect(hasPlatformRole('operators', OPERATOR_ROLE)).toBe(false)
     expect(hasPlatformRole(null, OPERATOR_ROLE)).toBe(false)
+  })
+})
+
+describe('session caps (review L11)', () => {
+  const hour = 60 * 60 * 1000
+  const now = Date.parse('2026-09-28T12:00:00Z')
+  const signedIn = (hoursAgo: number) => new Date(now - hoursAgo * hour)
+
+  it('ends every session 24 h after sign-in, and an operator session after 12 h', () => {
+    expect(sessionExpired('user', signedIn(23.9), now)).toBe(false)
+    expect(sessionExpired('user', signedIn(24.1), now)).toBe(true)
+    expect(sessionExpired(null, signedIn(24.1), now)).toBe(true)
+    expect(sessionExpired(OPERATOR_ROLE, signedIn(11.9), now)).toBe(false)
+    expect(sessionExpired(OPERATOR_ROLE, signedIn(12.1), now)).toBe(true)
+    expect(sessionExpired('user,operator', signedIn(12.1), now)).toBe(true)
+  })
+
+  it('cuts sessions issued under the old 7-day setting', () => {
+    expect(sessionExpired('user', signedIn(6 * 24).toISOString(), now)).toBe(true)
   })
 })

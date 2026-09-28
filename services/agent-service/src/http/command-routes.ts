@@ -32,6 +32,7 @@ import {
 import { type OnboardingDeps, createTenantRecord, onboardTenant } from '../tenants/onboarding.ts'
 import { EndorsementRefusedError } from '../endorser/endorser-client.ts'
 import { type OutboxDeps, outboxRoutes } from './outbox-routes.ts'
+import { credentialValuesSchema } from '@12id/credo-base/credential-values.ts'
 import { WireIdentifierError } from '@12id/credo-base/ids.ts'
 
 export interface CommandDeps {
@@ -161,7 +162,7 @@ export const commandRoutes = (deps: CommandDeps): FastifyPluginAsyncZod => async
     {
       schema: {
         params: tenantParams,
-        body: z.object({ connectionId: z.string().min(1), credentialDefinitionObjectId: z.uuid(), values: z.record(z.string(), z.string()), correlationId: correlation, hold: z.boolean().optional() }),
+        body: z.object({ connectionId: z.string().min(1), credentialDefinitionObjectId: z.uuid(), values: credentialValuesSchema, correlationId: correlation, hold: z.boolean().optional() }),
         response: { 202: z.object({ credentialExchangeId: z.string(), threadId: z.string(), state: z.string() }), 400: errorBody, 404: errorBody, 409: errorBody },
       },
     },

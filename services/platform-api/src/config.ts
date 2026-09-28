@@ -16,6 +16,8 @@ const configSchema = z.object({
   /** agent-service internal API (Phase 2 D2), on the private Docker network. */
   AGENT_API_URL: z.url(),
   AGENT_API_TOKEN: secret,
+  /** Reuse a tenant's catalogue for offers and proof requests this long (review L14); 0 turns it off. */
+  CATALOGUE_CACHE_MS: z.coerce.number().int().min(0).max(10 * 60 * 1000).default(30_000),
 
   /** Mediator admin route (patched image, P1) and read-only access to its Drizzle database (P7). */
   MEDIATOR_ADMIN_URL: z.url(),

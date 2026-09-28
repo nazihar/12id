@@ -586,6 +586,10 @@ Everything listens on `127.0.0.1`; only Grafana is published, through Caddy.
 **Rate limiting.**
 - **Image:** stock Caddy has no rate limiting. `infra/staging/caddy/Dockerfile` builds `12id/caddy-ratelimit:2.11.4` with `github.com/mholt/caddy-ratelimit@5625512f24f6f59d6f64fb3aafe5eecff0b286db`. Only an old `v0.1.0` tag exists, so it is pinned to a commit. The build took 417 s, and `caddy list-modules` shows `http.handlers.rate_limit`.
 - **Rules:** a `per_ip_limit` snippet keyed on `{remote_host}` with a 1-minute window: 300 events on `mediator.`, 120 on `vdr.`. It exempts `10.0.0.0/8` and loopback, because agents on the VM reach the edge by hairpin from the provider gateway `10.1.1.1` (W1) and would otherwise share one bucket. Thresholds are placeholders; a PickUpV1 holder polls over a single WebSocket, which Caddy counts once.
+  > **Phase 7 update (2026-09-28, review I2, L1):**
+  > - The exemption is narrowed to `10.1.1.1/32`: on a provider network, other customers share the rest of `10.0.0.0/8`. After the change the smokes passed and the edge counted 0 responses with status 429.
+  > - The `hardening` snippet now sends HSTS with `includeSubDomains; preload` and strips `X-Powered-By`. A `handle_errors` block gives Caddy's own errors (404, 413, 429, 502) the same headers, so `Server: Caddy` is gone everywhere.
+  > - See [`17-phase-7.md`](17-phase-7.md) L1, I2.
 - **Validation:** the candidate Caddyfile reports `Valid configuration` on the new image. The same file on stock `caddy:2.11.4` fails with `rate_limit is not a registered directive`, so **the image and the Caddyfile must switch together**; reloading the live stock container with the new file would take the edge down.
 
 **Mediation-record alert.** A second postgres-exporter (`127.0.0.1:9188`) queries `drizzle."DidcommMediation"`. Against the live database it returned `granted | 7 records | 1 created in the last hour`; that one is the phone registering during `smoke:android`. `MediationRequestSpike` fires above 100 new records per hour, a placeholder. Candidate config: `promtool` reports 14 rules, and `compose config` lists 8 services.

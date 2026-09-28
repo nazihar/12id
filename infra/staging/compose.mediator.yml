@@ -19,8 +19,9 @@ name: mediator
 # POST /admin/invitations route the platform API uses for per-wallet invitations (Phase 3 P1),
 # a 512 KiB WebSocket message cap (-p3, Phase 7 review M1), and indexable containment queries in
 # drizzle-storage (-p4, Phase 7 review M18; the indexes come from the mediator-indexes job below),
-# and admin housekeeping routes for the platform sweep (-p5, Phase 7 review M4, M10).
-x-mediator-image: &mediator-image 12id/mediator:375518d-p5
+# admin housekeeping routes for the platform sweep (-p5, Phase 7 review M4, M10), and no open startup
+# invitation while ADMIN_API_TOKEN is set (-p6, Phase 7 review L6).
+x-mediator-image: &mediator-image 12id/mediator:375518d-p6
 
 x-mediator-env: &mediator-env
   LOG_LEVEL: ${MEDIATOR_LOG_LEVEL:-info}
@@ -31,7 +32,8 @@ x-mediator-env: &mediator-env
   # WebSocket FIRST: the holder handshakes over the first advertised service.
   # At least one http(s) URL is required or the mediator refuses to start.
   AGENT_ENDPOINTS: wss://mediator.12id.naziharitsolution.com,https://mediator.12id.naziharitsolution.com
-  # Stable invitation across restarts. It is printed to the logs only; never publish it.
+  # Upstream: a stable startup invitation across restarts, printed to the logs. Ignored since -p6:
+  # with ADMIN_API_TOKEN set (below) there is no startup invitation at all (Phase 7 review L6).
   CREATE_NEW_INVITATION: "false"
 
   STORAGE__TYPE: drizzle
@@ -105,8 +107,10 @@ services:
     image: valkey/valkey:8-alpine
     restart: unless-stopped
     mem_limit: 256m
-    # Delivery uses streams; evicting them would drop messages.
-    command: ['valkey-server', '--maxmemory', '200mb', '--maxmemory-policy', 'noeviction', '--appendonly', 'yes']
+    # Only Credo's cache lives here: multi-instance delivery is `none`, so no Redis streams carry
+    # messages (the queue is Postgres). A full cache should evict, not refuse the mediator's writes
+    # (Phase 7 review L13). Revisit if delivery ever moves to `redis` (it cannot today, see above).
+    command: ['valkey-server', '--maxmemory', '200mb', '--maxmemory-policy', 'allkeys-lru', '--appendonly', 'yes']
     volumes:
       - valkeydata:/data
     healthcheck:
@@ -194,10 +198,14 @@ services:
       mediator-1:
         condition: service_healthy
 
-  # Logs every webhook the mediator sends, with a timestamp (evidence for W5 M2-M4).
+  # Logs every webhook the mediator sends, with a timestamp (evidence for W5 M2-M4). A debugging aid
+  # with no authentication, so it only runs on request (Phase 7 review L7):
+  #   infra/scripts/deploy.sh mediator --profile debug up -d webhook-sink
+  # then point MEDIATOR_WEBHOOK_URL at http://webhook-sink:8080/mediator, and stop it afterwards.
   webhook-sink:
+    profiles: [debug]
     image: node:22-alpine
-    restart: unless-stopped
+    restart: 'no'
     mem_limit: 64m
     command:
       - node

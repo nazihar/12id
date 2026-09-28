@@ -52,6 +52,7 @@ export const testConfig: PlatformConfig = {
   DATABASE_URL: TEST_DATABASE_URL,
   AGENT_API_URL: 'http://agent.test',
   AGENT_API_TOKEN: 'a'.repeat(40),
+  CATALOGUE_CACHE_MS: 0,
   MEDIATOR_ADMIN_URL: 'http://mediator.test',
   MEDIATOR_ADMIN_TOKEN: 'm'.repeat(40),
   MEDIATOR_DRIZZLE_URL: TEST_DATABASE_URL,

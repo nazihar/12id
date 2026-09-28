@@ -153,7 +153,8 @@ export async function createAgent() {
     });
     // Deletes single-use invitations nobody accepted within `invitationsOlderThanHours` (the platform
     // mints one per wallet and they never expire), and queued messages older than
-    // `queuedOlderThanDays` (their holder is gone). The reusable startup invitation is kept.
+    // `queuedOlderThanDays` (their holder is gone). Reusable invitations are skipped; with the -p6
+    // index.js none exist while ADMIN_API_TOKEN is set (Phase 7 review L6).
     app.post('/admin/sweep', express.json(), async (req, res) => {
         if (!adminAuthorized(req, res)) return;
         const invitationHours = Number(req.body?.invitationsOlderThanHours ?? 24);

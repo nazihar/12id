@@ -18,14 +18,16 @@
 }
 
 # Per-IP request limits (W6). Hairpinned traffic from agents on this VM arrives from the
-# provider gateway 10.1.1.1 (findings W1) and is exempt, as is loopback. The values are
-# placeholders to tune against real traffic: a PickUpV1 holder polls over one WebSocket
-# (a single HTTP request), so a legitimate device makes few HTTP requests per minute.
+# provider gateway 10.1.1.1 (findings W1) and is exempt, as is loopback. Only that one address:
+# on a provider network other customers share the rest of 10.0.0.0/8 (Phase 7 review I2). Another
+# host sets its own gateway here. The values are placeholders to tune against real traffic: a
+# PickUpV1 holder polls over one WebSocket (a single HTTP request), so a legitimate device makes
+# few HTTP requests per minute.
 (per_ip_limit) {
 	rate_limit {
 		zone {args[0]} {
 			match {
-				not remote_ip 10.0.0.0/8 127.0.0.1/8
+				not remote_ip 10.1.1.1/32 127.0.0.1/8
 			}
 			key {remote_host}
 			events {args[1]}
@@ -34,12 +36,27 @@
 	}
 }
 
-(hardening) {
+# Phase 7 review L1: every subdomain is TLS, so HSTS covers them all (includeSubDomains); preload
+# only takes effect if the apex is ever submitted to the browsers' list. Express names itself in
+# X-Powered-By on the agent and the mediator.
+(security_headers) {
 	header {
-		Strict-Transport-Security "max-age=31536000"
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "no-referrer"
 		-Server
+		-X-Powered-By
+	}
+}
+
+# Errors Caddy produces itself (a file_server 404, 502 with the upstream down, 413, 429) skip the
+# site's header directive, so they carried `Server: Caddy` (L1). They keep their status (and a
+# 429's Retry-After) and get a plain body.
+(hardening) {
+	import security_headers
+	handle_errors {
+		import security_headers
+		respond "{err.status_code} {err.status_text}" {err.status_code}
 	}
 }
 
@@ -178,8 +195,9 @@ mediator.12id.naziharitsolution.com {
 	import hardening
 
 	# The mediator serves GET /invite?_oobid=... with no authentication
-	# (apps/mediator/src/agent.ts), returning the open-mediation invitation. Never expose it;
-	# smoke tests read it on the VM at 127.0.0.1:3001/invite.
+	# (apps/mediator/src/agent.ts), returning any open invitation by id. Never expose it. Since -p6
+	# (Phase 7 review L6) there is no open-mediation startup invitation; tools mint a single-use
+	# one on the VM with infra/scripts/mediator-invitation.sh.
 	@invite path /invite /invite/*
 	respond @invite "Not Found" 404
 

@@ -17,6 +17,11 @@ const configSchema = z.object({
   INDY_NAMESPACE: indyNamespace,
   GENESIS_URL: z.url(),
   GENESIS_SHA256: z.string().regex(/^[0-9a-f]{64}$/, 'GENESIS_SHA256 must be 64 lowercase hex characters'),
+  /**
+   * Credo's `isProduction` flag for the one Indy network (review I1). It only orders networks when a
+   * legacy identifier could resolve on several; set it true on a production ledger for correctness.
+   */
+  INDY_NETWORK_PRODUCTION: z.stringbool().default(false),
 
   // DIDComm: the public endpoint phones and the mediator reach (through Caddy), and the local port.
   DIDCOMM_ENDPOINT: z.url(),

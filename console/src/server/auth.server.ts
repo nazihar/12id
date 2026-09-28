@@ -16,7 +16,7 @@ import { admin, organization, twoFactor } from 'better-auth/plugins'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { eq } from 'drizzle-orm'
 
-import { OPERATOR_ROLE, hasPlatformRole, platformAc, platformRoles, tenantAc, tenantRoles } from '../lib/permissions'
+import { OPERATOR_ROLE, SESSION_MAX_AGE_MS, hasPlatformRole, platformAc, platformRoles, tenantAc, tenantRoles } from '../lib/permissions'
 import { consoleDb } from './db.server'
 import * as schema from './db/auth-schema'
 import { startAuthHousekeeping } from './data-protection.server'
@@ -49,9 +49,11 @@ export const auth = betterAuth({
       })
     },
   },
+  // 24 h from sign-in, not extended by activity (review L11, owner 2026-09-28; was 7 days sliding).
+  // Operators get 12 h; that cap and this one are enforced per request from lib/permissions.ts.
   session: {
-    expiresIn: 60 * 60 * 24 * 7,
-    updateAge: 60 * 60 * 24,
+    expiresIn: SESSION_MAX_AGE_MS / 1000,
+    disableSessionRefresh: true,
   },
   rateLimit: {
     enabled: true,

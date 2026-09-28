@@ -186,7 +186,7 @@ The tested image is built on **Credo 0.6.0** (`@credo-ts/didcomm@0.6.0`, `@openw
 | `MESSAGE_PICKUP__MULTI_INSTANCE_DELIVERY__TYPE` | **`none`** | **Confirmed (Phase 1, staging).** With the Postgres pickup queue, `redis` **silently disables every webhook** (see below). Multi-instance delivery still works with `none`: the Postgres queue itself delivers across replicas (verified with two replicas) |
 | `PUSH_NOTIFICATIONS__WEBHOOK_URL` | our platform API | **Confirmed (Phase 1).** Fires only together with the Firebase placeholder below |
 | `PUSH_NOTIFICATIONS__FIREBASE__NOTIFICATION_TITLE` / `__NOTIFICATION_BODY` | any non-empty text | **Required for the webhook** with the Postgres queue, even with no Firebase project. `projects` may be omitted; with no device-token record the FCM send is skipped |
-| `CREATE_NEW_INVITATION` | `true` in dev | Regenerates the startup invitation instead of reusing the stored one |
+| `CREATE_NEW_INVITATION` | `true` in dev | Regenerates the startup invitation instead of reusing the stored one. *Phase 7 update (2026-09-28, L6): with our patched image (`-p6`) and `ADMIN_API_TOKEN` set there is no startup invitation at all; holders use the platform's single-use ones* |
 
 **Push notifications / webhook: confirmed on staging (Phase 1, W5 M2–M4).** Source trace in `apps/mediator/src/config/pushNotificationLoader.ts`, `redisMessageDeliveryLoader.ts`, `push-notifications/sendNotification.ts` and `packages/transport-queue-postgres`; evidence in [`5-phase-1-findings.md`](5-phase-1-findings.md).
 
@@ -982,7 +982,7 @@ Planned in detail as Phase 9 workstream W4 ([`18-phase-9-production.md`](18-phas
 Plan: [`18-phase-9-production.md`](18-phase-9-production.md); evidence (when started): `19-phase-9-production-findings.md`. Decisions: §12.1, §12.18.
 
 - [x] W0: plan recorded; §12.1 decided; §12.18; `17-phase-7.md` L16
-- [ ] W1: close Phase 7. **H1 done 2026-09-28** (and L5); the Low batch and the staging leftovers remain
+- [ ] W1: close Phase 7. **H1 done 2026-09-28** (and L5). **The Low batch is done on staging the same day** (L1, L4, L6, L7, L13, L14, L15, I1, I2). `AGENT_INTERNAL_TOKEN` is removed and `CONSOLE_TOKEN` is back in `platform.sops.env`. L11 done the same day by owner decision (console sessions 24 h from sign-in). Left: drop the old `endorser` database on the mediator instance (not before 2026-09-29), plus the owner's call on L10
 - [ ] W2: production-capable infra: per-environment config, file secrets (M11), image-only compose and a release bundle (M17), pulled off-site backups + a second age recipient (M13), `indy-node-container` ledger stack with a genesis ceremony and a trustee-signed endorser bootstrap
 - [ ] W3: Android SDK release (5b): rebuilt wrappers, configurable minisign trust anchor (M15), `maven.12id.com`, CI publishing to GHCR
 - [ ] W4: Phase 8 Hardening (load, failover, key rotation, DR drill)

@@ -27,7 +27,7 @@ const logger = createServiceLogger({ name: 'platform-api', level: config.LOG_LEV
 
 let draining = false
 const { pool, db } = createDatabase(config.DATABASE_URL)
-const agent = createAgentClient({ baseUrl: config.AGENT_API_URL, token: config.AGENT_API_TOKEN })
+const agent = createAgentClient({ baseUrl: config.AGENT_API_URL, token: config.AGENT_API_TOKEN, catalogueTtlMs: config.CATALOGUE_CACHE_MS })
 const mediator = createMediatorClient({ adminUrl: config.MEDIATOR_ADMIN_URL, adminToken: config.MEDIATOR_ADMIN_TOKEN, drizzleUrl: config.MEDIATOR_DRIZZLE_URL })
 const endpoints = endpointLookup(db)
 // Phase 6: without both settings nothing is gated and the biometric routes do not exist.

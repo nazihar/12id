@@ -69,13 +69,18 @@ export const platformRoles = {
 }
 
 /**
- * Operator sessions are capped (plan C2: operators 12 h, no trusted devices). The cap is ours, not
- * Better Auth's, so both the route guards and `operatorMiddleware` measure it from the same constant.
+ * Session caps, measured from sign-in and never extended by activity: operators 12 h (plan C2, no
+ * trusted devices), everyone else 24 h (Phase 7 review L11, owner 2026-09-28; it was 7 days sliding).
+ * The caps are ours, not Better Auth's, so the route guards and `authMiddleware` measure them from
+ * these constants, and a session issued before a change is cut too. Better Auth's own expiry is
+ * `SESSION_MAX_AGE_MS` with refresh disabled (`auth.server.ts`).
  */
 export const OPERATOR_SESSION_MAX_AGE_MS = 12 * 60 * 60 * 1000
+export const SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1000
 
-export function operatorSessionExpired(createdAt: Date | string | number) {
-  return Date.now() - new Date(createdAt).getTime() > OPERATOR_SESSION_MAX_AGE_MS
+export function sessionExpired(role: string | null | undefined, createdAt: Date | string | number, now = Date.now()) {
+  const cap = hasPlatformRole(role, OPERATOR_ROLE) ? OPERATOR_SESSION_MAX_AGE_MS : SESSION_MAX_AGE_MS
+  return now - new Date(createdAt).getTime() > cap
 }
 
 /** Better Auth stores roles as a comma-separated string. */

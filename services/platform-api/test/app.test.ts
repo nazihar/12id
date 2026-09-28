@@ -51,6 +51,7 @@ describe('platform-api HTTP', { skip: db ? false : 'no test database' }, () => {
     const ledger = await app.inject({ method: 'GET', url: '/v1/ledger' })
     assert.equal(ledger.statusCode, 200)
     assert.equal(ledger.json().genesis.sha256, '0'.repeat(64))
+    assert.equal(ledger.headers['cache-control'], 'public, max-age=300')
     assert.equal((await app.inject({ method: 'GET', url: '/openapi.json' })).statusCode, 200)
     assert.equal((await app.inject({ method: 'GET', url: '/v1/health' })).statusCode, 200)
   })
@@ -108,6 +109,18 @@ describe('platform-api HTTP', { skip: db ? false : 'no test database' }, () => {
     assert.equal(read.statusCode, 200)
     assert.equal(read.json().externalId, 'emp-42')
     assert.equal((await app.inject({ method: 'POST', url: '/v1/credentials/offer', headers, payload: { connectionId: 'conn-1', credentialDefinitionId: 'nope', attributes: {} } })).statusCode, 404)
+  })
+
+  it('refuses unbounded attributes before calling the agent (review L4)', async () => {
+    const headers = { authorization: `Bearer ${apiKey}` }
+    const offers = () => agent.calls.filter((c) => c.method === 'offerCredential').length
+    const before = offers()
+    const tooMany = Object.fromEntries(Array.from({ length: 126 }, (_, i) => [`a${i}`, 'x']))
+    for (const attributes of [tooMany, { name: 'v'.repeat(4097) }]) {
+      const offer = await app.inject({ method: 'POST', url: '/v1/credentials/offer', headers, payload: { connectionId: 'conn-1', credentialDefinitionId: 'ABC:3:CL:12:default', attributes } })
+      assert.equal(offer.statusCode, 400, offer.body)
+    }
+    assert.equal(offers(), before)
   })
 
   it('replays idempotent requests and refuses a reused key with a different body', async () => {

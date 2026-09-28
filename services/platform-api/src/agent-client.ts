@@ -109,6 +109,13 @@ export interface AgentClientOptions {
    * the endorser and the pool and can take far longer than a normal command (trap 44, review M5).
    */
   ledgerTimeoutMs?: number
+  /**
+   * How long a tenant's full catalogue is reused (review L14). Every offer and proof request reads
+   * it, and it changes only when the console publishes or deprecates, which clears the entry through
+   * this client. 0 turns the cache off. A second replica would see another replica's change after
+   * at most this long.
+   */
+  catalogueTtlMs?: number
   fetch?: typeof fetch
 }
 
@@ -140,16 +147,41 @@ export function createAgentClient(options: AgentClientOptions) {
 
   const t = (tenantId: string) => `/tenants/${encodeURIComponent(tenantId)}`
 
+  // Concurrent readers share one request; a failed read is not kept.
+  const catalogueTtlMs = options.catalogueTtlMs ?? 30_000
+  const catalogues = new Map<string, { expiresAt: number; value: Promise<AgentLedgerObject[]> }>()
+  const listCatalogue = (tenantId: string) => {
+    if (catalogueTtlMs <= 0) return call<AgentLedgerObject[]>('GET', `${t(tenantId)}/catalogue`)
+    const cached = catalogues.get(tenantId)
+    if (cached && cached.expiresAt > Date.now()) return cached.value
+    const value = call<AgentLedgerObject[]>('GET', `${t(tenantId)}/catalogue`)
+    const entry = { expiresAt: Date.now() + catalogueTtlMs, value }
+    catalogues.set(tenantId, entry)
+    value.catch(() => {
+      if (catalogues.get(tenantId) === entry) catalogues.delete(tenantId)
+    })
+    return value
+  }
+  /** Catalogue writes clear the tenant's entry whether they succeed or not: a timed-out publish may still land. */
+  const changesCatalogue = async <T>(tenantId: string, write: Promise<T>) => {
+    try {
+      return await write
+    } finally {
+      catalogues.delete(tenantId)
+    }
+  }
+
   return {
     createTenant: (label: string) => call<{ tenantId: string; status: string }>('POST', '/tenants', { label }),
     onboardTenant: (tenantId: string) => call<AgentTenant>('POST', `${t(tenantId)}/onboard`, undefined, ledgerTimeoutMs),
     getTenant: (tenantId: string) => call<AgentTenant>('GET', t(tenantId)),
 
     publishSchema: (tenantId: string, input: { name: string; version: string; attributes: string[] }) =>
-      call<AgentLedgerObject>('POST', `${t(tenantId)}/schemas`, input, ledgerTimeoutMs),
+      changesCatalogue(tenantId, call<AgentLedgerObject>('POST', `${t(tenantId)}/schemas`, input, ledgerTimeoutMs)),
     publishCredentialDefinition: (tenantId: string, input: { schemaObjectId: string; tag: string }) =>
-      call<AgentLedgerObject>('POST', `${t(tenantId)}/credential-definitions`, input, ledgerTimeoutMs),
-    listCatalogue: (tenantId: string) => call<AgentLedgerObject[]>('GET', `${t(tenantId)}/catalogue`),
+      changesCatalogue(tenantId, call<AgentLedgerObject>('POST', `${t(tenantId)}/credential-definitions`, input, ledgerTimeoutMs)),
+    /** The full catalogue, cached per tenant for `catalogueTtlMs` (the paged list below is not cached). */
+    listCatalogue,
     listCataloguePage: (tenantId: string, query: CataloguePageQuery) => {
       const params = new URLSearchParams({ kind: query.kind, page: String(query.page), pageSize: String(query.pageSize) })
       if (query.status) params.set('status', query.status)
@@ -157,7 +189,7 @@ export function createAgentClient(options: AgentClientOptions) {
       return call<{ items: AgentLedgerObject[]; total: number; page: number; pageSize: number }>('GET', `${t(tenantId)}/catalogue/page?${params}`)
     },
     setSchemaDeprecated: (tenantId: string, schemaObjectId: string, deprecated: boolean) =>
-      call<{ status: string }>('POST', `${t(tenantId)}/schemas/${schemaObjectId}/deprecation`, { deprecated }),
+      changesCatalogue(tenantId, call<{ status: string }>('POST', `${t(tenantId)}/schemas/${schemaObjectId}/deprecation`, { deprecated })),
 
     createInvitation: (tenantId: string, input: { multiUse: boolean; correlationId?: string; alias?: string }) =>
       call<{ outOfBandId: string; invitationUrl: string; multiUse: boolean }>('POST', `${t(tenantId)}/invitations`, input),

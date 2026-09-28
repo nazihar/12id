@@ -7,6 +7,8 @@ const configSchema = z.object({
   INDY_NAMESPACE: z.string().regex(/^[a-z][_a-z0-9-]*(:[a-z][_a-z0-9-]*)?$/, 'invalid did:indy namespace'),
   GENESIS_URL: z.url(),
   GENESIS_SHA256: z.string().regex(/^[0-9a-f]{64}$/, 'GENESIS_SHA256 must be 64 lowercase hex characters'),
+  /** Credo's `isProduction` flag for the Indy network (review I1); true on a production ledger. */
+  INDY_NETWORK_PRODUCTION: z.stringbool().default(false),
 
   /** The platform endorser, created by infra/ledger bootstrap-endorser. */
   ENDORSER_DID: z.string().regex(/^did:indy:[a-z][_a-z0-9-]*(:[a-z][_a-z0-9-]*)?:[1-9A-HJ-NP-Za-km-z]{21,22}$/, 'ENDORSER_DID must be a did:indy DID'),

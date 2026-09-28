@@ -24,6 +24,8 @@ x-ledger-env: &ledger-env
   INDY_NAMESPACE: twelveid:staging
   GENESIS_URL: https://genesis.12id.naziharitsolution.com/v1/pool_transactions_genesis
   GENESIS_SHA256: 6ab9bc1a3ba5ff257454ca8500a41d45756cd02c3db6c280bde51c7b363a835a
+  # Credo's isProduction for the Indy network (Phase 7 review I1). A test ledger here; "true" in production.
+  INDY_NETWORK_PRODUCTION: "false"
   # Staging platform endorser (6-phase-1-findings W3).
   ENDORSER_DID: did:indy:twelveid:staging:9WnSruRkr6b3V7XX9zPjka
   LOG_LEVEL: ${AGENT_LOG_LEVEL:-info}

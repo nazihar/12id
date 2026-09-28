@@ -14,7 +14,7 @@ import { createMiddleware } from '@tanstack/react-start'
 import { getRequestHeaders, setResponseHeader, setResponseStatus } from '@tanstack/react-start/server'
 import { and, eq } from 'drizzle-orm'
 
-import { OPERATOR_ROLE, type TenantRole, hasPlatformRole, operatorSessionExpired, tenantRoles } from '../lib/permissions'
+import { OPERATOR_ROLE, type TenantRole, hasPlatformRole, sessionExpired, tenantRoles } from '../lib/permissions'
 import { auth } from './auth.server'
 import { consoleDb } from './db.server'
 import { member, organization, twoFactor } from './db/auth-schema'
@@ -62,6 +62,8 @@ type TenantPermissions = Parameters<(typeof tenantRoles)['owner']['authorize']>[
 export const authMiddleware = createMiddleware({ type: 'function' }).server(async ({ next }) => {
   const session = await auth.api.getSession({ headers: getRequestHeaders() })
   if (!session) signInAgain()
+  // Operators 12 h, everyone else 24 h from sign-in (lib/permissions.ts, review L11).
+  if (sessionExpired(session.user.role, session.session.createdAt)) signInAgain()
   if (!session.user.twoFactorEnabled) refuse(403, 'set up two-factor authentication first')
   // Everything behind this middleware depends on who is asking.
   setResponseHeader('Cache-Control', 'no-store')
@@ -71,9 +73,8 @@ export const authMiddleware = createMiddleware({ type: 'function' }).server(asyn
 export const operatorMiddleware = createMiddleware({ type: 'function' })
   .middleware([authMiddleware])
   .server(async ({ next, context }) => {
-    const { user, session } = context.session
+    const { user } = context.session
     if (!hasPlatformRole(user.role, OPERATOR_ROLE)) refuse(403, 'operator role required')
-    if (operatorSessionExpired(session.createdAt)) signInAgain()
     const [totp] = await consoleDb().db.select({ verified: twoFactor.verified }).from(twoFactor).where(eq(twoFactor.userId, user.id))
     if (!totp?.verified) refuse(403, 'operators must use an authenticator app')
     return next({ context: { principal: principal({ actor: user.id, role: OPERATOR_ROLE, tenantId: null }) } })

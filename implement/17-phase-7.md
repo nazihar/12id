@@ -11,7 +11,13 @@
 - **Kept open by owner decision (2026-09-22):** M13 (off-site backups, later) and M17 (tags and CI, in the publishing phase).
 - **Fixed since: H1 (and L5), on staging 2026-09-28** (§2 H1 status; customer document `services/platform-api/docs/data-protection.md`).
 - **Added 2026-09-28:** L16 (the staging ledger's trustee seed is public), found while planning Phase 9 ([`18-phase-9-production.md`](18-phase-9-production.md)). Phase 9 also closes the owner-held M11, M13 and M17.
-- Everything else is open.
+- **Fixed since: the Low batch, on staging 2026-09-28** (L1, L4, L6, L7, L13, L14, L15, I1, I2; §10 row 14), and **L11** the same day by owner decision.
+- Still open:
+  - L2, L16 and M15, with Phase 9;
+  - L9, with the Phase 8 load test;
+  - L8, the owner's rotation;
+  - L10, an owner call (L11 was done the same day: 24 h sessions);
+  - L12, with the next Credo release.
 
 Every finding names its file and line. The evidence marker on each finding says how it was checked:
 - *run*: its command and output are in this file
@@ -51,24 +57,24 @@ Severity is exploitability × impact against the **production** threat model (cu
 | M16 | Med | infra | **Done 2026-09-23.** No alerts for webhook dead-letters, outbox lag, endorser refusals, API 5xx rate, mediator OOB growth; alert e-mail unconfigured | 0.5 d |
 | M17 | Med | infra | Mutable image tags (`phase3`, `phase4`, `postgres:15-alpine`, `valkey:8-alpine`); agent and platform stacks run different builds of one source tree; no CI. **Stack drift gone since H2/H3 (all on `phase7`); rest kept open for the publishing phase (owner, 2026-09-22)** | 1–2 d (5b.3) |
 | M18 | Med | mediator | **Done 2026-09-22.** Credo `drizzle-storage` 0.6.0 creates **no secondary indexes**: every inbound message (each wallet's 10 s poll) sequentially scans `Did` and `DidcommConnection`; the pickup queue's `recipient_dids` branch is unindexed too — the mediator's scaling cliff | 0.5 d |
-| L1 | Low | edge | `X-Powered-By: Express` on agent + mediator; HSTS without `includeSubDomains`/`preload`; `Server: Caddy` on genesis 404s | 1 h |
+| L1 | Low | edge | **Done 2026-09-28.** `X-Powered-By: Express` on agent + mediator; HSTS without `includeSubDomains`/`preload`; `Server: Caddy` on genesis 404s | 1 h |
 | L2 | Low | edge | Grafana and the von-network browser are public login/info surfaces | 1 h |
 | L3 | Low | platform-api | **Done 2026-09-24 (Phase 4 C9).** List routes cap at 200 with no cursor; no `(tenant_id, created_at)` index on the three mirror tables | 0.5 d |
-| L4 | Low | platform-api | Offer `attributes` unbounded in count/key/value size inside the 1 MB body; propagates to agent, outbox, webhooks | 1 h |
+| L4 | Low | platform-api | **Done 2026-09-28.** Offer `attributes` unbounded in count/key/value size inside the 1 MB body; propagates to agent, outbox, webhooks | 1 h |
 | L5 | Low | platform-api | **Done 2026-09-28 (with H1).** `POST /v1/webhook/deliveries/:id/retry` re-sends already-delivered events | 1 h |
-| L6 | Low | mediator | The open multi-use startup invitation is still created and printed to logs | 2 h |
-| L7 | Low | mediator | `webhook-sink` debug container runs permanently in the stack | 10 min |
+| L6 | Low | mediator | **Done 2026-09-28 (`-p6`).** The open multi-use startup invitation is still created and printed to logs | 2 h |
+| L7 | Low | mediator | **Done 2026-09-28.** `webhook-sink` debug container runs permanently in the stack | 10 min |
 | L8 | Low | dev machine | `console/.staging/` holds a live staging API key, owner password and TOTP secrets in plaintext (git-ignored) | rotate |
 | L9 | Low | agent-service | Askar Postgres pool size not set (`maxConnections` default) vs `TENANT_SESSION_LIMIT` 100 | verify in Phase 8 |
 | L10 | Low | platform-api | Console audit records route + status only, never the change; a bad edit cannot be reconstructed | 0.5 d |
-| L11 | Low | console | Tenant-member sessions last 7 days sliding (operators 12 h) | 10 min |
+| L11 | Low | console | **Done 2026-09-28 (owner: 24 h from sign-in).** Tenant-member sessions last 7 days sliding (operators 12 h) | 10 min |
 | L12 | Low | all | npm audit: transitive moderates only (valibot via unused `dcql`; esbuild via `drizzle-kit`) | with next Credo bump |
-| L13 | Low | mediator | Valkey runs `noeviction` for what is now a pure cache (streams unused since multi-instance delivery is `none`): it refuses writes instead of evicting when full (§8) | 10 min |
-| L14 | Low | platform-api | Every credential offer and proof request makes an internal HTTP round trip to agent-service for the rarely-changing catalogue; no cache (§8) | 2 h |
-| L15 | Low | platform-api | `GET /v1/ledger` is static config served with no `Cache-Control`, though every SDK installation fetches it (§8) | 10 min |
+| L13 | Low | mediator | **Done 2026-09-28.** Valkey runs `noeviction` for what is now a pure cache (streams unused since multi-instance delivery is `none`): it refuses writes instead of evicting when full (§8) | 10 min |
+| L14 | Low | platform-api | **Done 2026-09-28.** Every credential offer and proof request makes an internal HTTP round trip to agent-service for the rarely-changing catalogue; no cache (§8) | 2 h |
+| L15 | Low | platform-api | **Done 2026-09-28.** `GET /v1/ledger` is static config served with no `Cache-Control`, though every SDK installation fetches it (§8) | 10 min |
 | L16 | Low | ledger (staging) | *Added 2026-09-28.* von-network's genesis uses public test seeds (Trustee `000000000000000000000000Trustee1`) and its client ports are public: anyone can write to the staging ledger as Trustee. Staging only; production uses its own network (Phase 9) | with Phase 9 W2 |
-| I1 | Info | agent-service | `isProduction: false` in the Indy VDR network config; production checklist item | — |
-| I2 | Info | edge | `per_ip_limit` exempts all of `10.0.0.0/8` (provider hairpin); harmless on this host, wrong on a multi-tenant provider network | — |
+| I1 | Info | agent-service | **Done 2026-09-28.** `isProduction: false` in the Indy VDR network config; production checklist item | — |
+| I2 | Info | edge | **Done 2026-09-28.** `per_ip_limit` exempts all of `10.0.0.0/8` (provider hairpin); harmless on this host, wrong on a multi-tenant provider network | — |
 
 **Bucket B cross-check** (every item from the former `15-next-step.md` bucket B appears above): catalogue timeout → M5; orphaned wallets → M10; per-key rate limit → M4; mediator queue retention → M10; minisign on device → M15; SMTP invitation run / 12 h session cap → §9 not checked; upstream bug filing → M17 (CI/release hygiene); alert e-mail → M16; owner items (age key, `ubuntu` password, corrupted tenants) → M13, L8, §9.
 
@@ -305,11 +311,23 @@ Severity is exploitability × impact against the **production** threat model (cu
 ### L4 · Low · Unbounded attribute record
 `exchanges.ts:80` `attributes: z.record(z.string(), z.string())` — bounded only by the 1 MB `bodyLimit`; the schema route itself caps at 125 attribute names of 100 chars (`catalogue.ts:68`). Fix: `.max(125)` keys, 100-char names, 4 KB values; the same on agent-service `command-routes.ts:139`.
 
+**Re-validated 2026-09-28:** confirmed, and the offer route's `bodyLimit` has been 8 MB since Phase 6 (the gate's reference image), not 1 MB. **Also missed:** 125 values of 4 KB each would be 500 KB. Each value travels raw in the offer and in the credential, and the credential is base64-encoded and encrypted twice on its way to the holder. So the fix also needs a total, or the credential would exceed the 512 KB DIDComm cap (M1).
+
+**Status (2026-09-28): done on staging.**
+- **Built:** `services/credo-base/src/credential-values.ts`, one zod schema used by platform-api's offer route and agent-service's offer command. It allows at most 125 attributes, names of 1–100 characters, values up to 4 KB (counted in bytes), and 64 KB for all names and values together.
+- **Documented:** `docs/api.md` (Attribute rules) and the regenerated OpenAPI documents.
+- **Evidence:**
+  - credo-base `credential-values.test.ts`: the edges of every bound, plus a multi-byte value;
+  - platform-api: a 126-attribute offer and a 4,097-byte value both get 400 before any agent call;
+  - staging, from the internet with the acme API key: 400 `body/attributes at most 125 attributes` and 400 `… at most 4096 bytes`.
+
 ### L5 · Low · Retry of delivered events
 `webhook.ts:113-121` sets `pending` regardless of the current status. Fix: `where status in ('dead', 'pending')`.
 
 ### L10 · Low · Audit log has no diff
 `http/audit.ts:31`: actor, role, tenant, method, route, status. Fix: add a redacted request-body snapshot (secrets dropped) for mutating routes.
+
+**Not done with the Low batch (2026-09-28).** Phase 9 W1 takes L10 "only if cheap", and it is half a day. H1 already added `console_audit.reason` for erasures and reveals. It waits for the owner, or for the next time the console audit is touched (§10).
 
 ### Strengths (keep)
 Hashed tokens with prefix lookup and length-checked `timingSafeEqual` (`auth/tokens.ts`, `credo-base/src/internal-token.ts`); a tenant predicate on every mirror query and every agent call (verified route by route in `exchanges.ts`, `wallets.ts`, `webhook.ts`, `console.ts`, `proof-templates.ts`); idempotency reserved on arrival, per tenant, URL in the hash, secrets never stored (`idempotency.ts`); response serialisation by schema (no field leaks); generic 5xx bodies (`errors.ts`); HTTPS-only webhook URLs with `redirect: 'manual'` and a timestamped HMAC (`signer.ts`) — this closes SSRF into the Docker network without a private-IP list; `bodyLimit` 1 MB; `SKIP LOCKED` claim so a second replica is safe; graceful drain; `x-admin-token` accepted only on `/admin/*`, which the edge refuses.
@@ -574,6 +592,14 @@ Confirm the exact predicate shapes with `auto_explain` / `pg_stat_statements` on
 ### L1 · Low · Header hygiene
 *run*: `X-Powered-By: Express` on `agent.` and `mediator.`; HSTS `max-age=31536000` without `includeSubDomains`/`preload`; `Server: Caddy` on `genesis.` 404s. Fix: `header -X-Powered-By` in the `hardening` snippet; `Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"` (every subdomain is TLS already); `handle_errors` on genesis.
 
+**Status (2026-09-28): done on staging.**
+- **Built:** the header block is now a `security_headers` snippet with the full HSTS value and `-X-Powered-By`. `hardening` imports it and adds a `handle_errors` block that imports it again and answers `"{err.status_code} {err.status_text}"` with the same status.
+- **Why every site, not only genesis:** every error Caddy produces itself skips a site's `header` directive, not only the file-server 404. That includes the smoke issuer's 502 with no listener, a 413 from the M1 body cap, and a 429 from the rate limiter.
+- **Checked first on the staging Caddy image, in a throwaway container on a loopback port:** 404, 502, 413 and 429 keep their status, and the 429 keeps its `Retry-After: 60`. `Server` and an upstream's `X-Powered-By` were gone from all of them.
+  - One trap in that test: `respond` sorts before `rate_limit` in Caddy's directive order, so a limiter in front of `respond` never runs. The real sites proxy, so they are not affected.
+- **Staging probes from the internet:** agent `/readyz` 200, mediator `/health` 202, genesis 404, `api` `/v1/ledger` 200, console `/login` 200, smoke-issuer 502, agent junk POST 500. All carry `max-age=31536000; includeSubDomains; preload`, and none carries `Server` or `X-Powered-By`.
+- `preload` has no effect until someone submits the apex to the browsers' preload list. For `12id.com` that is an owner decision, because it binds the marketing site too.
+
 ### L2 · Low · Grafana and the ledger browser are public
 Grafana has its own login and rate limit; the von-network browser exposes `/status` (node versions, uptime) and all ledger reads. Both are staging-only components, but they will be copied to production unless the runbook says otherwise. Fix: `basic_auth` or an IP allowlist in Caddy for both; production should have neither.
 
@@ -586,11 +612,28 @@ Grafana has its own login and rate limit; the von-network browser exposes `/stat
 ### L6 · Low · The open startup invitation still exists
 `compose.mediator.yml` `CREATE_NEW_INVITATION: "false"` reuses a **multi-use open-mediation** invitation the image prints at startup; `/invite` is blocked at the edge but the URL is in every replica's log. Fix: patch `index.js` to skip invitation creation when `ADMIN_API_TOKEN` is set, or accept it and restrict log access.
 
+**Re-validated 2026-09-28:** confirmed, and skipping the creation is not enough. The invitation already in the logs stays valid: an OOB record never expires, and the M10 sweep deliberately skips reusable ones. Staging had **two** of them, because both replicas created one within 30 ms on the first start (2026-09-13). 24 connections, all from that day, were made through them.
+
+**Status (2026-09-28): done on staging (mediator `-p6`).**
+- **Built:** `mediator/patch/index.js` is the image's built `index.js` with one branch added. With `ADMIN_API_TOKEN` set (the platform's per-wallet route), it creates and logs no invitation and deletes every reusable open invitation. Without the token it behaves as upstream.
+  - Connections already made keep their records and stay mediated: Credo needs an OOB record only while a handshake is running.
+- **Tools:** `infra/scripts/mediator-invitation.sh` mints a single-use invitation through `POST /admin/invitations` on the VM, for `smoke-credo` and `MEDIATOR_INVITATION_FILE`. The token goes to curl on stdin. The M10 sweep deletes an unused one after 24 h.
+- **Rollout:** the two rows were saved first, to `~/l6-reusable-oob-2026-09-28.csv` (mode 600) on the VM. The replicas then rolled one at a time.
+- **Evidence:**
+  - mediator-1 logged "retired 2 reusable invitation(s)" and mediator-2 "retired 0". Neither log contains an invitation URL.
+  - Loopback `/invite?_oobid=<old id>` now answers 400 (no such invitation).
+  - The 24 old connections still have their 24 mediations. A minted invitation works.
+  - `smoke:platform-credo` PASSED and `smoke:biometric-credo` passed 18/18. Both mediate through single-use invitations.
+
 ### L7 · Low · `webhook-sink` in the stack
 `compose.mediator.yml:167-177` — an unauthenticated HTTP sink that logs whatever it receives; only a debugging aid. Move it to `profiles: [debug]`.
 
+**Status (2026-09-28): done on staging.** `profiles: [debug]` and `restart: 'no'`. The comment gives the command to start it on request (`deploy.sh mediator --profile debug up -d webhook-sink`). The running container was removed with `--profile debug rm -sf webhook-sink`, and `compose ps` now lists only postgres, valkey and the two replicas.
+
 ### I2 · Info · Rate-limit exemption for `10.0.0.0/8`
 `Caddyfile:19` exempts the provider gateway hairpin; on a provider where other tenants share `10.0.0.0/8` this exempts them too. Narrow to `10.1.1.1/32` (the address the comment names).
+
+**Status (2026-09-28): done on staging.** The exemption is `10.1.1.1/32 127.0.0.1/8`, and the comment says another host sets its own gateway (W2 moves it to the per-environment config). Every smoke and the console e2e passed afterwards, and Caddy's metrics showed **0** series with status 429. So all the VM's own traffic to the edge does arrive from `10.1.1.1`.
 
 ### Strengths (keep)
 Loopback-only port publishing; `DOCKER-USER` drops on the node-to-node ports (`ufw/after.rules.docker-user`); `/register`, `/invite`, `/admin/*`, `/internal/*` and the console header refused at the edge (probed); SOPS+age with tmpfs decrypt, `shred`, `umask 077`; migration health-checked by table presence; staggered replica start; timing-safe compare in the mediator patch (`patch/agent.js:102-104`); nightly encrypted backups with restore drills for every database; ledger write probe; TLS expiry alert; both Node images non-root.
@@ -620,6 +663,23 @@ Loopback-only port publishing; `DOCKER-USER` drops on the node-to-node ports (`u
 
 ### L11 · Low · Session lifetime
 `auth.server.ts:56-59`: 7 d sliding for everyone; `middleware.ts:19` caps operators at 12 h. Consider 24 h for tenant members (they manage API keys and webhook URLs).
+
+**Owner decision (2026-09-28): shorten it.** Seven days is a security concern. This replaces the Phase 4 decision "members 7 days with 24 h refresh".
+
+**Status (2026-09-28): done on staging.**
+- **Rule:** every console session ends **24 h after sign-in** and is not extended by activity. Operators keep their 12 h.
+- **Why a fixed cap and not a sliding one:** a sliding 24 h would keep a daily user signed in for ever.
+- **Built:**
+  - `lib/permissions.ts` `sessionExpired(role, createdAt)` replaces `operatorSessionExpired`: 12 h for operators, 24 h for everyone else, measured from sign-in.
+  - `authMiddleware` checks it on every server function; before, only `operatorMiddleware` did. `getViewer` checks it for the route guards.
+  - Better Auth: `expiresIn` 24 h with `disableSessionRefresh`, so the cookie and the row expire with the cap.
+  - Checking the cap per request, not only through Better Auth's expiry, also cuts sessions that were issued under the old 7-day setting.
+- **Trusted devices:** the console never sends `trustDevice`, so no trust cookie is ever set, and every sign-in asks for the second factor.
+- **Evidence:**
+  - console `tsc`, Vitest 32/32 (a new cap test, including a 6-day-old session), build and `check:client` clean;
+  - staging `e2e:staging` 3/3 on the new build;
+  - the 4 sessions the run created have a lifetime of exactly 24 h;
+  - 36 older sessions that were still valid under the old rule are now refused, so their users sign in again.
 
 ### Strengths (keep)
 A branded `Principal` only the middleware can create; the tenant resolved from the **session's active organization**, never from input (`middleware.ts:88-91`, `platform.server.ts:41-45`); invite-only, 2FA mandatory, operators TOTP-only with the after-hook (`auth.server.ts:66-74`); `disableSignUp`, `minPasswordLength 12`, `revokeSessionsOnPasswordReset`, hashed OTPs; CSRF middleware registered explicitly with the public origin (`start.ts:32-35`); `check-client-bundle.ts` refuses a client bundle containing `x-console-token`; the console reaches platform-api only through the console scope, audited per call; `Cache-Control: no-store` on authenticated server functions.
@@ -690,6 +750,12 @@ No action beyond tracking the next Credo release; add `npm audit --audit-level=h
 ### I1 · Info · `isProduction: false`
 `agent-service/src/agent/root-agent.ts:71`. Affects only Credo's network-selection metadata, but belongs on the production checklist next to §12.1.
 
+**Status (2026-09-28): done on staging.**
+- endorser-service had the same hard-coded `false` (`agent/endorser-agent.ts`).
+- Both now read `INDY_NETWORK_PRODUCTION` (a boolean, default `false`), which `compose.agent.yml` sets to `"false"` for the von-network ledger. Production sets `true` (Phase 9 W5).
+- The agent-service config test covers the default, `true` and a refused value.
+- On staging, both recreated containers show `false`.
+
 ---
 
 ## 8. Shared cache / Valkey — should the other services use it?
@@ -739,6 +805,14 @@ Two cheap adjacent wins while in here: `GET /v1/ledger` returns static, env-deri
 ### What to do in this phase
 - **Nothing shared.** Leave Valkey to the mediator.
 - **One small fix (L13):** with streams unused, `noeviction` is the wrong policy for a pure cache — the mediator errors instead of evicting when it fills. Set `--maxmemory-policy allkeys-lru` and correct the stale comment. Revisit if multi-instance delivery ever moves off `none` (it cannot today: `redis` silently disables the webhooks, §2.3).
+  - **Done on staging 2026-09-28.** `compose.mediator.yml` runs `allkeys-lru`, and the comment now says why. Only Valkey was recreated (`--no-deps`). `valkey-cli config get maxmemory-policy` returns `allkeys-lru`, with 1 MB in use.
+- **L14, done on staging 2026-09-28.**
+  - The cache lives in platform-api's `agent-client.ts`, not in the routes. `listCatalogue` keeps each tenant's catalogue for `CATALOGUE_CACHE_MS` (30 s; 0 turns it off). Concurrent readers share one request, and a failed read is not kept.
+  - `publishSchema`, `publishCredentialDefinition` and `setSchemaDeprecated` go through the same client. They clear the tenant's entry whether they succeed or fail, because a timed-out publish may still land.
+  - A second replica would see another replica's change after at most 30 s.
+  - Tests: `agent-client.test.ts`, 3 cases.
+  - On staging, `smoke:platform-credo` made **one** `GET …/catalogue` for its offer and proof request together, where there used to be one each. The offer found the credential definition the smoke had published seconds before, which shows the publish cleared the entry.
+- **L15, done on staging 2026-09-28.** `GET /v1/ledger` sends `Cache-Control: public, max-age=300` (the app test checks it). `curl -I` from the internet shows it.
 - **When scaling out:** add a second Valkey to the `12id-agent` network with `requirepass`, its own `mem_limit`, `allkeys-lru`, and `appendonly no` (it is a cache — losing it must be survivable). Do not reuse the mediator's.
 
 ## 9. Not checked
@@ -775,7 +849,14 @@ Two cheap adjacent wins while in here: `GET /v1/ledger` returns static, env-deri
 | 11 | ✅ **Done 2026-09-22.** M14: SDK log floor + https check | JVM tests; `apiDump`. **Passed:** 44/44, `apiCheck` green. Phone smoke not run |
 | 12 | ✅ **Done 2026-09-23.** M16: application alerts (SQL + Caddy metrics) | each fired once. **Passed:** 7 new rules fired to Alertmanager and were restored; 26 rules, 22/22 targets up |
 | 13 | ✅ **Done 2026-09-28.** H1: deletion routes + retention job + the §5.3 customer document (2–3 d); plus operator masking and flagged operator keys (owner) | staging issue → delete → grep every store. **Passed:** erase probe over the public API, 0 matches in platform rows and bodies, agent 404 for the Credo records, masked operator view with an audited reveal, `e2e:staging` 3/3, both smokes |
-| 14 | L1, L4, L6, L7, L13, L14, L15, I1, I2 (L5 done with H1) | probes / unit tests; `valkey-cli config get maxmemory-policy` returns `allkeys-lru`; one agent-service call per offer instead of two; `curl -I /v1/ledger` shows `Cache-Control` |
+| 14 | ✅ **Done 2026-09-28.** L1, L4, L6, L7, L13, L14, L15, I1, I2 (L5 done with H1) | probes / unit tests; `valkey-cli config get maxmemory-policy` returns `allkeys-lru`; one agent-service call per offer instead of two; `curl -I /v1/ledger` shows `Cache-Control`. **Passed on staging:**
+- all of the above, with one catalogue read for an offer and a proof request together;
+- no `Server` or `X-Powered-By` on any host, error responses included;
+- 400 for oversized attributes from the internet;
+- mediator `-p6` retired both startup invitations;
+- 0 responses with status 429 after I2;
+- tests: platform-api 95/95, agent-service 59/59, endorser-service 32/32, credo-base 12/12;
+- `smoke:platform-credo` PASSED, `smoke:biometric-credo` 18/18, `e2e:staging` 3/3 |
 
 **Order revised 2026-09-22** after the re-validation: K1 added; M5 and the webhook bundle moved up; M7 and M16 given their own rows.
 
@@ -783,7 +864,7 @@ Two cheap adjacent wins while in here: `GET /v1/ledger` returns static, env-deri
 
 **Owner decisions (not code):** M16 confirm alert e-mail delivery; L2 whether Grafana and the ledger browser exist in production at all; L8 rotate the `.staging` credentials; §12.1 ledger topology, a clean production host, TAA (bucket C).
 
-**Defer to their phases:** M15 with 5b.1 (the wrapper rebuild changes the size budget); L9, M1's concurrency switch and M2's numbers with the Phase 8 load tests; L10, L11 when those surfaces are next touched; L3 in Phase 4 C9 (2026-09-24).
+**Defer to their phases:** M15 with 5b.1 (the wrapper rebuild changes the size budget); L9, M1's concurrency switch and M2's numbers with the Phase 8 load tests; L10 when the console audit is next touched (L11 done 2026-09-28, owner decision); L3 in Phase 4 C9 (2026-09-24).
 
 **Explicitly not doing:** sharing the mediator's Valkey with the other services, or adding Redis anywhere (§8). Build M4's rate limiter in-process behind a small store interface so it can move to Redis the day platform-api runs a second replica.
 
