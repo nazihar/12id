@@ -956,7 +956,7 @@ Runs after Phase 7. It is the one item the design names as a first-customer bloc
 
 **5b.2 One repository for consumers**
 - Vendor or shade `com.github.multiformats:java-multibase` (only JitPack has it) so `settings.gradle` needs no JitPack entry.
-- Decide the public repository: a static Maven repo behind the existing Caddy edge (`maven.<domain>`, same deploy path as genesis) now, Maven Central via the 12id.com namespace later. **Owner decision.**
+- ~~Decide the public repository~~ **decided 2026-09-30 (owner):** a static Maven repository on GitHub Pages at `maven.12id.com`. The fork is merged into the SDK artifact, and the wrappers become one `com.12id:holder-sdk-native` artifact. CI is driven by tags. Details are in [`18-phase-9-production.md`](18-phase-9-production.md) W3, which supersedes this appendix.
 - The sample consumes SDK + fork + wrappers from that repository exactly as a customer would; `docs/integration.md` collapses to a single-repository snippet.
 
 **5b.3 CI and release pipeline** (GitHub Actions on `nazihar/12id`; also M17)

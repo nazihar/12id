@@ -10,36 +10,33 @@ on the phone, the mediator and the issuing organisation. No credential or key ev
 
 | | |
 |---|---|
-| Android | `minSdk 24`. Verified on Android 14, arm64-v8a. **x86_64 emulators do not work** (the native libraries fail to load); test on an arm64 device or an arm64 emulator |
+| Android | `minSdk 24`. Native libraries for `arm64-v8a`, `armeabi-v7a` and `x86_64` (emulators), 16 KB page aligned. Verified on Android 14 (arm64-v8a) and on x86_64 emulators at API 26, 28 and 36. **Android 7.0 (API 24) cannot validate the platform's Let's Encrypt certificate** (its trust store lacks ISRG Root X1): support for it is being decided |
 | Language | Kotlin with coroutines (every SDK call is a `suspend` function) |
-| Size | the sample's minified arm64 release APK is 28.7 MB, most of it the three native libraries (Askar, AnonCreds, Indy VDR). Ship an App Bundle or ABI splits; `ndk.abiFilters` has no effect because the native libraries arrive inside AARs |
+| Size | most of an app's added size is the three native libraries (Askar, AnonCreds, Indy VDR, in `com.12id:holder-sdk-native`, which comes with the SDK). Ship an App Bundle or ABI splits so each device downloads one ABI |
 | Push | optional but strongly recommended: your backend receives `wallet.sync_requested` and pushes the app, which calls `OneTwoId.sync()` |
 
 ## Gradle
 
-The SDK is currently distributed from a local Maven repository (`sdk-android/build/m2`, produced by
-`./gradlew publishAllPublicationsToLocalRepository`); a public repository follows. The published
-artifact still depends on the `org.hyperledger` UniFFI wrappers and on one JitPack artifact, so a
-consumer declares three repositories:
+The SDK is published to the 12id Maven repository, `https://maven.12id.com`. Declare it once, next to
+Google and Maven Central, and add one dependency; the native libraries (`com.12id:holder-sdk-native`) come
+with it:
 
-```groovy
-// settings.gradle
+```kotlin
+// settings.gradle.kts
 dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        maven { url = uri("<path or URL of the 12id repository>"); content { includeGroup("com.12id") } }
-        maven { url = uri("<path or URL of the wrapper mirror>"); content { includeGroup("org.hyperledger") } }
-        maven { url = uri("https://jitpack.io"); content { includeGroup("com.github.multiformats") } }
+        maven("https://maven.12id.com") { content { includeGroup("com.12id") } }
     }
 }
 
-// app/build.gradle
+// app/build.gradle.kts
 dependencies {
     implementation("com.12id:holder-sdk-android:0.1.0")
 }
 android {
-    splits { abi { enable true; reset(); include "arm64-v8a"; universalApk false } }   // or an App Bundle
+    splits { abi { isEnable = true; reset(); include("arm64-v8a", "armeabi-v7a", "x86_64"); isUniversalApk = false } }  // or an App Bundle
 }
 ```
 

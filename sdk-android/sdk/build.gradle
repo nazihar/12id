@@ -11,7 +11,15 @@ android {
 
     defaultConfig {
         minSdk 24
-        consumerProguardFiles 'consumer-rules.pro'
+        // The fork's rules travel with its classes (W3: the fork is part of this artifact).
+        consumerProguardFiles 'consumer-rules.pro', '../ariesframework/consumer-rules.pro'
+    }
+
+    // W3 (Phase 9): the fork's sources and the vendored java-multibase are compiled into the SDK, so a
+    // customer declares one artifact and the SDK and the fork cannot drift apart. :ariesframework stays
+    // a module for the fork's own tests and is not published.
+    sourceSets {
+        main.java.srcDirs += ['../ariesframework/src/main/java', '../third_party/java-multibase/java']
     }
 
     compileOptions {
@@ -37,16 +45,19 @@ android {
 }
 
 kotlin {
-    // Every public declaration must say so: nothing reaches customers by accident.
-    explicitApi()
+    // explicitApi() is off since W3: it would apply to the fork's sources, which now compile here.
+    // apiCheck (sdk/api/sdk.api) and ApiSurfaceTest still stop anything public reaching customers by accident.
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11
     }
 }
 
 dependencies {
-    // implementation, not api: no Aries type is visible to the customer's compiler.
-    implementation project(':ariesframework')
+    // The rebuilt UniFFI wrappers, published as com.12id:holder-sdk-native (native/README.md).
+    implementation project(':native')
+    // The fork's own dependencies (ariesframework/build.gradle), at the versions the SDK already resolved.
+    // peerdid's java-multibase is vendored (third_party/java-multibase): it is only on JitPack.
+    implementation('org.didcommx:peerdid:0.5.0') { exclude group: 'com.github.multiformats' }
 
     // The framework logs through slf4j; the SDK provides the binding (org.slf4j.impl) so those lines
     // reach the customer's LogSink.
@@ -70,7 +81,8 @@ afterEvaluate {
         repositories {
             maven {
                 name = 'local'
-                url = rootProject.layout.buildDirectory.dir('m2')
+                // -PpublishRepo=<dir>: CI publishes into a checkout of the public repository (nazihar/maven).
+                url = findProperty('publishRepo') ?: rootProject.layout.buildDirectory.dir('m2')
             }
         }
         publications {

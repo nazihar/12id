@@ -3,19 +3,22 @@
 | Module | What | Published as |
 |---|---|---|
 | `sdk/` | The customer-facing SDK, package `com.onetwoid.sdk` (`docs/integration.md`) | `com.12id:holder-sdk-android` |
-| `ariesframework/` | Vendored fork of `aries-framework-kotlin` (`FORK.md`) | `com.12id:aries-framework-kotlin` |
+| `ariesframework/` | Vendored fork of `aries-framework-kotlin` (`FORK.md`); its sources compile into `sdk/`, the module keeps the fork's tests | inside `com.12id:holder-sdk-android` |
+| `native/` | The rebuilt UniFFI wrappers (Askar, AnonCreds, Indy VDR) and their bindings (`native/README.md`) | `com.12id:holder-sdk-native` (comes with the SDK) |
+| `biometrics-aws/`, `biometrics-mock/` | Face-capture add-ons (Phase 6) | `com.12id:holder-sdk-android-biometrics-{aws,mock}` |
+| `third_party/java-multibase/` | Vendored `java-multibase` (only on JitPack), compiled into the SDK | — |
 | `sample/` | Example app; consumes the SDK from the local Maven repository like a customer would; its debug build is driven by `infra/smoke/sdk-android.ts` | — |
 
 ## Build
 
 ```
-powershell -File scripts/mirror-uniffi.ps1        # once: mirrors the UniFFI wrapper AARs into third_party/m2
 ./gradlew :ariesframework:test :sdk:test :sdk:apiCheck
-./gradlew publishAllPublicationsToLocalRepository # -> build/m2
+./gradlew :sdk:publishReleasePublicationToLocalRepository   # -> build/m2 (the sample does this itself)
 ./gradlew :sample:assembleDebug :sample:assembleRelease
 ```
 
-`local.properties` needs `sdk.dir`. JDK 17, Gradle 8.14.5 (wrapper), AGP 8.13.2, Kotlin 2.2.21.
+The sample takes `com.12id:holder-sdk-native` from `build/m2` if `native/build.sh` ran here (a Linux host,
+`native/README.md`), otherwise from `https://maven.12id.com`. `local.properties` needs `sdk.dir`. JDK 17, Gradle 8.14.5 (wrapper), AGP 8.13.2, Kotlin 2.2.21.
 
 ## Public API changes
 

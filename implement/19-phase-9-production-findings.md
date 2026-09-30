@@ -179,3 +179,74 @@ published (von-network holds 9702–9708), clients on `12id-ledger`. Removed aft
 - `/opt/12id/infra.prev-w2` (the old tree, for a rollback) and the old images (`12id/services:phase7` …):
   delete after a few days of stable staging.
 - `/opt/12id/build-src/w2-20260929`: the copied source the images were built from.
+
+## W3 — Android SDK release and CI (started 2026-09-30)
+
+### Summary
+| Item | Built | Verified |
+|---|---|---|
+| Decisions | Two artifacts (SDK + fork merged; native), GitHub Pages Maven repository `maven.12id.com`, CI on tags (owner, 2026-09-30; `18-…` W3) | — |
+| 5b.1 native | `sdk-android/native/`: `build.sh` (upstream tag `0.2.1`, cargo-ndk 4.1.2, NDK r27c, Rust 1.77.2, API 24, 3 ABIs), upstream bindings reused, `com.12id:holder-sdk-native:0.2.1-12id.1` | **`smoke:sdk-android` PASSED on the phone (7/7) and on x86_64 emulators API 26, 28, 36 (steps 1–3)**; native instrumentation test on API 24, 36, 37 (16 KB pages) and the phone |
+| 5b.2 SDK artifact | Fork sources + vendored `java-multibase` compiled into `:sdk`; `third_party/m2`, `mirror-uniffi.ps1` and JitPack retired; `-PpublishRepo` | fork JVM tests 4/4, SDK 44/44, `apiCheck` clean; the published POM names only `com.12id:holder-sdk-native` (no `org.hyperledger`, no JitPack) |
+| 5b.3 CI | `.github/workflows/ci-{services,console,sdk-android}.yml`, `release-{images,native,sdk-android}.yml`, `sdk-android/ci/maven-repo.sh`; `release.sh tag` takes `X.Y.Z-rc.N` and a source version | written, **not run yet**: needs the push and the owner's one-time GitHub setup (`18-…` W3) |
+| M15 | — | not started (needs W5's production minisign keys for the default) |
+
+### Native build (5b.1)
+- **Root cause of trap 42 confirmed.** Rust links Android libraries with `-nodefaultlibs`, so compiler-rt's builtins
+  are left out unless the linker is told; upstream's `cross` build did not. `cargo-ndk --link-builtins` fixes it: no
+  rebuilt library imports `__extenddftf2` or any symbol outside the API 24 stubs of `libc`/`libm`/`libdl`/`liblog`.
+- **`build.sh` checks its own output** (the check upstream would have failed): allowed `NEEDED` entries only, every
+  imported symbol present in the API-level stubs, 16 KB `LOAD` alignment on the 64-bit ABIs, exactly the three
+  `*_uniffi.so` per ABI.
+- **Two build problems the check caught:**
+  - Indy VDR (ZeroMQ is C++) was left importing the whole C++ runtime (`__cxa_throw`, `operator new`, …) and needed
+    no libc++: the `-lc++_static` that `cc` emits sits before `libzmq.a` on the link line, so it resolved nothing, and
+    a shared library links with undefined symbols anyway. Fixed by linking `libc++_static` + `libc++abi` again at the
+    end (`RUSTFLAGS` for Indy VDR only). The AAR ships no `libc++_shared.so` (upstream did).
+  - `cargo ndk -o` also copied dependency crates built as cdylibs (`libaries_askar-<hash>.so`, …). `build.sh` now
+    copies only the wrapper libraries.
+- **Size (arm64):** 6.9 + 7.7 + 5.2 = 19.8 MB for the three libraries, against 44.4 MB upstream (with its
+  `libc++_shared.so`). The native AAR is 24 MB (three ABIs).
+- **Build time:** 65 min for the first build (14 cores, WSL; OpenSSL and ZeroMQ from source), about 1 min cached.
+- **Build host:** this PC's C: is full and Docker Desktop hangs, and the owner's Ubuntu WSL disk is on C:. A separate
+  WSL distro `12id-build` (Ubuntu 24.04, disk on E:) runs `build.sh`; `wsl --unregister 12id-build` removes it. CI
+  uses `ubuntu-24.04`.
+
+### Device evidence (2026-09-30, rebuilt libraries)
+- **Phone (Xiaomi, Android 14, arm64): `smoke:sdk-android` PASSED 7/7** — onboarding Ready; connect; offer accepted →
+  done, declined → abandoned; offline offer with wake webhook → done; proof verified, second declined; restart keeps
+  2 credentials and the mediation; spent invitation Ready after 26 s; all webhook signatures valid. The native
+  instrumentation test passed there too.
+- **x86_64 emulators, steps 1–3 PASSED on API 26, 28 and 36** (onboarding, connect, offer accept/decline). This is the
+  first time the SDK has run on an emulator (Phase 5 finding 9).
+- **API 24 (Android 7.0): the native libraries load** (instrumentation test: Askar, AnonCreds, Indy VDR calls pass), but
+  **the SDK cannot reach the platform**: `CertPathValidatorException: Trust anchor for certification path not found`.
+  Android 7.0's trust store lacks ISRG Root X1 (added in 7.1.1), and Let's Encrypt no longer serves the cross-signed
+  chain. New finding, below.
+- **16 KB pages (API 37 `ps16k` emulator):** the native instrumentation test passed; Android noted
+  `PAGE_SIZE_APP_COMPAT_FLAG_ELF_NOT_ALIGNED` because JNA 5.7.0's **x86_64** `libjnidispatch.so` is 4 KB aligned (its
+  arm64 build is 64 KB aligned, ours are 16 KB). The smoke there did not reach the native layer: the stand-in customer
+  backend took 39 s to create the wallet on staging and the sample's token call timed out (twice).
+- The smoke's `adb logcat -c` is now best effort: the API 26 image refuses it ("failed to clear the 'main' log").
+
+### Found on the way
+- **minSdk 24 and Let's Encrypt (new, needs an owner decision).** Android 7.0 (API 24) cannot validate our
+  certificates. Options: raise `minSdk` to 25; ship ISRG Root X1 (and X2) as extra trust anchors in the SDK's own
+  OkHttp clients and the framework's (the platform, genesis and mediator connections); or use a CA that Android 7.0
+  trusts. Android 7.0 is a very small share of active devices.
+- **The async Askar call hangs in the instrumentation test, with the upstream libraries as well.** `provision` never
+  completes inside the `:native` test APK on API 24 and 36 (also with upstream's arm64 libraries under ARM translation),
+  while the same call works in the app on every device above. All Rust threads are idle in the dump, so the continuation
+  callback is not reaching Kotlin in that harness. The test is `@Ignore`d with this explanation; the app path is covered
+  by the smoke.
+- **JNA 5.7.0 is not 16 KB aligned on x86_64** (emulators only). A JNA bump would clear the compat-mode notice; the
+  bindings use no API that changed since 5.7.
+- **Auto mode refuses some staging actions** even with an allow rule (a reverse tunnel, and writes on a remote host
+  without an explicit per-action go-ahead). The owner opens the smoke tunnel themself.
+
+### Not done yet in W3
+- CI has not run: the owner commits and pushes, then does the one-time setup (`18-…` W3: `nazihar/maven` + Pages +
+  CNAME, `MAVEN_REPO_TOKEN`, tag ruleset, GHCR Actions access), then tags `native-v0.2.1-12id.1`.
+- M15 (minisign on device).
+- The API 24 decision above, and the 16 KB smoke once staging's wallet creation is fast again.
+- M10's phone check (re-onboarding after a `never_connected` revocation).

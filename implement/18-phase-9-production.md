@@ -12,6 +12,9 @@
   - ~~GHCR namespace~~ decided: `ghcr.io/nazihar` (owner, 2026-09-29). Staging was moved there the same day with identical digests.
   - The owner's backup machine.
   - ~~`smoke:sdk-android` on the phone~~: passed 2026-09-30.
+- **W3 started (2026-09-30).** The owner settled distribution and CI (W3 below): two SDK artifacts, a GitHub Pages Maven repository at `maven.12id.com`, and CI driven by tags.
+  - Built: the native artifact (5b.1), the merged SDK artifact (5b.2) and the workflows (5b.3). **`smoke:sdk-android` passed with the rebuilt libraries on the phone (7/7) and on x86_64 emulators API 26/28/36.** Evidence in `19-…` W3.
+  - Open: CI's first run (after the owner's push and one-time setup), M15, and a decision on API 24 (Android 7.0 cannot validate Let's Encrypt certificates).
 - Next: W5 (bring-up) and W3 (SDK release, CI). W4 can start on staging now.
 
 ## Context
@@ -34,11 +37,11 @@ No production environment exists. Until now these decisions were deferred: the l
 | Ledger (§12.1) | **Our own Indy network, full control.** No third-party network, no von-network. Official `indy-node-container` images; fresh random node and steward keys; trustee keys kept offline | Validator operations are ours. No TAA is needed on our own network (documented choice). The production did:indy namespace is ours (proposed `twelveid`) |
 | Validator placement | **All 4 validators on the app VM for now** | Keys are secure, but availability is the same as staging: if the VM goes down, so does the ledger. Moving a validator to its own host later is a NODE transaction plus a genesis rotation ([`genesis-rotation.md`](../infra/runbooks/genesis-rotation.md)) |
 | Hosting | **One fresh, dedicated VM** with the same Docker Compose + Caddy stacks as staging. Self-hosted, no outside vendor | Size it after the Phase 8 load test. Starting point: 8 vCPU / 32 GB |
-| Domain | **`12id.com` subdomains:** `api.`, `agent.`, `mediator.`, `genesis.`, `vdr.`, `maven.`, and **`console.12id.com`** | The apex stays the marketing site |
+| Domain | **`12id.com` subdomains:** `api.`, `agent.`, `mediator.`, `genesis.`, `vdr.`, `maven.`, and **`console.12id.com`** | The apex stays the marketing site. `maven.` is a CNAME to GitHub Pages, not a site on the VM (W3, 2026-09-30) |
 | Secrets (M11) | **Root-only files on disk** (`/opt/12id/run-secrets`, mode 600). Services read `*_FILE` | Containers restart unattended after a reboot, and secret values leave `docker inspect`. A decrypted copy is at rest on the disk, like the age key already is |
 | Backups (M13) | **A backup machine at another site pulls nightly over SSH.** Its key can only read `/opt/12id/backups`. It keeps 30 daily + 12 monthly. A **second age recipient** has its private key offline | A compromised production VM cannot delete the off-site copies. Backups decrypt even if the VM and its age key are both lost |
-| Images | **Prebuilt only; nothing is built on any VM.** GHCR, `ghcr.io/nazihar/12id-*`. A merge to main pushes `sha-<short>`; a git tag `vX.Y.Z` adds `X.Y.Z` to the same digests. **One platform version** for services, console, console-tools, ledger-tools and the patched mediator; the mediator's upstream base and patch level go in image labels. The SDKs get their own semver | Closes M17's mutable tags. "What is running" is answered by `services/VERSIONS.md` |
-| Promotion | `sha-…` on staging → smokes pass → tag `vX.Y.Z` → production pulls **`X.Y.Z@sha256:…`** | Rollback = redeploy the previous digest. Migrations stay backward compatible for one release. The VMs pull with a read-only `read:packages` token, stored as a secret |
+| Images | **Prebuilt only; nothing is built on any VM.** GHCR, `ghcr.io/nazihar/12id-*`. A release-candidate tag `vX.Y.Z-rc.N` builds and pushes `sha-<short>` + `X.Y.Z-rc.N`; the tag `vX.Y.Z` on the same commit adds `X.Y.Z` to the same digests (tags, not merges: owner, 2026-09-30). **One platform version** for services, console, console-tools, ledger-tools and the patched mediator; the mediator's upstream base and patch level go in image labels. The SDKs get their own semver | Closes M17's mutable tags. "What is running" is answered by `services/VERSIONS.md` |
+| Promotion | `X.Y.Z-rc.N` on staging → smokes pass → tag `vX.Y.Z` → production pulls **`X.Y.Z@sha256:…`** | Rollback = redeploy the previous digest. Migrations stay backward compatible for one release. The VMs pull with a read-only `read:packages` token, stored as a secret |
 | Self-hosting (§12.15) | **Production deploys from the same release bundle a self-hosting customer would get:** image-only compose files, one env template, `release.env` | Every production deploy tests the self-host path. The `init` command and the self-host guide are a later packaging phase; go-live does not wait for them |
 | SDK trust anchor (M15) | **Configurable** minisign public keys in `OneTwoIdConfig`. The default is 12id's production keys (primary + backup), compiled in | A self-hosting customer uses their own genesis key without a custom SDK build |
 | Go-live gate | **H1, the Android SDK release (5b), Phase 8 load + DR, and iOS** | iOS is blocked on hardware: no Mac, Apple developer account or iPhone yet (owner action) |
@@ -166,26 +169,64 @@ W2, W3 and W5 can partly run in parallel. W6 waits on hardware.
    - Rehearse locally (Docker Desktop), then as a scratch Compose project on staging.
 6. **Runbooks:** new `infra/runbooks/ledger-ceremony.md` and `production-bringup.md`; `genesis-rotation.md` gains "move a validator to its own host".
 
-### W3 — Android SDK release (Phase 5b, `17-phase-7.md` Appendix A) — ~6–8 d
-- **5b.1:** fork and rebuild the UniFFI wrappers for arm64-v8a, armeabi-v7a and x86_64, linking compiler-rt builtins statically. Publish them as `com.12id:*-uniffi-android`. Replace the coordinates in `sdk-android/ariesframework/build.gradle` and retire `third_party/m2`. Emulator matrix at API 24/26/28/36.
-- **M15:** minisign verification of the genesis on the device:
+### W3 — Android SDK release and CI (Phase 5b, `17-phase-7.md` Appendix A) — ~6–8 d
+
+**Decided (owner, 2026-09-30).** The aim is to keep things simple for the customer and for us, with as little configuration outside the repo as possible.
+
+| Item | Decision | Why |
+|---|---|---|
+| Artifacts | **Two artifacts, and the customer declares one.**<br>• `com.12id:holder-sdk-android` is the SDK, the fork (its sources merged into the SDK module and no longer published on their own) and the vendored `java-multibase`. About 3 MB.<br>• `com.12id:holder-sdk-native` is the three rebuilt UniFFI wrappers (Askar, AnonCreds, Indy VDR) in one AAR: the `.so` files for arm64-v8a, armeabi-v7a and x86_64, plus their Kotlin bindings. About 20 MB. It arrives transitively | One coordinate for the customer, and the SDK and the fork can never drift apart. The native part changes only with an Askar, AnonCreds or VDR bump, so SDK releases stay small (the Pages limit is 1 GB) |
+| Wrapper sources | Build scripts in the monorepo (`sdk-android/native/`), pinned to an upstream tag. **No separate GitHub fork** | Same pattern as the vendored `ariesframework` |
+| Public repository | **A static Maven repository on GitHub Pages.** It is a public repo, `nazihar/maven`, that holds only built artifacts, and it is served at `maven.12id.com` via a CNAME. This replaces "a static repo behind the production Caddy" | GitHub Packages' Maven registry needs a token even for public packages (GHCR does not), and we cannot ask customers for one. Pages needs no VM, costs nothing, and needs no customer token. The custom domain lets us move to Maven Central later without breaking a consumer |
+| CI triggers | **Tags, not merges:**<br>• pushes to `master` and PRs run checks only;<br>• `vX.Y.Z-rc.N` builds every image once and pushes `sha-<short>` + `X.Y.Z-rc.N`, and staging deploys it;<br>• `vX.Y.Z` on the same commit retags those digests with no rebuild;<br>• `sdk-android-vX.Y.Z` publishes the SDK;<br>• `native-vX.Y.Z` rebuilds and publishes the wrappers | Production runs the digests staging tested. GHCR does not collect an image for every commit |
+| Actions minutes | `nazihar/12id` is private on a free account, so it gets 2,000 minutes a month. The emulator matrix and the Rust build run on tags or by hand, never on every push | |
+
+**The customer's setup:**
+```kotlin
+// settings.gradle.kts
+repositories { google(); mavenCentral(); maven("https://maven.12id.com") }
+// app/build.gradle.kts
+implementation("com.12id:holder-sdk-android:X.Y.Z")
+```
+
+**The owner's one-time setup outside the repo:**
+1. Create the public repo `nazihar/maven` and turn on Pages (deploy from branch `main`).
+2. Add a DNS record: `maven.12id.com` CNAME to `nazihar.github.io`, then set the custom domain and "Enforce HTTPS" in Pages.
+3. Add one Actions secret in `nazihar/12id`, `MAVEN_REPO_TOKEN`: a fine-grained PAT with Contents: read and write on `nazihar/maven` only.
+4. Add a tag ruleset on `nazihar/12id` so only the owner can create `v*`, `sdk-android-v*` and `native-v*`.
+5. For each of the nine `ghcr.io/nazihar/12id-*` packages, open Package settings → Manage Actions access, and add `nazihar/12id` with the Write role. The packages were first pushed by hand in W2, so the workflow's token may not write to them until this is done.
+
+GHCR needs no secret: the workflow's `GITHUB_TOKEN` pushes to `ghcr.io/nazihar` once step 5 is done.
+
+**Steps:**
+- **5b.1: the native artifact** (finding 9, trap 42):
+  - rebuild Askar, AnonCreds and Indy VDR from upstream `aries-uniffi-wrappers` tag `0.2.1`, the sources of the three published wrappers, with its `Cargo.lock`;
+  - use `cargo-ndk` and NDK r27 at API 24, whose clang links compiler-rt's builtins, so `__extenddftf2` resolves on x86_64;
+  - build three ABIs and drop x86;
+  - libc++ is linked statically, so the upstream `libc++_shared.so` goes away;
+  - reuse the upstream Kotlin bindings (`classes.jar`, generated code, Apache-2.0) unchanged. The Rust sources are identical, and UniFFI checks its API checksums when a library loads;
+  - package everything as `com.12id:holder-sdk-native`, and retire `scripts/mirror-uniffi.ps1` and `third_party/m2`;
+  - acceptance: the sample onboards on x86_64 emulators at API 24, 26, 28 and 36, and `smoke:sdk-android` still passes on the phone.
+- **5b.2: the SDK artifact and the repository:**
+  - merge the fork's sources into `:sdk`. The `ariesframework` module stays for its own tests and is not published. `apiDump` ignores `org.hyperledger.*`;
+  - vendor `java-multibase`, which removes JitPack;
+  - publish to a local directory in Maven layout. CI copies it into `nazihar/maven`;
+  - the sample resolves only from that repository, and `docs/integration.md` shrinks to the snippet above.
+- **M15: minisign verification of the genesis on the device:**
   - the trust anchor is configurable: `OneTwoIdConfig` takes one or more minisign public keys;
   - the default is 12id's production keys (primary + backup), compiled in;
   - the key and URL from `/v1/ledger` stay hints only;
   - `apiDump` for the new parameter;
   - depends on W5 step 2, which generates the production keys.
-- **5b.2:**
-  - vendor `java-multibase`, which removes JitPack;
-  - the public repository is self-hosted: a static Maven repo at `maven.12id.com` behind the production Caddy, deployed like genesis.
-- **5b.3: CI on GitHub Actions** (a self-hosted runner is optional):
-  - PR checks:
-    - services `tsc` + tests + `npm audit --audit-level=high`;
-    - console `tsc` / Vitest / `check:client`;
-    - SDK build + JVM tests + `apiCheck`;
-    - emulator job;
-  - on merge to main: build every image once and push `ghcr.io/nazihar/12id-*:sha-<short>`;
-  - on `vX.Y.Z`: add the version tag to the same digests (no rebuild), write `release.env` and `services/VERSIONS.md`, and attach the release bundle to the GitHub release;
-  - on `sdk-android-vX.Y.Z`: publish the fork, SDK and wrappers to `maven.12id.com`, and attach the API dump.
+- **5b.3: CI on GitHub Actions** (GitHub-hosted runners):
+  - checks on pushes to `master` and on PRs, filtered by path:
+    - services: `tsc` + tests + `npm audit --audit-level=high`;
+    - console: `tsc` / Vitest / `check:client`;
+    - SDK: build + JVM tests + `apiCheck`;
+  - the release workflows above;
+  - the emulator job (x86_64, API 24/26/28/36, `native/src/androidTest`: all three libraries load and answer a call) runs on `native-v*` and by hand. The native libraries are what differ between ABIs and API levels, so an SDK release runs the JVM tests, `apiCheck` and a sample build from the published artifacts instead;
+  - `sdk-android-v*` and `native-v*` publish into a checkout of `nazihar/maven` (so `maven-metadata.xml` keeps every version), refuse a version that already exists, and push. `sdk-android-v*` attaches the API dump to the GitHub release;
+  - the workflows are `.github/workflows/ci-{services,console,sdk-android}.yml` and `release-{images,native,sdk-android}.yml`.
 - Phone checks still owed: ~~`smoke:sdk-android` (M14, the M1 mediator cap)~~ **passed 2026-09-30** (`19-phase-9-production-findings.md` W2), and re-onboarding after a `never_connected` revocation (M10).
 
 ### W4 — Phase 8 Hardening (production-shaped staging; the DR drill against production) — ~5–6 d

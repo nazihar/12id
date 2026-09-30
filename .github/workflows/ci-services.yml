@@ -1,0 +1,46 @@
+# Checks for services/* (Phase 9 W3, 5b.3): typecheck, tests (with a real Postgres, so the database tests
+# run instead of skipping) and npm audit. Pushes to master and PRs that touch services/.
+name: ci-services
+
+on:
+  push:
+    branches: [master]
+    paths: ['services/**', '.github/workflows/ci-services.yml']
+  pull_request:
+    paths: ['services/**', '.github/workflows/ci-services.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      # The tests' default TEST_DATABASE_URL (the Phase 2 local Postgres): 127.0.0.1:55432, password spike-only.
+      postgres:
+        image: postgres:15-alpine@sha256:fe0737ba566a2c5b2a28f34433c0a423261900ec17b9bf7ad115e1aae7e57f1b
+        env:
+          POSTGRES_PASSWORD: spike-only
+        ports: ['55432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 12
+    defaults:
+      run:
+        working-directory: services
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.20.0
+          cache: npm
+          cache-dependency-path: services/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck --workspaces --if-present
+      - run: npm test --workspaces --if-present
+      - run: npm audit --audit-level=high

@@ -13,7 +13,9 @@ plugins {
 }
 
 apiValidation {
-    // Only the customer-facing SDK has a stable API; the fork and the sample are internal.
+    // Only the customer-facing SDK has a stable API; the fork, the native bindings and the sample are internal.
     // The biometric add-ons have one public class each and implement the SDK's BiometricCapture port.
-    ignoredProjects += ['ariesframework', 'sample', 'biometrics-mock', 'biometrics-aws']
+    ignoredProjects += ['native', 'ariesframework', 'sample', 'biometrics-mock', 'biometrics-aws']
+    // Since W3 the fork and the vendored java-multibase compile into :sdk; they are not the SDK's API.
+    ignoredPackages += ['org.hyperledger.ariesframework', 'io.ipfs.multibase']
 }

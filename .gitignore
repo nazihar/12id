@@ -37,4 +37,6 @@ Thumbs.db
 !infra/env/*.env
 !infra/env/*/von-network.env
 !infra/compose/release.env
+# Phase 9 W3: the native build's pinned inputs (no secrets)
+!sdk-android/native/versions.env
 !infra/build/

@@ -1,0 +1,105 @@
+plugins {
+    id 'com.android.library'
+    // Only for the instrumentation test (src/androidTest); the module has no Kotlin sources of its own.
+    id 'org.jetbrains.kotlin.android'
+    id 'maven-publish'
+}
+
+// com.12id:holder-sdk-native: the three UniFFI wrappers (Askar, AnonCreds, Indy VDR) in one AAR.
+// The .so files come from build.sh (jniLibs/, not committed); the Kotlin bindings are the upstream
+// generated classes, unchanged (bindings/, README.md). Customers get this artifact through the SDK.
+android {
+    namespace 'com.onetwoid.sdk.nativelibs'
+    compileSdk 36
+
+    defaultConfig {
+        minSdk 24
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+    }
+
+    sourceSets {
+        main.jniLibs.srcDirs = ['jniLibs']
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+
+    buildFeatures {
+        buildConfig = false
+    }
+
+    publishing {
+        singleVariant('release')
+    }
+}
+
+dependencies {
+    // Packaged into the AAR (libs/); the upstream bindings, unchanged.
+    api files(fileTree(dir: 'bindings', include: '*.jar').files.sort())
+
+    // What the upstream wrapper POMs declared, same versions (kotlin-stdlib comes from the Kotlin plugin).
+    implementation('net.java.dev.jna:jna:5.7.0@aar') { transitive = false }
+    implementation 'org.jetbrains.kotlinx:atomicfu:0.22.0'
+    implementation 'com.squareup.okio:okio:3.2.0'
+    implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.1'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.0'
+
+    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
+    androidTestImplementation 'androidx.test:runner:1.5.2'
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11
+    }
+}
+
+// An AAR without its libraries would install and then crash on the first wallet call.
+def checkJniLibs = tasks.register('checkJniLibs') {
+    def dir = layout.projectDirectory.dir('jniLibs')
+    def abis = providers.fileContents(layout.projectDirectory.file('versions.env')).asText.map { text ->
+        (text =~ /(?m)^ABIS="([^"]+)"/)[0][1].split(' ') as List
+    }
+    doLast {
+        def missing = []
+        abis.get().each { abi ->
+            ['askar_uniffi', 'anoncreds_uniffi', 'indy_vdr_uniffi'].each { lib ->
+                if (!dir.file("$abi/lib${lib}.so").asFile.exists()) missing << "$abi/lib${lib}.so"
+            }
+        }
+        if (missing) throw new GradleException("native/jniLibs is incomplete (run native/build.sh): ${missing.join(', ')}")
+    }
+}
+tasks.matching { it.name == 'bundleReleaseAar' }.configureEach { dependsOn checkJniLibs }
+
+afterEvaluate {
+    publishing {
+        repositories {
+            maven {
+                name = 'local'
+                // -PpublishRepo=<dir>: CI publishes into a checkout of the public repository (nazihar/maven).
+                url = findProperty('publishRepo') ?: rootProject.layout.buildDirectory.dir('m2')
+            }
+        }
+        publications {
+            release(MavenPublication) {
+                from components.release
+                groupId 'com.12id'
+                artifactId 'holder-sdk-native'
+                version project.property('nativeVersion')
+                pom {
+                    name = '12id holder SDK native libraries'
+                    description = 'Askar, AnonCreds and Indy VDR for Android (aries-uniffi-wrappers, rebuilt)'
+                    licenses {
+                        license {
+                            name = 'Apache-2.0'
+                            url = 'https://www.apache.org/licenses/LICENSE-2.0'
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

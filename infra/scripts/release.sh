@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Builds and pushes every 12id image, and writes the release bundle's release.env (Phase 9 W2, M17).
-# By hand until W3's CI runs the same two steps on GitHub Actions.
+# CI runs it (.github/workflows/release-images.yml, W3); by hand it works the same way.
 #
-#   infra/scripts/release.sh build              build HEAD once, push :sha-<short>, write release.env
-#   infra/scripts/release.sh tag 1.2.3          add :1.2.3 to the digests in release.env (no rebuild)
+#   infra/scripts/release.sh build                  build HEAD once, push :sha-<short>, write release.env
+#   infra/scripts/release.sh tag 1.2.3-rc.1         add :1.2.3-rc.1 to the digests in release.env (no rebuild)
+#   infra/scripts/release.sh tag 1.2.3 sha-abc1234  add :1.2.3 to the digests the registry has for
+#                                                   :sha-abc1234, i.e. what the release candidate staged
 #
 # REGISTRY (default ghcr.io/nazihar) must be logged in (`docker login ghcr.io`, a token with
 # write:packages). A dirty tree is refused unless ALLOW_DIRTY=1 (rehearsals); its version gets -dirty.
@@ -11,7 +13,7 @@
 # and one digest per image, so a deploy pulls exactly what was built and a rollback is the previous file.
 set -euo pipefail
 
-cmd="${1:?usage: release.sh build | tag X.Y.Z}"
+cmd="${1:?usage: release.sh build | tag X.Y.Z[-rc.N] [from-version]}"
 # Outside a git checkout (a copied tree), VERSION and REVISION must be given.
 repo="$(git -C "$(dirname "$0")" rev-parse --show-toplevel 2>/dev/null || (cd "$(dirname "$0")/../.." && pwd))"
 REGISTRY="${REGISTRY:-ghcr.io/nazihar}"
@@ -63,20 +65,31 @@ case "$cmd" in
     write_release "$version" "$revision"
     ;;
   tag)
-    new="${2:?usage: release.sh tag X.Y.Z}"
-    [[ "$new" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "version must look like 1.2.3" >&2; exit 2; }
-    # shellcheck disable=SC1090
-    source "$RELEASE_FILE"
+    new="${2:?usage: release.sh tag X.Y.Z[-rc.N] [from-version]}"
+    from="${3:-}"
+    [[ "$new" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]] || { echo "version must look like 1.2.3 or 1.2.3-rc.1" >&2; exit 2; }
+    if [ -n "$from" ]; then
+      VERSION="$from"
+    else
+      # shellcheck disable=SC1090
+      source "$RELEASE_FILE"
+    fi
     for name in "${IMAGES[@]}"; do
-      var="$(digest_var "$name")"
-      digest="${!var:?$var missing from $RELEASE_FILE}"
+      if [ -n "$from" ]; then
+        # Never rebuild for a release: take the digests already pushed (and staged) as :$from.
+        digest="$(docker buildx imagetools inspect "$REGISTRY/12id-$name:$from" | sed -n 's/^Digest: *\(sha256:[0-9a-f]*\)$/\1/p' | head -1)"
+        [ -n "$digest" ] || { echo "$REGISTRY/12id-$name:$from not found; tag a release candidate of this commit first" >&2; exit 1; }
+      else
+        var="$(digest_var "$name")"
+        digest="${!var:?$var missing from $RELEASE_FILE}"
+      fi
       docker buildx imagetools create --tag "$REGISTRY/12id-$name:$new" "$REGISTRY/12id-$name@$digest"
       digests[$name]="$digest"
     done
     write_release "$new" "tag v$new of $VERSION"
     ;;
   *)
-    echo "usage: release.sh build | tag X.Y.Z" >&2
+    echo "usage: release.sh build | tag X.Y.Z[-rc.N] [from-version]" >&2
     exit 2
     ;;
 esac

@@ -11,31 +11,26 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        // 12id fork change: the aries-uniffi-wrappers are only published to GitHub Packages, which
-        // needs a token. scripts/mirror-uniffi.ps1 fills this repo; nothing else resolves from it.
-        maven {
-            name = "uniffiMirror"
-            url = uri("third_party/m2")
-            content { includeGroup("org.hyperledger") }
-        }
-        // org.didcommx:peerdid depends on com.github.multiformats:java-multibase, which is only on
-        // JitPack. Restricted to that group so nothing else can resolve from JitPack.
-        maven {
-            name = "jitpackMultibase"
-            url = uri("https://jitpack.io")
-            content { includeGroup("com.github.multiformats") }
-        }
-        // The published SDK and fork (`./gradlew publishAllPublicationsToLocalRepository`); the sample
-        // consumes them from here like a customer app would (Phase 5 plan P).
+        // The published SDK, native libraries and add-ons (`./gradlew publishAllPublicationsToLocalRepository`);
+        // the sample consumes them from here like a customer app would (Phase 5 plan P). CI copies this
+        // directory into the public repository (Phase 9 W3).
         maven {
             name = "local"
             url = uri("build/m2")
+            content { includeGroup("com.12id") }
+        }
+        // The public repository (GitHub Pages, nazihar/maven): whatever was not published locally, usually
+        // com.12id:holder-sdk-native, which only native/build.sh on a Linux host can produce.
+        maven {
+            name = "12id"
+            url = uri("https://maven.12id.com")
             content { includeGroup("com.12id") }
         }
     }
 }
 
 rootProject.name = "12id-sdk-android"
+include ':native'
 include ':ariesframework'
 include ':sdk'
 include ':biometrics-mock'

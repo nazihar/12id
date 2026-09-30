@@ -6,9 +6,10 @@ plugins {
 
 // The sample is a stand-in for a customer app: it consumes the SDK only from the local Maven
 // repository (build/m2), never as a project dependency, so the published artifact is what gets
-// tested. Building the sample publishes the fork and the SDK there first.
+// tested. Building the sample publishes the SDK and the add-ons there first. The native libraries come from
+// build/m2 when native/build.sh ran here, otherwise from maven.12id.com.
 tasks.matching { it.name == 'preBuild' }.configureEach {
-    dependsOn ':ariesframework:publishReleasePublicationToLocalRepository', ':sdk:publishReleasePublicationToLocalRepository',
+    dependsOn ':sdk:publishReleasePublicationToLocalRepository',
         ':biometrics-aws:publishReleasePublicationToLocalRepository', ':biometrics-mock:publishReleasePublicationToLocalRepository'
 }
 
@@ -48,13 +49,12 @@ android {
 
     // Phase 0 measured 165.8 MB for seven ABIs vs 51.7 MB for arm64 alone; ndk.abiFilters has no
     // effect because the native libraries arrive inside AARs. Splits (or an App Bundle) are the lever.
-    // The wrappers' x86_64 libraries fail to load on every Android version (missing __extenddftf2,
-    // Phase 5 findings), so emulators are out until the wrappers are rebuilt; arm64 devices only.
+    // x86_64 is for emulators: the rebuilt native libraries load there since Phase 9 W3 (native/README.md).
     splits {
         abi {
             enable true
             reset()
-            include 'arm64-v8a'
+            include 'arm64-v8a', 'x86_64'
             universalApk false
         }
     }

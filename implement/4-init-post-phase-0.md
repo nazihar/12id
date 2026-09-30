@@ -1082,7 +1082,7 @@ Plan: [`18-phase-9-production.md`](18-phase-9-production.md); evidence (when sta
 
 41. **Force-stopped apps get no push, and MIUI needs "Autostart"** (Phase 5, confirmed on the phone). `am force-stop` (and the user's Force stop) puts the app in the stopped state: no broadcast and no FCM message is delivered until the next launch. MIUI additionally refuses to start a killed app for a broadcast without app-op 10008, which `pm clear` resets asynchronously. Simulate pushes with `am kill`, not `force-stop`; document both for customers.
 
-42. **The UniFFI wrappers' x86_64 libraries do not load on any Android version** (Phase 5). `cannot locate symbol "__extenddftf2"` from `libaskar_uniffi.so` on API 24, 26, 28 and 36 emulators; arm64 is fine. No emulator testing, and no minSdk verification, until the wrappers are rebuilt with static compiler-rt builtins (§12.16).
+42. **The UniFFI wrappers' x86_64 libraries do not load on any Android version** (Phase 5). **Fixed in Phase 9 W3:** rebuilt with `cargo-ndk --link-builtins` (`sdk-android/native/`); the SDK onboards on x86_64 emulators at API 26, 28 and 36. `cannot locate symbol "__extenddftf2"` from `libaskar_uniffi.so` on API 24, 26, 28 and 36 emulators; arm64 is fine. No emulator testing, and no minSdk verification, until the wrappers are rebuilt with static compiler-rt builtins (§12.16).
 
 43. **`UnsatisfiedLinkError` is an `Error`, not an `Exception`** (Phase 5). A `catch (e: Exception)` around wallet initialisation let the failure escape and left the SDK's state at `Initializing` for good. Catch `Throwable` at the API boundary and report a typed failure.
 
@@ -1221,11 +1221,17 @@ The console (`console/`) uses Better Auth with the organization (tenant membersh
 
 The product is offered as SaaS and will also be self-hostable by an organization. That is why the console has two roles (operators across tenants for us or a self-hoster's admins; tenant members for SaaS customers). Phase 4 keeps the console free of dependencies a self-hoster cannot have (no Google allowlist, no fixed IPs, everything configured by environment, mail through any SMTP). Packaging the whole stack (ledger, patched mediator, endorser, genesis signing, upgrades) for self-hosters is a later phase.
 
-### 12.16 Android SDK naming and distribution — decided: `com.12id` / `com.onetwoid`, local repository for now (new, Phase 5)
+### 12.16 Android SDK naming and distribution — decided: `com.12id` / `com.onetwoid`, GitHub Pages Maven repository at `maven.12id.com` (new, Phase 5; distribution settled 2026-09-30)
 
 Maven group **`com.12id`** (the product domain, 12id.com), artifact `holder-sdk-android` (the fork as `aries-framework-kotlin`); Kotlin package **`com.onetwoid`** (a package segment cannot start with a digit; `com._12id` was rejected as unreadable; the company domain was rejected because the SDK is a product artefact). Entry point `com.onetwoid.sdk.OneTwoId`.
 
 Distribution is **source / local Maven only** (`sdk-android/build/m2`, consumed by the sample the way a customer would) until a public repository is chosen before the first customer. Two things must happen with that step: republish the UniFFI wrappers under our coordinates — **rebuilt**, because the upstream x86_64 libraries do not load on any Android (missing compiler-rt builtins, §9) and emulator testing depends on it — and vendor or mirror the one JitPack dependency (`com.github.multiformats:java-multibase`), so that a consumer needs a single repository. Maven Central remains possible later (namespace verification against 12id.com).
+
+**Settled 2026-09-30 (owner, Phase 9 W3, [`18-phase-9-production.md`](18-phase-9-production.md)).** Keep it simple for the customer and for us, with as little configuration outside the repo as possible:
+- **Two artifacts, and the customer declares one.** `com.12id:holder-sdk-android` is the SDK, with the fork merged in (the fork is no longer published on its own) and `java-multibase` vendored. `com.12id:holder-sdk-native` is the three rebuilt UniFFI wrappers in one AAR (three ABIs), and it arrives transitively.
+- **The wrappers are rebuilt from upstream tag `0.2.1` in the monorepo** (`sdk-android/native/`), not in a separate fork. The upstream Kotlin bindings are reused unchanged.
+- **Repository: a static Maven repository on GitHub Pages** (public repo `nazihar/maven`, CNAME `maven.12id.com`). GitHub Packages was rejected because its Maven registry needs a token even for public packages. Self-hosting behind the production Caddy was rejected: it adds a VM dependency and customer builds would break when the VM is down. Maven Central stays possible later; the custom domain means no consumer has to change anything.
+- A customer declares one extra repository line and one dependency.
 
 ### 12.17 Biometric gate — decided: optional per tenant, own service, bring-your-own AWS first (new, Phase 6 planning)
 

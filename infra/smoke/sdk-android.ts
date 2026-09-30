@@ -107,7 +107,12 @@ const waitState = async (type: string, id: string, states: string[], timeoutMs: 
 try {
   await receiver.listening
   console.log(`device: ${adb('shell', 'getprop', 'ro.product.model')}, Android ${adb('shell', 'getprop', 'ro.build.version.release')}`)
-  adb('logcat', '-c')
+  // Best effort: some API 26 emulator images refuse ("failed to clear the 'main' log"); dumps are counted, not cleared.
+  try {
+    adb('logcat', '-c')
+  } catch {
+    console.log('  (logcat -c refused by the device; continuing)')
+  }
   const endpoint = await setup.must<{ secret?: string }>('PUT', '/v1/webhook', { url: webhookUrl })
   secret = endpoint.secret ?? (await setup.must<{ secret: string }>('POST', '/v1/webhook/rotate-secret')).secret
   const credDefId = process.env.CRED_DEF_ID ?? (await publishCatalogue(setup, 'smoke-badge')).credentialDefinitionLedgerId

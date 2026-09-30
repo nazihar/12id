@@ -3,7 +3,6 @@ plugins {
     id 'org.jetbrains.kotlin.android'
     id 'org.jetbrains.kotlin.plugin.serialization'
     id "org.jlleitschuh.gradle.ktlint" version '13.1.0'
-    id 'maven-publish'
 }
 
 android {
@@ -27,10 +26,9 @@ android {
         sourceCompatibility JavaVersion.VERSION_11
         targetCompatibility JavaVersion.VERSION_11
     }
-    publishing {
-        singleVariant("release") {
-            withSourcesJar()
-        }
+    // 12id fork change (W3): the vendored java-multibase, as in :sdk (third_party/java-multibase).
+    sourceSets {
+        main.java.srcDirs += ['../third_party/java-multibase/java']
     }
 }
 
@@ -49,10 +47,8 @@ ktlint {
 }
 
 dependencies {
-    // 12id fork change: the Android artifacts of the wrappers, resolved from third_party/m2.
-    implementation 'org.hyperledger:anoncreds_uniffi-android:0.2.0-wrapper.1'
-    implementation 'org.hyperledger:indy_vdr_uniffi-android:0.2.1-wrapper.2'
-    implementation 'org.hyperledger:askar_uniffi-android:0.2.0-wrapper.1'
+    // 12id fork change (W3): the rebuilt UniFFI wrappers (native/README.md).
+    implementation project(':native')
 
     implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.0'
     implementation 'org.slf4j:slf4j-api:1.7.32'
@@ -60,11 +56,9 @@ dependencies {
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-jdk8:1.7.0'
     implementation 'org.jetbrains.kotlinx:kotlinx-datetime:0.4.0'
     implementation 'com.squareup.okhttp3:okhttp:4.10.0'
-    implementation 'org.didcommx:peerdid:0.5.0'
+    implementation('org.didcommx:peerdid:0.5.0') { exclude group: 'com.github.multiformats' }
 
-    implementation 'androidx.core:core-ktx:1.7.0'
-    implementation 'androidx.appcompat:appcompat:1.6.1'
-    implementation 'com.google.android.material:material:1.8.0'
+    // 12id fork change (W3): androidx core/appcompat and Material dropped; the framework uses none of them.
     // 12id fork change: a library must not choose the app's logging backend; logback is for tests only.
     testImplementation 'ch.qos.logback:logback-classic:1.2.6'
     testImplementation 'junit:junit:4.13.2'
@@ -75,23 +69,4 @@ dependencies {
     androidTestImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.0'
 }
 
-// 12id fork change: publish under our coordinates to the project-local repository only
-// (4-init §12.16). Consumers resolve it from build/m2; there is no remote repository yet.
-afterEvaluate {
-    publishing {
-        repositories {
-            maven {
-                name = "local"
-                url = rootProject.layout.buildDirectory.dir("m2")
-            }
-        }
-        publications {
-            release(MavenPublication) {
-                from components.release
-                groupId 'com.12id'
-                artifactId 'aries-framework-kotlin'
-                version project.property('forkVersion')
-            }
-        }
-    }
-}
+// 12id fork change (W3): not published on its own; its sources compile into :sdk (com.12id:holder-sdk-android).

@@ -8,7 +8,7 @@
 | Upstream base | `e1efb7a` ("issue credential 2.0 (#37)") |
 | Vendored on | 2026-09-15, from the Phase 0 clone `phase0/android` |
 | Upstream sample `app/` | removed; replaced by `sample/` |
-| Published as | `com.12id:aries-framework-kotlin` (local Maven repo only, 4-init §12.16) |
+| Published as | inside `com.12id:holder-sdk-android`: its sources compile into `:sdk` (Phase 9 W3, 4-init §12.16). `com.12id:aries-framework-kotlin` (Phase 5) is no longer published |
 
 ## Changes against upstream
 
@@ -21,9 +21,10 @@ Every change is marked in the source with a `fork change` comment (`Phase 0 fork
 | T1 | `build.gradle`, `ariesframework/build.gradle`, `gradle/wrapper` | Gradle 8.0 → 8.14.5 (checksum pinned), AGP 8.0.2 → 8.13.2, Kotlin 1.8 → 2.2.21, compileSdk 33 → 36, library `targetSdk` removed, `kotlinOptions` → `kotlin.compilerOptions`, ktlint plugin 11.4.2 → 13.1.0. No source changes were needed | compileSdk 36 for current customer apps (Phase 5 plan) |
 | F3 | `routing/MediationRecipient.kt` | public `startPickup()` / `stopPickup()`; `close()` delegates to `stopPickup()`; the polling timer is never started twice | The SDK pauses polling in the background and resumes in the foreground; upstream could only stop it for good |
 | F4 | `agent/AgentEvents.kt`, `routing/MediationRecipient.kt` | `AgentEvents.PickupEvent(messageCount)` published after every pickup batch | `sync()` needs to know when the mediator's queue is drained |
-| F5 | `ariesframework/build.gradle` | `logback-classic` is test-only; UniFFI wrappers resolved from `third_party/m2`; publishes under `com.12id` | A library must not force a logging backend; no GitHub Packages token (4-init §9) |
+| F5 | `ariesframework/build.gradle` | `logback-classic` is test-only | A library must not force a logging backend |
 
 | F6 | `ariesframework/consumer-rules.pro` | R8 keep rules for the framework's serializable models, the UniFFI bindings and JNA | Apps that minify would otherwise strip classes resolved by name at runtime (verified by the sample's minified release build) |
+| F7 | `ariesframework/build.gradle` | The UniFFI wrappers come from `:native` (rebuilt, `native/README.md`) instead of the `org.hyperledger` artifacts; `java-multibase` is vendored (`third_party/java-multibase`) instead of resolved from JitPack; androidx core/appcompat and Material dropped (unused); no publication of its own | Phase 9 W3: one repository for consumers, and x86_64 libraries that load |
 
 The slf4j binding that makes the framework's logs visible lives in the SDK (`sdk/src/main/java/org/slf4j/impl/`), not in the fork.
 

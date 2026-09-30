@@ -1,0 +1,58 @@
+# Server images (Phase 9 W3, M17). Tags, not merges (owner, 2026-09-30):
+#   vX.Y.Z-rc.N  build every image once, push :sha-<short> and :X.Y.Z-rc.N; staging deploys it
+#   vX.Y.Z       on the same commit: add :X.Y.Z to the digests the rc pushed (no rebuild)
+# Both attach release.env and the release bundle to a GitHub release. infra/scripts/release.sh does the work.
+name: release-images
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+', 'v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+']
+
+permissions:
+  contents: write # the GitHub release
+  packages: write # ghcr.io/nazihar/12id-*
+
+concurrency:
+  group: release-images
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - name: The tag must point at master
+        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/master
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: "Release candidate: build once, push :sha-<short> and :X.Y.Z-rc.N"
+        if: contains(github.ref_name, '-rc.')
+        run: |
+          bash infra/scripts/release.sh build
+          bash infra/scripts/release.sh tag "${TAG#v}"
+      - name: "Release: add :X.Y.Z to the release candidate's digests"
+        if: ${{ !contains(github.ref_name, '-rc.') }}
+        run: bash infra/scripts/release.sh tag "${TAG#v}" "sha-$(git rev-parse --short=7 HEAD)"
+      - name: Release bundle
+        run: |
+          # What a host needs to deploy (production-bringup.md); never infra/env/<env>/ (overlays, secrets).
+          tar czf "12id-bundle-${TAG#v}.tar.gz" infra/compose infra/env/template.env infra/scripts infra/systemd infra/runbooks
+          cp infra/compose/release.env "release-${TAG#v}.env"
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prerelease=""
+          if [[ "$TAG" == *-rc.* ]]; then prerelease="--prerelease"; fi
+          gh release create "$TAG" $prerelease --title "$TAG" \
+            --notes "Images ghcr.io/nazihar/12id-*:${TAG#v}, digests in release-${TAG#v}.env. Commit that file as infra/compose/release.env to deploy it." \
+            "12id-bundle-${TAG#v}.tar.gz" "release-${TAG#v}.env"
