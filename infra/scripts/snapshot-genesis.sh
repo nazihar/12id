@@ -2,6 +2,10 @@
 # Publishes a versioned, immutable genesis snapshot for https://genesis.<domain>/ (W2).
 #
 #   snapshot-genesis.sh <version>        e.g. snapshot-genesis.sh v1
+#   GENESIS_SOURCE=/opt/12id/ceremony/out/pool_transactions_genesis snapshot-genesis.sh v1
+#
+# The source is von-network's /genesis (staging) unless GENESIS_SOURCE names a file: our own
+# network's genesis comes from the ceremony (Phase 9 W2, runbooks/ledger-ceremony.md).
 #
 # Layout under $GENESIS_ROOT (served read-only by Caddy):
 #   v1/pool_transactions_genesis          immutable; never overwritten
@@ -17,7 +21,8 @@ VERSION="${1:?usage: snapshot-genesis.sh <version, e.g. v1>}"
 [[ "$VERSION" =~ ^v[0-9]+$ ]] || { echo "version must look like v1, v2, ..." >&2; exit 2; }
 
 LEDGER_URL="${LEDGER_URL:-http://127.0.0.1:9000}"
-GENESIS_ROOT="${GENESIS_ROOT:-/opt/12id/infra/staging/genesis}"
+# Outside the code tree since Phase 9 W2, so a tree sync never touches a published version.
+GENESIS_ROOT="${GENESIS_ROOT:-/opt/12id/genesis}"
 EXPECTED_NODES="${EXPECTED_NODES:-4}"
 FILE=pool_transactions_genesis
 
@@ -30,7 +35,11 @@ fi
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-curl -fsS "$LEDGER_URL/genesis" -o "$tmp/$FILE"
+if [ -n "${GENESIS_SOURCE:-}" ]; then
+  cp "$GENESIS_SOURCE" "$tmp/$FILE"
+else
+  curl -fsS "$LEDGER_URL/genesis" -o "$tmp/$FILE"
+fi
 
 # One JSON transaction per line; each validator is a NODE txn (type "0").
 nodes="$(grep -c '"type":"0"' "$tmp/$FILE" || true)"
@@ -39,9 +48,11 @@ if [ "$nodes" -ne "$EXPECTED_NODES" ]; then
   exit 1
 fi
 
-# Every validator must advertise a public address, never a Docker-internal one.
-if grep -Eq '"(client_ip|node_ip)":"(127\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|host\.docker\.internal)' "$tmp/$FILE"; then
-  echo "genesis advertises a private address - start von-network with the public IP" >&2
+# Phones connect to client_ip, so it must be public. node_ip carries validator-to-validator traffic:
+# our own network keeps it on a private Docker network on purpose (compose.ledger-nodes.yml), while
+# von-network advertises the public IP there too. ALLOW_PRIVATE_CLIENT_IP=1 only for a local rehearsal.
+if [ "${ALLOW_PRIVATE_CLIENT_IP:-}" != 1 ] && grep -Eq '"client_ip":"(127\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|host\.docker\.internal)' "$tmp/$FILE"; then
+  echo "genesis advertises a private client address - phones could not reach the ledger" >&2
   exit 1
 fi
 

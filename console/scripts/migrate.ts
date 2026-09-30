@@ -12,6 +12,9 @@ import { drizzle } from 'drizzle-orm/node-postgres'
 import { migrate } from 'drizzle-orm/node-postgres/migrator'
 import pg from 'pg'
 
+// Secrets arrive as NAME_FILE (Phase 9 M11); the runtime image copies this one server file for the script.
+import { resolveFileEnv } from '../src/server/file-env.server.ts'
+
 async function ensureDatabase(url: string): Promise<'created' | 'existing'> {
   const name = decodeURIComponent(new URL(url).pathname.replace(/^\//, ''))
   if (!/^[a-z_][a-z0-9_]{0,62}$/.test(name)) throw new Error(`refusing to create database with unexpected name '${name}'`)
@@ -30,7 +33,7 @@ async function ensureDatabase(url: string): Promise<'created' | 'existing'> {
   }
 }
 
-const url = process.env.DATABASE_URL
+const url = resolveFileEnv(process.env).DATABASE_URL
 if (!url) throw new Error('DATABASE_URL is required')
 
 const database = await ensureDatabase(url)

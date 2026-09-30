@@ -1,0 +1,12 @@
+[Unit]
+# The VM's backup runs at 02:30 UTC (12id-backup.timer); pull after it, and again later in case it ran late.
+Description=Pull the 12id backups twice a day
+
+[Timer]
+OnCalendar=*-*-* 04:15:00 UTC
+OnCalendar=*-*-* 16:15:00 UTC
+RandomizedDelaySec=10m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,207 @@
+# The platform's edge (Phase 1; one file for every environment since Phase 9 W2).
+#
+# Hostnames and the rate-limit exemption come from the environment file (infra/env/<env>.env) through
+# compose.edge.yml: {$VAR} is replaced before the file is parsed. An environment's extra sites (staging:
+# the ledger browser, Grafana, the smoke issuer) are in infra/env/<env>/caddy/*.caddy, imported last.
+#
+# Caddy runs with host networking, so upstreams are services published on 127.0.0.1 only.
+# Docker-published ports bypass ufw; binding them to localhost is what keeps them private.
+
+{
+	email {$ACME_EMAIL}
+
+	# rate_limit comes from caddy-ratelimit (infra/build/caddy/Dockerfile). This file does
+	# not load on the stock caddy image.
+	order rate_limit before reverse_proxy
+
+	# Phase 7 review M16: per-server request metrics (status codes, durations) on the admin
+	# endpoint's /metrics, which listens on 127.0.0.1:2019 and is scraped by Prometheus.
+	servers {
+		metrics
+	}
+}
+
+# Per-IP request limits (W6). Hairpinned traffic from agents on this VM arrives from the
+# provider gateway (staging: 10.1.1.1, findings W1) and is exempt, as is loopback. Only that one
+# address: on a provider network other customers share the rest of 10.0.0.0/8 (Phase 7 review I2).
+# Each environment sets its own in EDGE_RATE_LIMIT_EXEMPT. The values are placeholders to tune against real traffic: a
+# PickUpV1 holder polls over one WebSocket (a single HTTP request), so a legitimate device makes
+# few HTTP requests per minute.
+(per_ip_limit) {
+	rate_limit {
+		zone {args[0]} {
+			match {
+				not remote_ip {$EDGE_RATE_LIMIT_EXEMPT}
+			}
+			key {remote_host}
+			events {args[1]}
+			window 1m
+		}
+	}
+}
+
+# Phase 7 review L1: every subdomain is TLS, so HSTS covers them all (includeSubDomains); preload
+# only takes effect if the apex is ever submitted to the browsers' list. Express names itself in
+# X-Powered-By on the agent and the mediator.
+(security_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+		-X-Powered-By
+	}
+}
+
+# Errors Caddy produces itself (a file_server 404, 502 with the upstream down, 413, 429) skip the
+# site's header directive, so they carried `Server: Caddy` (L1). They keep their status (and a
+# 429's Retry-After) and get a plain body.
+(hardening) {
+	import security_headers
+	handle_errors {
+		import security_headers
+		respond "{err.status_code} {err.status_text}" {err.status_code}
+	}
+}
+
+# Versioned genesis distribution (W2). Files are snapshots written by the deploy scripts;
+# the ledger container is never exposed here.
+{$GENESIS_HOST} {
+	import hardening
+
+	root * /srv/genesis
+
+	@versioned path_regexp ^/v[0-9]+/
+	header @versioned Cache-Control "public, max-age=31536000, immutable"
+
+	@current path /current/*
+	header @current Cache-Control "public, max-age=300"
+
+	header Access-Control-Allow-Origin "*"
+	file_server
+}
+
+# indy-vdr-proxy (W10): ledger reads over 443 for networks that block the Indy client ports.
+# The proxy also relays signed writes (POST /submit); this hedge is for reads only.
+{$VDR_HOST} {
+	import hardening
+
+	@notRead not method GET HEAD
+	respond @notRead "Method Not Allowed" 405
+
+	import per_ip_limit vdr_per_ip 120
+
+	reverse_proxy 127.0.0.1:3100
+}
+
+# Phase 2 agent-service: the tenants' public DIDComm endpoint. Only what phones and the
+# mediator need: POST / (DIDComm envelopes) and GET /readyz (health). The internal API is
+# on another port and never proxied.
+{$AGENT_HOST} {
+	import hardening
+
+	@didcomm {
+		method POST
+		path /
+	}
+	@ready {
+		method GET
+		path /readyz
+	}
+	handle @didcomm {
+		import per_ip_limit agent_per_ip 300
+		# Phase 7 review M1: Credo's HTTP transport accepts 5 MB and every tenant shares one serial
+		# message queue, so junk is refused here. A 125-attribute offer or presentation with ordinary
+		# values is tens of KB once encrypted; 512 KB leaves a wide margin.
+		request_body {
+			max_size 512KB
+		}
+		reverse_proxy 127.0.0.1:3400
+	}
+	handle @ready {
+		reverse_proxy 127.0.0.1:3400
+	}
+	handle {
+		respond "Not Found" 404
+	}
+}
+
+# Phase 3 platform-api: the customer-facing REST API. /internal/* (mediator webhook receiver)
+# and /admin/* (operator bootstrap, SSH tunnel to 127.0.0.1:3500) never leave the VM.
+{$API_HOST} {
+	import hardening
+
+	@private path /internal /internal/* /admin /admin/*
+	respond @private "Not Found" 404
+
+	# Console scope (Phase 4 C1): only the console's server, on the Docker network, may present
+	# this header. platform-api also refuses it without the right token; this keeps it off the internet.
+	@consoleHeader header X-Console-Token *
+	respond @consoleHeader "Not Found" 404
+
+	import per_ip_limit api_per_ip 600
+
+	reverse_proxy 127.0.0.1:3500
+}
+
+# Phase 4 console: operator console and tenant portal (TanStack Start + Better Auth). Staging serves
+# it on the apex of its domain; production on console.12id.com (the apex is the marketing site).
+# The console's own server functions are the only caller of platform-api's console scope; the
+# browser holds a host-only session cookie. Caddy sets X-Forwarded-For, which Better Auth's rate
+# limiter keys on.
+{$CONSOLE_HOST} {
+	import hardening
+	# The console sends its own per-request CSP (Phase 7 review M12, console/src/start.ts), including
+	# frame-ancestors 'none'. Do not set one here: Caddy's header directive would replace it.
+
+	# Hashed, immutable build assets (a page load fetches ~40 chunks) stay outside the per-IP
+	# limit, which protects sign-in and server functions. Without this, a handful of page loads
+	# per minute from one address left pages without their scripts (C7 findings).
+	@assets path /assets/*
+	handle @assets {
+		reverse_proxy 127.0.0.1:3600
+	}
+	handle {
+		import per_ip_limit console_per_ip 300
+		reverse_proxy 127.0.0.1:3600
+	}
+}
+
+# DIDComm mediator (W4). Two replicas; WebSocket upgrades are proxied automatically.
+{$MEDIATOR_HOST} {
+	import hardening
+
+	# The mediator serves GET /invite?_oobid=... with no authentication
+	# (apps/mediator/src/agent.ts), returning any open invitation by id. Never expose it. Since -p6
+	# (Phase 7 review L6) there is no open-mediation startup invitation; tools mint a single-use
+	# one on the VM with infra/scripts/mediator-invitation.sh.
+	@invite path /invite /invite/*
+	respond @invite "Not Found" 404
+
+	# The patched POST /admin/invitations (Phase 3 P1) is for the platform API on the Docker
+	# network only.
+	@admin path /admin /admin/*
+	respond @admin "Not Found" 404
+
+	import per_ip_limit mediator_per_ip 300
+
+	# Phase 7 review M1: the same 512 KB cap as the agent for HTTP bodies (forwarded messages,
+	# pickup requests). WebSocket frames are capped inside the mediator (-p3 patch).
+	request_body {
+		max_size 512KB
+	}
+
+	reverse_proxy 127.0.0.1:3001 127.0.0.1:3002 {
+		lb_policy round_robin
+		fail_duration 30s
+
+		# /health answers 202, not 200.
+		health_uri /health
+		health_status 202
+		health_interval 10s
+		health_timeout 3s
+	}
+}
+
+# This environment's extra sites (none in production). A glob that matches nothing is not an error.
+import /etc/caddy-sites/*.caddy

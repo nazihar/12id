@@ -1,4 +1,8 @@
-# Runbook: Postgres backup and restore (staging)
+# Runbook: backup and restore (every environment)
+
+**Phase 9 W2 (2026-09-29), review M13:** backups are encrypted to the VM's key **and** an offline key,
+pulled nightly by a backup machine at another site, and restorable with the offline key alone
+("Off-site copies" below). Production also backs up the validators' volumes and the published genesis.
 
 ## What is backed up
 `infra/scripts/backup-postgres.sh`, run nightly at 02:30 UTC by `12id-backup.timer`, dumps every database in the mediator stack's Postgres:
@@ -27,15 +31,16 @@ Restore of `agent_root` needs `AGENT_ASKAR_STORE_KEY` from `secrets/agent.sops.e
 
 Each dump is `pg_dump --format=custom`, piped straight into `age` with the VM's age recipient, so no plaintext dump touches disk. Output goes to `/opt/12id/backups/<UTC timestamp>/` with a `SHA256SUMS` file. Directories older than 7 days are deleted.
 
-**The Askar stores are encrypted twice:** by Askar with their store keys (in `infra/staging/secrets/*.sops.env`), and by age. A restore needs the age key and the matching sops secrets.
+**The Askar stores are encrypted twice:** by Askar with their store keys (in `infra/env/<env>/secrets/*.sops.env`), and by age. A restore needs the age key and the matching sops secrets.
 
 **Roles after a restore (Phase 7 H3):** after restoring into a running stack, run `infra/scripts/pg-roles.sh <agent|mediator>` so each database and its objects belong to the service role again (`postgres-roles.md`).
 
-**Scope decision (2026-09-13):** backups are VM-local. Losing the VM loses the backups and the age key that decrypts them. Accepted for staging; production needs an offsite copy and a separately held key.
+**Scope decision (2026-09-13), replaced in Phase 9 W2:** backups were VM-local, so losing the VM lost the backups and the only key. Now every file is encrypted to two recipients (`infra/env/<env>/backup-recipients.txt` holds the offline public key; the SOPS files use the same key, `.sops.yaml`), a backup is written to `.incomplete-<stamp>` and renamed when complete, and a backup machine pulls the directory with a read-only key.
 
 ## Install / check the timer
 ```sh
-sudo cp /opt/12id/infra/staging/systemd/12id-backup.{service,timer} /etc/systemd/system/
+echo ENV=staging | sudo tee /etc/default/12id         # production: ENV=production
+sudo cp /opt/12id/infra/systemd/12id-backup.{service,timer} /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now 12id-backup.timer
 systemctl list-timers 12id-backup.timer
@@ -79,10 +84,10 @@ Run on the VM as `ubuntu`. This is the drill required by the Phase 1 plan (W9).
    age -d -i /opt/12id/secrets/age.key "$B/agent-endorser.dump.age" \
      | docker exec -i restore-pg pg_restore -U postgres --create --no-owner --dbname=postgres
    docker network connect --alias restore-pg 12id-endorser restore-pg
-   cd /opt/12id/infra/staging
-   EXTRA_SECRETS=agent ../scripts/deploy.sh ledger run --rm \
-     -e POSTGRES_HOST=restore-pg:5432 -e POSTGRES_USER=endorser_service -e POSTGRES_PASSWORD=drill \
-     bootstrap-endorser
+   # Since Phase 9 the password is a file (POSTGRES_PASSWORD_FILE); empty it to use the drill value.
+   /opt/12id/infra/scripts/deploy.sh ledger run --rm \
+     -e POSTGRES_HOST=restore-pg:5432 -e POSTGRES_USER=endorser_service \
+     -e POSTGRES_PASSWORD_FILE= -e POSTGRES_PASSWORD=drill bootstrap-endorser
    ```
 6. **Clean up:**
    ```sh
@@ -123,3 +128,45 @@ to decrypt: keep the secret with the backups' key material.
 2. Drop and recreate the affected databases in `mediator-postgres-1`, then `pg_restore` as in the drill, into the stack's own Postgres.
 3. Run `infra/scripts/pg-roles.sh mediator` (or `agent`) so the restored objects belong to the service role again.
 4. Start the replicas and run `check-mediator-tables.sh --after-start`, then `smoke:credo`.
+
+## Off-site copies (the backup machine, Phase 9 W2)
+A machine at another site pulls `/opt/12id/backups` nightly. The VM cannot reach it, and the key it
+uses can only read that one directory, so a compromised VM can neither delete the copies nor use the key.
+
+**On the backup machine** (any Linux with `rsync` and `ssh`; it never needs `age` or any 12id key):
+```sh
+sudo useradd --system --create-home backup
+sudo -u backup ssh-keygen -t ed25519 -N '' -f /home/backup/.ssh/12id-backup-pull -C 12id-backup-pull
+sudo install -m 0755 infra/scripts/backup-pull.sh /usr/local/bin/12id-backup-pull.sh
+sudo tee /etc/12id-backup-pull.env <<'EOF'
+SOURCE=ubuntu@<vm address>
+DEST=/srv/12id-backups
+SSH_KEY=/home/backup/.ssh/12id-backup-pull
+EOF
+sudo install -d -o backup -g backup -m 0700 /srv/12id-backups
+sudo cp infra/systemd/backup-machine/12id-backup-pull.{service,timer} /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now 12id-backup-pull.timer
+```
+**On the VM**, one line in `~ubuntu/.ssh/authorized_keys` with that public key (`rrsync` comes with `rsync`):
+```
+command="/usr/bin/rrsync -ro /opt/12id/backups",restrict ssh-ed25519 AAAA... 12id-backup-pull
+```
+`backup-pull.sh` copies complete backups only, never overwrites or deletes what it already holds when the
+VM rotates, verifies each `SHA256SUMS` once, keeps every backup of the last 30 days plus the first of each
+of the last 12 months, and exits 2 when its newest copy is older than 26 hours (the timer's failure mail,
+or `/srv/12id-backups/last-pull.prom` for a textfile collector).
+
+### Drill: restore from the pulled copy with the offline key only
+Neither the VM nor its age key is involved.
+1. On a machine that is **not** the VM, with the offline private key on removable media:
+   ```sh
+   B=/srv/12id-backups/daily/$(ls /srv/12id-backups/daily | tail -1)
+   (cd "$B" && sha256sum -c SHA256SUMS)
+   docker run -d --name drill-pg -e POSTGRES_PASSWORD=drill postgres:15-alpine
+   age -d -i /media/offline/<env>-offline-age.key "$B/agent-platform_api.dump.age" \
+     | docker exec -i drill-pg pg_restore -U postgres --create --dbname=postgres
+   docker exec drill-pg psql -U postgres -d platform_api -tAc 'select count(*) from tenants'
+   ```
+2. The same key decrypts the SOPS files (`SOPS_AGE_KEY_FILE=/media/offline/… sops -d …`), so the Askar
+   store keys that open `agent_root` and `endorser` are recoverable too.
+3. Record the date, the backup and the counts in the environment's findings. Last run: `19-phase-9-production-findings.md` W2.

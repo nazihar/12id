@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { resolveFileEnv } from '@12id/credo-base/file-env.ts'
+
 const optionalSecret = z
   .string()
   .optional()
@@ -41,7 +43,8 @@ const configSchema = z
 export type BiometricServiceConfig = z.infer<typeof configSchema>
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): BiometricServiceConfig {
-  const result = configSchema.safeParse(env)
+  // Secrets arrive as NAME_FILE (Phase 9 M11), resolved before validation.
+  const result = configSchema.safeParse(resolveFileEnv(env))
   if (!result.success) {
     const problems = result.error.issues.map((issue) => `  ${issue.path.join('.') || '(root)'}: ${issue.message}`)
     throw new Error(`invalid biometric-service configuration:\n${problems.join('\n')}`)

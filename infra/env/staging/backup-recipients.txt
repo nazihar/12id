@@ -1,0 +1,5 @@
+# Offline age recipients for staging backups and SOPS files (Phase 9 W2, review M13). Public keys only.
+# The private half of each is kept offline by the owner and never touches a server; with it, a backup
+# pulled to the backup machine decrypts even if the VM and /opt/12id/secrets/age.key are both lost.
+# Listed in .sops.yaml as well. Staging offline key, generated 2026-09-29:
+age10yjjvjjafjllprv3xwzxjmnqerxnp8uv5lh6pvfkqam0s2gzzc4qv6junc

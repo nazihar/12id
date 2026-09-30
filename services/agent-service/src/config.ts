@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { resolveFileEnv } from '@12id/credo-base/file-env.ts'
+
 // did:indy namespaces must match Credo's didIndyRegex: lowercase start, at most one sub-namespace
 // (6-phase-1-findings W3: "12id" is rejected; staging uses "twelveid:staging").
 const indyNamespace = z.string().regex(/^[a-z][_a-z0-9-]*(:[a-z][_a-z0-9-]*)?$/, 'invalid did:indy namespace')
@@ -78,7 +80,8 @@ export type AgentServiceConfig = z.infer<typeof configSchema>
 
 /** Parses and validates the environment. Throws one error listing every problem. */
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AgentServiceConfig {
-  const result = configSchema.safeParse(env)
+  // Secrets arrive as NAME_FILE (Phase 9 M11), resolved before validation.
+  const result = configSchema.safeParse(resolveFileEnv(env))
   if (!result.success) {
     const problems = result.error.issues.map((issue) => `  ${issue.path.join('.') || '(root)'}: ${issue.message}`)
     throw new Error(`invalid agent-service configuration:\n${problems.join('\n')}`)

@@ -19,9 +19,11 @@ CONTAINER="${PLATFORM_CONTAINER:-platform-platform-api-1}"
 
 docker exec -i -e TENANT="$TENANT" -e PROVIDER="$PROVIDER" -e CONFIG="$CONFIG" "$CONTAINER" node --input-type=module -e '
 const base = "http://127.0.0.1:3500"
+// Phase 9 M11: CONSOLE_TOKEN is a mounted secret file (CONSOLE_TOKEN_FILE).
+const token = process.env.CONSOLE_TOKEN_FILE ? (await import("node:fs")).readFileSync(process.env.CONSOLE_TOKEN_FILE, "utf8").trim() : process.env.CONSOLE_TOKEN
 const headers = {
   "content-type": "application/json",
-  "x-console-token": process.env.CONSOLE_TOKEN,
+  "x-console-token": token,
   "x-console-actor": "smoke@biometric-setup",
   "x-console-role": "owner",
   "x-console-tenant": process.env.TENANT,

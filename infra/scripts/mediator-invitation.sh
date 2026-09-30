@@ -2,7 +2,7 @@
 # Prints one fresh single-use mediator invitation URL, for tools that need a mediated Credo holder
 # (the ledger stack's smoke-credo, MEDIATOR_INVITATION_FILE for infra/smoke and the spikes).
 #
-#   MEDIATOR_INVITATION_URL="$(infra/scripts/mediator-invitation.sh)" EXTRA_SECRETS=agent \
+#   MEDIATOR_INVITATION_URL="$(infra/scripts/mediator-invitation.sh)" \
 #     infra/scripts/deploy.sh ledger run --rm smoke-credo
 #
 # Since the mediator's -p6 patch (Phase 7 review L6) there is no startup invitation in the logs any
@@ -11,7 +11,8 @@
 # An invitation nobody uses is deleted by the platform sweep after MEDIATOR_INVITATION_TTL_HOURS.
 set -euo pipefail
 
-ROOT="${ROOT:-/opt/12id/infra/staging}"
+ENV="${ENV:-staging}"
+ROOT="${ROOT:-/opt/12id/infra/env/$ENV}"
 export SOPS_AGE_KEY_FILE="${SOPS_AGE_KEY_FILE:-/opt/12id/secrets/age.key}"
 MEDIATOR_URL="${MEDIATOR_URL:-http://127.0.0.1:3001}"
 

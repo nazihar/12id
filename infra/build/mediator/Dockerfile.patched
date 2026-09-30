@@ -1,0 +1,36 @@
+# Pinned mediator image plus four patched files (4-init §12.8, amended in Phases 2, 3 and 7).
+#
+# 1. packages/transport-queue-postgres (Phase 2 findings, A11): `takeFromQueue({ deleteMessages: true })`,
+#    which Credo's pickup-v1 batch handler uses, only SELECTed in the upstream image, so PickUpV1
+#    holders (our native SDK) were re-sent every message on every poll and the queue never drained.
+#    patch/TransportQueuePostgres.js is the built file from mediator:375518d with that branch
+#    replaced by an atomic DELETE ... RETURNING.
+# 2. apps/mediator/build/agent.js (Phase 3 P1): adds `POST /admin/invitations`, which mints a
+#    single-use out-of-band invitation for the platform API (one per wallet). Guarded by the
+#    ADMIN_API_TOKEN env (route absent without it) and never proxied by the edge.
+#
+# 3. apps/mediator/build/agent.js (Phase 7 review M1): the WebSocket server gets `maxPayload: 512 KiB`
+#    (ws defaults to 100 MiB, and the edge's request_body cap does not cover WebSocket frames).
+# 4. @credo-ts/drizzle-storage build/adapter/queryToDrizzlePostgres.mjs (Phase 7 review M18, -p4):
+#    array/jsonb containment as native `column @> value` instead of `to_jsonb(column) @> ...`,
+#    so the GIN indexes in indexes.sql can serve it (to_jsonb cannot be indexed).
+# 5. apps/mediator/build/agent.js (Phase 7 review M4, M10, -p5): `DELETE /admin/connections/:id` (a revoked
+#    wallet's mediation, connection and queue) and `POST /admin/sweep` (unused invitations, stale queue
+#    rows), behind the same ADMIN_API_TOKEN guard; the platform API's sweep calls them.
+# 6. apps/mediator/build/index.js (Phase 7 review L6, -p6): with ADMIN_API_TOKEN set, no open multi-use
+#    startup invitation is created or printed to the logs, and reusable ones left from earlier starts are
+#    deleted. Holders only connect through the single-use invitations of item 2. patch/index.js is the
+#    built file from mediator:375518d with that branch added; without the token it behaves as upstream.
+# 7. secrets-entrypoint.sh (Phase 9 W2, review M11): reads NAME_FILE secrets (and NAME_URL_PASSWORD)
+#    into the environment, then execs the image's unchanged command. Not a patch of upstream code.
+#
+# Everything else is the pinned image. Re-check every file on every mediator upgrade.
+# Pinned by digest (Phase 9 M17): the tag is upstream's commit, but a tag can be re-pushed.
+FROM ghcr.io/openwallet-foundation/didcomm-mediator-credo/mediator:375518d@sha256:4e0cbbd28b19c3d473fbc64155b5f19b35da6850642414213664b5bdc8ef7976
+COPY --chown=agent:agent patch/TransportQueuePostgres.js /app/packages/transport-queue-postgres/build/TransportQueuePostgres.js
+COPY --chown=agent:agent patch/agent.js /app/apps/mediator/build/agent.js
+COPY --chown=agent:agent patch/index.js /app/apps/mediator/build/index.js
+COPY --chown=agent:agent patch/queryToDrizzlePostgres.mjs /app/node_modules/.pnpm/@credo-ts+drizzle-storage@0.6.0_@hyperledger+anoncreds-shared@0.3.4_drizzle-orm@0.44.7__9bddfa36e957075bf8704d55767df5f1/node_modules/@credo-ts/drizzle-storage/build/adapter/queryToDrizzlePostgres.mjs
+COPY --chmod=0555 secrets-entrypoint.sh /usr/local/bin/secrets-entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/secrets-entrypoint.sh"]
+CMD ["node", "apps/mediator/build/index.js"]

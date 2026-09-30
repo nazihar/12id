@@ -130,6 +130,15 @@ node port 9707 blocked    (9000 blocked, verified earlier)
 
 ## W9 — Secrets (in place)
 
+> **Phase 9 update (2026-09-29, W2):** containers no longer get secrets as environment values interpolated from
+> a `/dev/shm` env file.
+> - `deploy.sh` (now `ENV=staging|production`) writes root-only secret files under `/opt/12id/run-secrets`, and
+>   the services read `NAME_FILE`.
+> - The staging SOPS files moved to `infra/env/staging/secrets/` and gained a second, offline age recipient,
+>   and backups are pulled off-site.
+> - The compose files moved to `infra/compose/`, and the published genesis moved to `/opt/12id/genesis`.
+> - See `19-phase-9-production-findings.md` W2.
+
 - **Tools on the VM:**
   - `age` 1.1.1 and `minisign` 0.11 from apt.
   - `sops` 3.13.3 installed as the checksum-verified static binary.

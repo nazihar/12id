@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { resolveFileEnv } from '@12id/credo-base/file-env.ts'
+
 const configSchema = z.object({
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent']).default('info'),
 
@@ -41,7 +43,8 @@ const configSchema = z.object({
 export type EndorserServiceConfig = z.infer<typeof configSchema>
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): EndorserServiceConfig {
-  const result = configSchema.safeParse(env)
+  // Secrets arrive as NAME_FILE (Phase 9 M11), resolved before validation.
+  const result = configSchema.safeParse(resolveFileEnv(env))
   if (!result.success) {
     const problems = result.error.issues.map((issue) => `  ${issue.path.join('.') || '(root)'}: ${issue.message}`)
     throw new Error(`invalid endorser-service configuration:\n${problems.join('\n')}`)

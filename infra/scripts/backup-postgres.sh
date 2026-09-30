@@ -1,71 +1,93 @@
 #!/usr/bin/env bash
-# Nightly encrypted Postgres backups for staging (W9).
+# Nightly encrypted backups (W9; off-site since Phase 9 W2, review M13).
 #
-# Every database in the mediator stack's Postgres, plus roles, is dumped and encrypted with
-# the VM's age key before it touches disk:
-#   drizzle         mediator DIDComm storage (connections, mediation records)
-#   message_pickup  queued messages for holders
-#   mediator        mediator Askar KMS store
+# Every database of both Postgres instances, their roles, and (production) the validators' data
+# volumes are dumped and encrypted before they touch disk, to two kinds of age recipient:
+#   - the VM's own key (/opt/12id/secrets/age.key), for a restore on this VM;
+#   - the offline key(s) in infra/env/<env>/backup-recipients.txt, whose private half never touches
+#     a server: backups decrypt even if the VM and its key are both lost.
 #
-# VM-local by decision (owner, 2026-09-13): losing the VM loses these backups too, and the
-# age key that decrypts them. Accepted for a resettable staging ledger; not a production pattern.
+# A backup machine at another site pulls /opt/12id/backups nightly over SSH with a read-only key
+# (infra/scripts/backup-pull.sh, runbooks/backup-restore.md). A backup is written to
+# .incomplete-<stamp> and renamed when complete, so a pull never copies half of one. The VM keeps
+# KEEP_DAYS (7) days; the backup machine keeps 30 daily and 12 monthly.
+#
+#   mediator postgres: drizzle (mediator DIDComm storage), message_pickup (queued messages),
+#                      mediator (mediator Askar KMS store), globals (roles)
+#   agent-postgres:    agent_root (tenant wallets), agent_service, endorser (the endorser key, encrypted
+#                      by Askar), endorser_service, platform_api, console, biometric (reference images
+#                      encrypted with the master key, which is in SOPS, not here), globals
+#   ledger (production, compose.ledger-nodes.yml): each validator's /var/lib/indy (ledger + node keys)
+#   genesis: the published genesis versions (/opt/12id/genesis)
 #
 # Restore: infra/runbooks/backup-restore.md
 set -euo pipefail
 
+ENV="${ENV:-staging}"
 ROOT="${ROOT:-/opt/12id}"
 BACKUP_DIR="${BACKUP_DIR:-$ROOT/backups}"
 KEEP_DAYS="${KEEP_DAYS:-7}"
+GENESIS_DIR="${GENESIS_DIR:-$ROOT/genesis}"
 DEPLOY="$ROOT/infra/scripts/deploy.sh"
-DATABASES=(drizzle message_pickup mediator)
+OFFLINE_RECIPIENTS="$ROOT/infra/env/$ENV/backup-recipients.txt"
+# Only for reading the validators' volumes; pinned like every base image (Phase 9 M17).
+ALPINE=alpine:3.22@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8
+export ENV
 
-recipient="$(age-keygen -y "$ROOT/secrets/age.key")"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+work="$BACKUP_DIR/.incomplete-$stamp"
 dest="$BACKUP_DIR/$stamp"
 
 umask 077
-mkdir -p "$dest"
+mkdir -p "$work"
+trap 'rm -rf "$work"' EXIT
 
-for db in "${DATABASES[@]}"; do
-  "$DEPLOY" mediator exec -T postgres pg_dump -U postgres --format=custom "$db" \
-    | age -r "$recipient" > "$dest/$db.dump.age"
-  # age output of an empty pipe is still a few hundred bytes; a real dump is far larger.
-  if [ "$(stat -c %s "$dest/$db.dump.age")" -lt 1024 ]; then
-    echo "backup of $db looks empty" >&2
-    exit 1
-  fi
-done
-
-"$DEPLOY" mediator exec -T postgres pg_dumpall -U postgres --globals-only \
-  | age -r "$recipient" > "$dest/globals.sql.age"
-
-# Phase 2 agent stack: its own Postgres instance.
-#   agent_root        agent-service root Askar store (tenant wallets: keys, connections, credentials)
-#   agent_service     tenants, catalogue, outbox
-#   endorser          platform endorser Askar store (the endorser private key, encrypted by Askar);
-#                     on the mediator instance until Phase 7 H3
-#   endorser_service  tenant bindings, endorsement audit
-#   platform_api      Phase 3: tenants, API keys, wallets, mirror tables, webhook queue
-#   console           Phase 4: console accounts, organizations, sessions, 2FA secrets (Better Auth)
-#   biometric         Phase 6: tenant vendor config and reference images (AES-GCM, master key in
-#                     biometric.sops.env, not in the dump), sessions, scores and decisions
-# compose.agent.yml interpolates secrets from two files, so deploy.sh needs EXTRA_SECRETS here.
-# Since Phase 7 H3 every service has its own role, so the roles (globals) are dumped here too.
-if [ -f "$ROOT/infra/staging/compose.agent.yml" ] && EXTRA_SECRETS=ledger "$DEPLOY" agent ps --status running agent-postgres | grep -q agent-postgres; then
-  for db in agent_root agent_service endorser endorser_service platform_api console biometric; do
-    EXTRA_SECRETS=ledger "$DEPLOY" agent exec -T agent-postgres pg_dump -U postgres --format=custom "$db" \
-      | age -r "$recipient" > "$dest/agent-$db.dump.age"
-    if [ "$(stat -c %s "$dest/agent-$db.dump.age")" -lt 1024 ]; then
-      echo "backup of agent $db looks empty" >&2
-      exit 1
-    fi
-  done
-  EXTRA_SECRETS=ledger "$DEPLOY" agent exec -T agent-postgres pg_dumpall -U postgres --globals-only \
-    | age -r "$recipient" > "$dest/agent-globals.sql.age"
+recipients="$work/.recipients"
+age-keygen -y "$ROOT/secrets/age.key" > "$recipients"
+if [ -f "$OFFLINE_RECIPIENTS" ]; then
+  grep -E '^age1' "$OFFLINE_RECIPIENTS" >> "$recipients"
+else
+  echo "warning: $OFFLINE_RECIPIENTS missing; encrypting to the VM key only" >&2
 fi
 
-(cd "$dest" && sha256sum -- *.age > SHA256SUMS)
+encrypt() { age -R "$recipients" > "$work/$1"; }
+check_size() { # age output of an empty pipe is still a few hundred bytes; a real dump is far larger.
+  [ "$(stat -c %s "$work/$1")" -ge 1024 ] || { echo "backup $1 looks empty" >&2; exit 1; }
+}
 
-find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d -mtime +"$KEEP_DAYS" -exec rm -rf -- {} +
+for db in drizzle message_pickup mediator; do
+  "$DEPLOY" mediator exec -T postgres pg_dump -U postgres --format=custom "$db" | encrypt "$db.dump.age"
+  check_size "$db.dump.age"
+done
+"$DEPLOY" mediator exec -T postgres pg_dumpall -U postgres --globals-only | encrypt globals.sql.age
 
-echo "backup $stamp: $(du -sh "$dest" | cut -f1) in $dest"
+if "$DEPLOY" agent ps --status running agent-postgres | grep -q agent-postgres; then
+  for db in agent_root agent_service endorser endorser_service platform_api console biometric; do
+    "$DEPLOY" agent exec -T agent-postgres pg_dump -U postgres --format=custom "$db" | encrypt "agent-$db.dump.age"
+    check_size "agent-$db.dump.age"
+  done
+  "$DEPLOY" agent exec -T agent-postgres pg_dumpall -U postgres --globals-only | encrypt agent-globals.sql.age
+fi
+
+# Our own validators (production). Copied live: a node restored from a slightly older copy catches up
+# from the other three; what cannot be recreated are the node keys, which are in here.
+for n in 1 2 3 4; do
+  volume="12id-ledger-node$n-data"
+  docker volume inspect "$volume" > /dev/null 2>&1 || continue
+  docker run --rm --network none -v "$volume:/data:ro" "$ALPINE" tar -C /data -czf - . | encrypt "ledger-node$n.tar.gz.age"
+  check_size "ledger-node$n.tar.gz.age"
+done
+
+if [ -d "$GENESIS_DIR" ]; then
+  tar -C "$GENESIS_DIR" -czf - . | encrypt genesis.tar.gz.age
+fi
+
+rm -f "$recipients"
+(cd "$work" && sha256sum -- *.age > SHA256SUMS)
+mv "$work" "$dest"
+trap - EXIT
+
+find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d -name '2*' -mtime +"$KEEP_DAYS" -exec rm -rf -- {} +
+find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d -name '.incomplete-*' -mmin +720 -exec rm -rf -- {} +
+
+echo "backup $stamp: $(du -sh "$dest" | cut -f1) in $dest, $(wc -l < "$dest/SHA256SUMS") files"

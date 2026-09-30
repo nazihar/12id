@@ -1,0 +1,74 @@
+# Ledger tooling: one-off jobs that act on the ledger. The validators and the genesis ceremony are
+# compose.ledger-nodes.yml (production); staging's von-network is run by its own `manage` script and
+# its tools are in infra/env/staging/compose.ledger.yml.
+#
+# Production order (runbooks/ledger-ceremony.md):
+#   deploy.sh ledger-nodes run --rm ceremony             # once; /opt/12id/ceremony/{recipients,out}
+#   deploy.sh ledger-nodes up -d                         # then publish the genesis (snapshot-genesis.sh)
+#   age -d -i <offline key> trustee-1.seed.age | deploy.sh ledger run --rm -T bootstrap-endorser
+#   deploy.sh ledger run --rm write-probe                # from 12id-ledger-probe.timer afterwards
+#
+# secrets/ledger.sops.env: ENDORSER_ASKAR_STORE_KEY, LEDGER_PROBE_SEED (64 hex characters; generate it
+# with `set-secret.sh ledger LEDGER_PROBE_SEED --generate`). ENDORSER_DB_PASSWORD comes from agent.sops.env.
+# Since Phase 7 H3 the endorser store is on agent-postgres, owned by `endorser_service`: run
+# infra/scripts/pg-roles.sh agent first so the (empty) `endorser` database exists for Askar.
+name: ledger
+
+x-image: &image ${REGISTRY:?release.env}/12id-ledger-tools:${VERSION:?release.env}@${LEDGER_TOOLS_DIGEST:?release.env}
+
+x-genesis-env: &genesis-env
+  # The same signed, published genesis the SDK uses, not a validator's own copy.
+  GENESIS_URL: https://${GENESIS_HOST:?env file}/${GENESIS_VERSION:?env file}/pool_transactions_genesis
+  GENESIS_SHA256: ${GENESIS_SHA256:?env file}
+  # did:indy namespace: must match [a-z][_a-z0-9-]*(:[a-z][_a-z0-9-]*)?, so "12id" is invalid.
+  INDY_NAMESPACE: ${INDY_NAMESPACE:?env file}
+  INDY_NETWORK_PRODUCTION: ${INDY_NETWORK_PRODUCTION:?env file}
+
+services:
+  # Trustee-signed endorser bootstrap: the trustee seed arrives on stdin (-T), never as a file or env.
+  bootstrap-endorser:
+    image: *image
+    group_add: ['${SECRETS_GID:?run through deploy.sh}']
+    mem_limit: 512m
+    stdin_open: true
+    environment:
+      <<: *genesis-env
+      ENDORSER_REGISTRAR: trustee
+      ENDORSER_ALIAS: ${ENDORSER_ALIAS:?env file}
+      # Askar on Postgres: the store id is also the database name (created by pg-roles.sh).
+      ASKAR_STORE_ID: endorser
+      ASKAR_STORE_KEY_FILE: /run/secrets/ENDORSER_ASKAR_STORE_KEY
+      POSTGRES_HOST: agent-postgres:5432
+      POSTGRES_USER: endorser_service
+      POSTGRES_PASSWORD_FILE: /run/secrets/ENDORSER_DB_PASSWORD
+      LEDGER_PROBE_SEED_FILE: /run/secrets/LEDGER_PROBE_SEED
+      LOG_LEVEL: info
+    secrets: [ENDORSER_ASKAR_STORE_KEY, ENDORSER_DB_PASSWORD, LEDGER_PROBE_SEED]
+    networks: [endorser]
+
+  # Consensus probe (src/write-probe.ts): one attribute write on the probe's own DID, read back.
+  write-probe:
+    image: *image
+    group_add: ['${SECRETS_GID}']
+    mem_limit: 256m
+    command: ['src/write-probe.ts']
+    environment:
+      <<: *genesis-env
+      LEDGER_PROBE_SEED_FILE: /run/secrets/LEDGER_PROBE_SEED
+      OUT_DIR: /metrics
+    secrets: [LEDGER_PROBE_SEED]
+    volumes:
+      - ${METRICS_DIR:?run through deploy.sh}:/metrics
+
+secrets:
+  ENDORSER_ASKAR_STORE_KEY:
+    file: ${RUN_SECRETS:?run through deploy.sh}/ledger/ENDORSER_ASKAR_STORE_KEY
+  LEDGER_PROBE_SEED:
+    file: ${RUN_SECRETS}/ledger/LEDGER_PROBE_SEED
+  ENDORSER_DB_PASSWORD:
+    file: ${RUN_SECRETS}/agent/ENDORSER_DB_PASSWORD
+
+networks:
+  endorser:
+    external: true
+    name: 12id-endorser

@@ -11,6 +11,14 @@
 # Output: Prometheus textfile metrics for node-exporter's textfile collector.
 set -uo pipefail
 
+# Phase 9 W2: an environment with its own Indy network (LEDGER_NETWORK_NAME set in its env file) uses
+# the ledger-tools probe instead: an attribute write on the probe's own role-less DID, read back
+# (infra/ledger/src/write-probe.ts). It writes the same metrics, so the alerts are unchanged.
+ENV="${ENV:-staging}"
+if grep -qE '^LEDGER_NETWORK_NAME=.+' "/opt/12id/infra/env/$ENV.env" 2>/dev/null; then
+  exec env ENV="$ENV" /opt/12id/infra/scripts/deploy.sh ledger run --rm -T write-probe
+fi
+
 LEDGER_URL="${LEDGER_URL:-http://127.0.0.1:9000}"
 OUT_DIR="${OUT_DIR:-/opt/12id/metrics}"
 READBACK_TIMEOUT_S="${READBACK_TIMEOUT_S:-60}"

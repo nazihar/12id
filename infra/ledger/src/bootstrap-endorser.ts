@@ -1,8 +1,14 @@
 /**
- * Creates, or verifies, the platform's staging Endorser DID (Phase 1 W3).
+ * Creates, or verifies, the platform's Endorser DID (Phase 1 W3; trustee-signed since Phase 9 W2).
  *
  * - The Ed25519 key is generated inside an Askar store backed by Postgres and never leaves it.
- * - von-network's trustee writes the NYM with role ENDORSER from {did, verkey}; no seed exists.
+ * - Who writes the NYM with role ENDORSER (ENDORSER_REGISTRAR):
+ *     trustee       (production, our own network) a trustee signs it here. The operator pipes the
+ *                   trustee seed on stdin, decrypted from offline custody (runbooks/ledger-ceremony.md);
+ *                   it lives in this process's memory only and is never stored or printed.
+ *     von-register  (staging) von-network's unauthenticated /register, reached on its Docker network.
+ * - Trustee mode also registers the write probe's DID (LEDGER_PROBE_SEED, role-less NYM) when set, so
+ *   the probe can prove consensus without any privileged key online (src/write-probe.ts).
  * - Re-runnable: if the store already holds an endorser DID for this namespace, it is checked
  *   against the ledger instead of creating a second one.
  *
@@ -19,18 +25,19 @@ import { AskarModule, AskarStoreDuplicateError } from '@credo-ts/askar'
 import { Agent, DidsModule, LogLevel, TypedArrayEncoder } from '@credo-ts/core'
 import { IndyVdrIndyDidResolver, IndyVdrModule, IndyVdrPoolService } from '@credo-ts/indy-vdr'
 import { agentDependencies } from '@credo-ts/node'
-import { GetNymRequest } from '@hyperledger/indy-vdr-nodejs'
+import { GetNymRequest, NymRequest } from '@hyperledger/indy-vdr-nodejs'
 
+import { env, readSeedFromStdin, signerFromSeed, type IndySigner } from './indy-keys.ts'
 import { PlainLogger } from './logger.ts'
 
 // Ledger role codes as returned by GET_NYM.
 const ENDORSER_ROLE = '101'
+const TRUSTEE_ROLE = '0'
 
-function env(name: string, fallback?: string): string {
-  const value = process.env[name] ?? fallback
-  if (!value) throw new Error(`missing required environment variable ${name}`)
-  return value
-}
+const registrar = env('ENDORSER_REGISTRAR', 'trustee')
+if (registrar !== 'trustee' && registrar !== 'von-register') throw new Error(`unknown ENDORSER_REGISTRAR ${registrar}`)
+// Read before anything else logs: the operator's pipe is waiting.
+const trustee: IndySigner | null = registrar === 'trustee' ? signerFromSeed(await readSeedFromStdin()) : null
 
 const namespace = env('INDY_NAMESPACE')
 const alias = env('ENDORSER_ALIAS')
@@ -79,7 +86,7 @@ const agent = new Agent({
       indyVdr,
       networks: [
         {
-          isProduction: false,
+          isProduction: process.env.INDY_NETWORK_PRODUCTION === 'true',
           indyNamespace: namespace,
           genesisTransactions: await fetchGenesis(),
           connectOnStartup: true,
@@ -103,6 +110,18 @@ async function readNym(nym: string): Promise<NymData | null> {
   return data ? (JSON.parse(data) as NymData) : null
 }
 
+/** Writes a NYM signed by the trustee (our own network has no TAA, 18-phase-9 decisions). */
+async function writeNymAsTrustee(options: { dest: string; verkey: string; alias: string; role?: 'ENDORSER' }) {
+  if (!trustee) throw new Error('no trustee key')
+  const pool = agent.dependencyManager.resolve(IndyVdrPoolService).getPoolForNamespace(namespace)
+  const request = new NymRequest({ submitterDid: trustee.nym, ...options })
+  request.setSignature({ signature: trustee.sign(Buffer.from(request.signatureInput, 'utf8')) })
+  const response = await pool.submitRequest(request)
+  if ((response as { op?: string }).op !== 'REPLY') {
+    throw new Error(`NYM write refused: ${JSON.stringify(response).slice(0, 300)}`)
+  }
+}
+
 async function waitForNym(nym: string, timeoutMs = 60_000): Promise<NymData> {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
@@ -122,6 +141,14 @@ async function run() {
     console.log(`Askar store '${storeId}' already exists`)
   }
   await agent.initialize()
+
+  if (trustee) {
+    const onLedger = await readNym(trustee.nym)
+    if (onLedger?.role !== TRUSTEE_ROLE) {
+      throw new Error(`the seed on stdin is not a trustee of this ledger (${trustee.nym}: role ${onLedger?.role ?? 'none'})`)
+    }
+    console.log(`signing as trustee ${trustee.nym}`)
+  }
 
   const prefix = `did:indy:${namespace}:`
   const existing = (await agent.dids.getCreatedDids({ method: 'indy' })).filter((record) =>
@@ -155,13 +182,17 @@ async function run() {
     nym = TypedArrayEncoder.toBase58(publicKeyBytes.slice(0, 16))
     did = `${prefix}${nym}`
 
-    const response = await fetch(env('LEDGER_REGISTER_URL'), {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ did: nym, verkey, alias, role: 'ENDORSER' }),
-    })
-    if (!response.ok) {
-      throw new Error(`NYM registration failed: ${response.status} ${await response.text()}`)
+    if (trustee) {
+      await writeNymAsTrustee({ dest: nym, verkey, alias, role: 'ENDORSER' })
+    } else {
+      const response = await fetch(env('LEDGER_REGISTER_URL'), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ did: nym, verkey, alias, role: 'ENDORSER' }),
+      })
+      if (!response.ok) {
+        throw new Error(`NYM registration failed: ${response.status} ${await response.text()}`)
+      }
     }
     await waitForNym(nym)
 
@@ -186,13 +217,29 @@ async function run() {
     throw new Error(`${did} does not resolve: ${JSON.stringify(resolved.didResolutionMetadata)}`)
   }
 
+  const probe = await registerProbe()
+
   console.log(
     JSON.stringify(
-      { result, did, nym, verkey, role: 'ENDORSER', indyNamespace: namespace, askarStoreId: storeId },
+      { result, did, nym, verkey, role: 'ENDORSER', indyNamespace: namespace, askarStoreId: storeId, probe },
       null,
       2
     )
   )
+}
+
+/** The write probe's own DID: role-less, so its key can only write attributes about itself. */
+async function registerProbe(): Promise<{ nym: string; result: 'created' | 'existing' } | undefined> {
+  if (!trustee || !(process.env.LEDGER_PROBE_SEED || process.env.LEDGER_PROBE_SEED_FILE)) return undefined
+  const probe = signerFromSeed(env('LEDGER_PROBE_SEED'))
+  const existing = await readNym(probe.nym)
+  if (existing) {
+    if (existing.verkey !== probe.verkey) throw new Error(`probe NYM ${probe.nym} exists with another verkey`)
+    return { nym: probe.nym, result: 'existing' }
+  }
+  await writeNymAsTrustee({ dest: probe.nym, verkey: probe.verkey, alias: '12id-write-probe' })
+  await waitForNym(probe.nym)
+  return { nym: probe.nym, result: 'created' }
 }
 
 let exitCode = 0

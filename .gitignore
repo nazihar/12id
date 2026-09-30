@@ -32,3 +32,9 @@ build/
 Thumbs.db
 .vscode/
 .idea/
+
+# Phase 9 W2: non-secret deploy configuration is committed (secrets stay in *.sops.env)
+!infra/env/*.env
+!infra/env/*/von-network.env
+!infra/compose/release.env
+!infra/build/

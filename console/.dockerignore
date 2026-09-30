@@ -7,3 +7,7 @@ playwright-report
 .env
 .env.*
 !.env.example
+# Plaintext staging credentials (Phase 7 L8): never in an image. The build stage copies the whole
+# directory and is published as the console-tools image (Phase 9 W2).
+.staging
+e2e

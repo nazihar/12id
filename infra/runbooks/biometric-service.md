@@ -1,5 +1,13 @@
 # Runbook: biometric-service (staging)
 
+> **Phase 9 W2 (2026-09-29): commands below are from the original rollout.** Today every stack deploys with
+> `infra/scripts/deploy.sh <stack>` (`ENV=staging` by default): no `EXTRA_SECRETS` (each compose file mounts
+> the secrets it needs, from any stack's file) and no `--build` (images come from `infra/compose/release.env`;
+> nothing is built on a VM). Secrets live in `infra/env/<env>/secrets/*.sops.env` and reach containers as
+> files under `/run/secrets`; change one with `infra/scripts/set-secret.sh`, then redeploy the stack.
+> The compose files are in `infra/compose/`, the staging-only parts in `infra/env/staging/`.
+> See [production-bringup.md](production-bringup.md).
+
 Phase 6 biometric gate ([`15-phase-6-biometric.md`](../../implement/15-phase-6-biometric.md)). An internal service that holds each tenant's biometric vendor configuration and the reference images of pending face checks, both encrypted. It decides liveness + face match through the vendor adapters. platform-api is its only caller.
 
 ## What runs where

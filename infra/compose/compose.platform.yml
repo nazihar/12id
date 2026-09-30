@@ -1,0 +1,136 @@
+# Platform stack (Phase 3 P9): platform-provision (init job) + platform-api.
+#
+#   infra/scripts/deploy.sh platform
+#
+# secrets/platform.sops.env: PLATFORM_ADMIN_TOKEN, MEDIATOR_WEBHOOK_SECRET, MEDIATOR_ADMIN_TOKEN
+# (same value as mediator.sops.env), PLATFORM_RO_PASSWORD (read-only role on the mediator's drizzle
+# database), CONSOLE_TOKEN (Phase 4 console scope, runbooks/console.md), PLATFORM_DB_PASSWORD (the
+# platform_api role, infra/scripts/pg-roles.sh), PLATFORM_AGENT_TOKEN (same value as agent.sops.env).
+# Phase 6: BIOMETRIC_INTERNAL_TOKEN comes from secrets/biometric.sops.env; deploy the biometric stack
+# first (platform-api joins its 12id-biometric network).
+# Phase 7 H2/H3: platform-api holds neither the agent-postgres superuser password nor the
+# agent→endorser token, and cannot resolve endorser-service.
+# Phase 9 W2 (review M11): every secret is a file under /run/secrets (NAME_FILE, NAME_URL_PASSWORD_FILE);
+# the image comes from the release bundle.
+#
+# Networks: `12id-agent` for agent-service and agent-postgres (platform_api database lives on that
+# instance), `12id-mediator` so the mediator can reach the webhook receiver as `platform-api` and
+# the read-only drizzle query can reach `postgres`. Published on 127.0.0.1 only; Caddy proxies
+# 3500 as API_HOST and blocks /internal/* and /admin/*.
+name: platform
+
+x-image: &image ${REGISTRY:?release.env}/12id-services:${VERSION:?release.env}@${SERVICES_DIGEST:?release.env}
+
+# Non-root secret readers: see compose.agent.yml.
+x-secret-reader: &secret-reader
+  group_add: ['${SECRETS_GID:?run through deploy.sh}']
+  labels:
+    io.12id.secrets-rev: ${SECRETS_REV:?run through deploy.sh}
+
+x-platform-env: &platform-env
+  LOG_LEVEL: ${PLATFORM_LOG_LEVEL:-info}
+  HOST: 0.0.0.0
+  PORT: "3500"
+  PUBLIC_URL: https://${API_HOST:?env file}
+  DATABASE_URL: postgresql://platform_api@agent-postgres:5432/platform_api
+  DATABASE_URL_PASSWORD_FILE: /run/secrets/PLATFORM_DB_PASSWORD
+
+  AGENT_API_URL: http://agent-service:3410
+  AGENT_API_TOKEN_FILE: /run/secrets/PLATFORM_AGENT_TOKEN
+
+  # mediator-1 is enough for minting invitations (both replicas share one store).
+  MEDIATOR_ADMIN_URL: http://mediator-1:3000
+  MEDIATOR_ADMIN_TOKEN_FILE: /run/secrets/MEDIATOR_ADMIN_TOKEN
+  MEDIATOR_DRIZZLE_URL: postgresql://platform_ro@postgres:5432/drizzle
+  MEDIATOR_DRIZZLE_URL_PASSWORD_FILE: /run/secrets/PLATFORM_RO_PASSWORD
+  MEDIATOR_WEBHOOK_SECRET_FILE: /run/secrets/MEDIATOR_WEBHOOK_SECRET
+
+  PLATFORM_ADMIN_TOKEN_FILE: /run/secrets/PLATFORM_ADMIN_TOKEN
+  # Phase 4 console scope; must equal console.sops.env's CONSOLE_TOKEN.
+  CONSOLE_TOKEN_FILE: /run/secrets/CONSOLE_TOKEN
+
+  INDY_NAMESPACE: ${INDY_NAMESPACE:?env file}
+  GENESIS_URL: https://${GENESIS_HOST:?env file}/${GENESIS_VERSION:?env file}/pool_transactions_genesis
+  GENESIS_SHA256: ${GENESIS_SHA256:?env file}
+  GENESIS_SIGNATURE_URL: https://${GENESIS_HOST}/${GENESIS_VERSION}/pool_transactions_genesis.minisig
+  GENESIS_SIGNING_PUBLIC_KEY: ${GENESIS_SIGNING_PUBLIC_KEY:?env file}
+  VDR_PROXY_URL: https://${VDR_HOST:?env file}
+
+  # Phase 6 biometric gate (compose.biometric.yml).
+  BIOMETRIC_SERVICE_URL: http://biometric-service:3430
+  BIOMETRIC_SERVICE_TOKEN_FILE: /run/secrets/BIOMETRIC_INTERNAL_TOKEN
+
+  DRAIN_DEADLINE_MS: "15000"
+
+x-platform-secrets: &platform-secrets
+  - PLATFORM_DB_PASSWORD
+  - PLATFORM_AGENT_TOKEN
+  - MEDIATOR_ADMIN_TOKEN
+  - PLATFORM_RO_PASSWORD
+  - MEDIATOR_WEBHOOK_SECRET
+  - PLATFORM_ADMIN_TOKEN
+  - CONSOLE_TOKEN
+  - BIOMETRIC_INTERNAL_TOKEN
+
+services:
+  # One-shot: creates the platform_api database on the agent stack's Postgres and applies migrations.
+  platform-provision:
+    image: *image
+    <<: *secret-reader
+    command: ['platform-api/src/provision.ts']
+    environment: *platform-env
+    secrets: *platform-secrets
+    mem_limit: 256m
+    networks: [agent, mediator]
+
+  platform-api:
+    image: *image
+    <<: *secret-reader
+    command: ['platform-api/src/main.ts']
+    restart: unless-stopped
+    mem_limit: 512m
+    # Must exceed DRAIN_DEADLINE_MS plus shutdown time.
+    stop_grace_period: 30s
+    environment: *platform-env
+    secrets: *platform-secrets
+    ports:
+      - '127.0.0.1:3500:3500'
+    networks: [agent, mediator, biometric]
+    healthcheck:
+      test: ['CMD-SHELL', 'node -e "fetch(\"http://127.0.0.1:3500/readyz\").then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    depends_on:
+      platform-provision:
+        condition: service_completed_successfully
+
+secrets:
+  PLATFORM_DB_PASSWORD:
+    file: ${RUN_SECRETS:?run through deploy.sh}/platform/PLATFORM_DB_PASSWORD
+  PLATFORM_AGENT_TOKEN:
+    file: ${RUN_SECRETS}/platform/PLATFORM_AGENT_TOKEN
+  MEDIATOR_ADMIN_TOKEN:
+    file: ${RUN_SECRETS}/platform/MEDIATOR_ADMIN_TOKEN
+  PLATFORM_RO_PASSWORD:
+    file: ${RUN_SECRETS}/platform/PLATFORM_RO_PASSWORD
+  MEDIATOR_WEBHOOK_SECRET:
+    file: ${RUN_SECRETS}/platform/MEDIATOR_WEBHOOK_SECRET
+  PLATFORM_ADMIN_TOKEN:
+    file: ${RUN_SECRETS}/platform/PLATFORM_ADMIN_TOKEN
+  CONSOLE_TOKEN:
+    file: ${RUN_SECRETS}/platform/CONSOLE_TOKEN
+  BIOMETRIC_INTERNAL_TOKEN:
+    file: ${RUN_SECRETS}/biometric/BIOMETRIC_INTERNAL_TOKEN
+
+networks:
+  agent:
+    external: true
+    name: 12id-agent
+  mediator:
+    external: true
+    name: 12id-mediator
+  biometric:
+    external: true
+    name: 12id-biometric

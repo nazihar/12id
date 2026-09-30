@@ -49,7 +49,7 @@ export function platformClient(baseUrl: string, bearer: string): PlatformClient 
 /**
  * Setup routes are console only (review K1): catalogue publishing, proof templates, biometric
  * policies and the webhook endpoint. The smokes call them the way `biometric-setup.sh` does. They
- * run inside the platform container, where CONSOLE_TOKEN already lives, reached over SSH, so the
+ * run inside the platform container, where CONSOLE_TOKEN already lives (a secret file since Phase 9), reached over SSH, so the
  * token never leaves the VM. The request travels base64-encoded in an env var and the script on
  * stdin, so nothing needs shell quoting.
  *
@@ -62,7 +62,9 @@ export function consoleClient(tenantId = env('PLATFORM_TENANT_ID')): PlatformCli
   const container = env('PLATFORM_CONTAINER', 'platform-platform-api-1')
   const script = `
 const { method, path, body, tenant } = JSON.parse(Buffer.from(process.env.REQ, 'base64').toString())
-const headers = { 'x-console-token': process.env.CONSOLE_TOKEN, 'x-console-actor': 'smoke', 'x-console-role': 'owner', 'x-console-tenant': tenant }
+// Phase 9 M11: the token is a mounted secret file (CONSOLE_TOKEN_FILE), no longer an env value.
+const token = process.env.CONSOLE_TOKEN_FILE ? (await import('node:fs')).readFileSync(process.env.CONSOLE_TOKEN_FILE, 'utf8').trim() : process.env.CONSOLE_TOKEN
+const headers = { 'x-console-token': token, 'x-console-actor': 'smoke', 'x-console-role': 'owner', 'x-console-tenant': tenant }
 if (body !== undefined) headers['content-type'] = 'application/json'
 const res = await fetch('http://127.0.0.1:3500' + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) })
 const json = await res.json().catch(() => ({}))

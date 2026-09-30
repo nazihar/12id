@@ -9,7 +9,7 @@ ROOT="${ROOT:-/opt/12id}"
 cd "$ROOT"
 export SOPS_AGE_KEY_FILE="${SOPS_AGE_KEY_FILE:-$ROOT/secrets/age.key}"
 
-dec() { sops --decrypt --input-type dotenv --output-type dotenv "infra/staging/secrets/$1.sops.env"; }
+dec() { sops --decrypt --input-type dotenv --output-type dotenv "infra/env/staging/secrets/$1.sops.env"; }
 value() { dec "$1" | sed -n "s/^$2=//p"; }
 has() { dec "$1" | grep -q "^$2="; }
 gen() { openssl rand -base64 48 | tr -dc 'A-Za-z0-9' | cut -c1-40; }

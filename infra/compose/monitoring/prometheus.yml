@@ -1,0 +1,98 @@
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+  # The environment label is set with --enable-feature=expand-external-labels (compose.monitoring.yml).
+  external_labels:
+    environment: ${ENVIRONMENT}
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['127.0.0.1:9093']
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ['127.0.0.1:9090']
+
+  - job_name: alertmanager
+    static_configs:
+      - targets: ['127.0.0.1:9093']
+
+  - job_name: node
+    static_configs:
+      - targets: ['127.0.0.1:9100']
+
+  - job_name: cadvisor
+    static_configs:
+      - targets: ['127.0.0.1:9101']
+
+  - job_name: postgres
+    static_configs:
+      - targets: ['127.0.0.1:9187']
+
+  - job_name: postgres-drizzle
+    static_configs:
+      - targets: ['127.0.0.1:9188']
+
+  # Phase 7 review M16: agent-service outbox lag and endorser decisions.
+  - job_name: postgres-agent
+    static_configs:
+      - targets: ['127.0.0.1:9190']
+
+  - job_name: postgres-endorser
+    static_configs:
+      - targets: ['127.0.0.1:9191']
+
+  # Phase 7 review M16: the edge's own request metrics (status codes), from Caddy's admin endpoint.
+  - job_name: caddy
+    static_configs:
+      - targets: ['127.0.0.1:2019']
+
+  # Phase 6 biometric gate (postgres-exporter-biometric-queries.yml).
+  - job_name: postgres-biometric
+    static_configs:
+      - targets: ['127.0.0.1:9189']
+
+  # Public HTTPS endpoints, through Caddy. Also feeds certificate-expiry alerts. The targets are the
+  # environment's hostnames, so they come from files compose.monitoring.yml writes (Phase 9 W2):
+  # blackbox-http.yml from infra/env/<env>.env, plus any extra-*.yml an environment adds (staging: the
+  # ledger browser).
+  - job_name: blackbox-http
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    file_sd_configs:
+      - files: [/etc/prometheus/targets/blackbox-http.yml, /etc/prometheus/targets/extra-http-*.yml]
+    relabel_configs: &blackbox-relabel
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: 127.0.0.1:9115
+
+  # Host-local services without TLS (Phase 6 biometric-service is not published at the edge).
+  - job_name: blackbox-http-local
+    metrics_path: /probe
+    params:
+      module: [http_2xx_local]
+    static_configs:
+      - targets:
+          - http://127.0.0.1:3430/healthz
+    relabel_configs: *blackbox-relabel
+
+  # Validator client ports on the public IP (PUBLIC_IP in the environment file). Probed from the VM, so
+  # on staging this hairpins through the provider NAT: it proves the ports answer, not that every
+  # network can reach them. Reachability is NOT consensus: writes failed with all four ports open
+  # (findings W1).
+  - job_name: blackbox-indy-client
+    metrics_path: /probe
+    params:
+      module: [tcp_connect]
+    file_sd_configs:
+      - files: [/etc/prometheus/targets/indy-client.yml]
+    relabel_configs: *blackbox-relabel

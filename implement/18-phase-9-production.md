@@ -3,7 +3,16 @@
 **Status (2026-09-28):**
 - W0 (this document and the updates to the other docs) is done.
 - **W1 (close Phase 7) is done on staging.** Its evidence stays with each finding in `17-phase-7.md`.
-- Next is W2. Evidence from W2 on goes to `19-phase-9-production-findings.md`.
+- **W2 is done (2026-09-29): staging runs the bundle.** Evidence is in [`19-phase-9-production-findings.md`](19-phase-9-production-findings.md).
+  - Staging runs the release bundle with file secrets and digest-pinned GHCR images, and every smoke passed unchanged.
+  - `docker inspect` is clean.
+  - Backups are pulled off-site and restored with the offline key only.
+  - The production ledger stack was rehearsed as a scratch project on staging.
+- **Open from W2:**
+  - ~~GHCR namespace~~ decided: `ghcr.io/nazihar` (owner, 2026-09-29). Staging was moved there the same day with identical digests.
+  - The owner's backup machine.
+  - ~~`smoke:sdk-android` on the phone~~: passed 2026-09-30.
+- Next: W5 (bring-up) and W3 (SDK release, CI). W4 can start on staging now.
 
 ## Context
 Phases 0–6 are built and verified on the staging VM `id-dev` (`*.12id.naziharitsolution.com`, [`4-init-post-phase-0.md`](4-init-post-phase-0.md) §10):
@@ -108,7 +117,19 @@ W2, W3 and W5 can partly run in parallel. W6 waits on hardware.
   - the owner restores `CONSOLE_TOKEN` in the VM's `platform.sops.env`.
 - Docs rule: a dated back-note in the origin phase doc plus the note in `17-phase-7.md`.
 
-### W2 — Make the infra production-capable (rehearsed locally and on staging) — ~5 d
+### W2 — Make the infra production-capable (rehearsed locally and on staging) — ~5 d ✅ 2026-09-29
+> **Status 2026-09-29: done; staging switched.** Evidence and traps: `19-phase-9-production-findings.md` W2.
+>
+> **Deviations from the plan as written:**
+> - The services and console Dockerfiles stay next to their sources. `infra/build/compose.build.yml` holds every build definition, and the infra-owned Dockerfiles moved to `infra/build/`.
+> - The genesis is built by the ceremony image with indy-plenum's own transaction builders. `genesis_from_files.py` is not in indy-node 1.13.2 or its image.
+> - Secret files are `root:12000 0440` in a root-only directory, and each reading container runs with `group_add: 12000`. The containers don't run as root, so the literal "root 600" would not have been readable.
+> - The ceremony lives in `compose.ledger-nodes.yml` (`run --rm ceremony`).
+> - Staging's L2 stays as it was; production has no public ledger browser or Grafana.
+> - The local rehearsal stopped on the dev PC's full disk. The ledger was rehearsed as a scratch project on staging, and the images were built there once, by owner decision.
+>
+> The plan as written:
+
 1. **Per-environment config:**
    - one set of `compose.*.yml`;
    - the hostnames move into a non-secret `infra/env/<env>.env` (`API_HOST`, `CONSOLE_HOST`, `MEDIATOR_HOST`, …), and the Caddyfile uses `{$VAR}`;
@@ -165,7 +186,7 @@ W2, W3 and W5 can partly run in parallel. W6 waits on hardware.
   - on merge to main: build every image once and push `ghcr.io/nazihar/12id-*:sha-<short>`;
   - on `vX.Y.Z`: add the version tag to the same digests (no rebuild), write `release.env` and `services/VERSIONS.md`, and attach the release bundle to the GitHub release;
   - on `sdk-android-vX.Y.Z`: publish the fork, SDK and wrappers to `maven.12id.com`, and attach the API dump.
-- Phone checks still owed: `smoke:sdk-android` (M14, the M1 mediator cap), and re-onboarding after a `never_connected` revocation (M10).
+- Phone checks still owed: ~~`smoke:sdk-android` (M14, the M1 mediator cap)~~ **passed 2026-09-30** (`19-phase-9-production-findings.md` W2), and re-onboarding after a `never_connected` revocation (M10).
 
 ### W4 — Phase 8 Hardening (production-shaped staging; the DR drill against production) — ~5–6 d
 - **Mediator load test** with the real profile:

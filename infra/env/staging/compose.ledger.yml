@@ -1,0 +1,51 @@
+# Staging overlay for the ledger tools (Phase 9 W2): deploy.sh adds it after infra/compose/compose.ledger.yml.
+# Staging's ledger is von-network (17-phase-7.md L16), so the endorser was registered through its
+# unauthenticated /register rather than by a trustee, and the W8 smoke issuer lives here.
+#
+#   infra/scripts/deploy.sh ledger run --rm bootstrap-endorser       # verifies the existing endorser
+#   MEDIATOR_INVITATION_URL="$(infra/scripts/mediator-invitation.sh)" \
+#     infra/scripts/deploy.sh ledger run --rm smoke-credo
+
+services:
+  bootstrap-endorser:
+    environment:
+      ENDORSER_REGISTRAR: von-register
+      # von-network's /register, reached on its Docker network only.
+      LEDGER_REGISTER_URL: http://webserver:8000/register
+    stdin_open: false
+    networks: [von, endorser]
+
+  # W8 smoke:credo (and W5 M1): issuer + Credo holder in one process. The holder has no
+  # inbound transport and reaches the mediator through the public wss:// URL, so the whole
+  # TLS edge is exercised. The mediator no longer logs a startup invitation (-p6, Phase 7 review L6);
+  # infra/scripts/mediator-invitation.sh mints a single-use one.
+  smoke-credo:
+    image: ${REGISTRY}/12id-ledger-tools:${VERSION}@${LEDGER_TOOLS_DIGEST}
+    # Host networking: the inbound transport listens on :3200 for Caddy (ufw blocks it
+    # externally), and /register is reachable at 127.0.0.1:9000.
+    network_mode: host
+    mem_limit: 768m
+    command: ['src/smoke/smoke-credo.ts']
+    environment:
+      GENESIS_URL: https://${GENESIS_HOST}/${GENESIS_VERSION}/pool_transactions_genesis
+      GENESIS_SHA256: ${GENESIS_SHA256}
+      INDY_NAMESPACE: ${INDY_NAMESPACE}
+      LEDGER_REGISTER_URL: http://127.0.0.1:9000/register
+      ISSUER_ENDPOINT: https://smoke-issuer.12id.naziharitsolution.com
+      ISSUER_PORT: "3200"
+      # Optional at interpolation so other tools in this file run without it; the smoke
+      # script itself refuses to start when it is missing.
+      MEDIATOR_INVITATION_URL: ${MEDIATOR_INVITATION_URL:-}
+      # The Credo holder cannot use PickUpV1 against a ws-first mediator (Phase 0), and Credo's WS client
+      # fails the mediation handshake with it (6-phase-1-findings W8), so the holder polls over HTTP:
+      # these defaults are the combination that passes (re-checked 2026-09-29, Phase 9 W2). wss:// for a
+      # holder stays covered by the native SDK (smoke:sdk-android, PickUpV1).
+      PICKUP_STRATEGY: ${PICKUP_STRATEGY:-PickUpV2}
+      # Holder outbound transports: "http", "ws" or "http,ws".
+      HOLDER_OUTBOUND: ${HOLDER_OUTBOUND:-http}
+      LOG_LEVEL: ${LOG_LEVEL:-warn}
+
+networks:
+  von:
+    external: true
+    name: von_von

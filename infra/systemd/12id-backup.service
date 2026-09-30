@@ -1,0 +1,14 @@
+[Unit]
+Description=12id nightly encrypted backup (Postgres, ledger volumes, genesis)
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+# ENV=staging|production (Phase 9 W2); one line in /etc/default/12id on each VM.
+EnvironmentFile=-/etc/default/12id
+ExecStart=/opt/12id/infra/scripts/backup-postgres.sh
+Nice=10
+IOSchedulingClass=idle

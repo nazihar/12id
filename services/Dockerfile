@@ -1,7 +1,7 @@
 # One image for agent-service, endorser-service, platform-api and biometric-service (Phase 2 A10, Phase 3 P9,
 # Phase 6 B1); the
 # compose file picks the entry script. Node 22.20 runs the TypeScript sources directly; no tsx (Phase 0 finding).
-FROM node:22.20.0-bookworm-slim
+FROM node:22.20.0-bookworm-slim@sha256:b21fe589dfbe5cc39365d0544b9be3f1f33f55f3c86c87a76ff65a02f8f5848e
 
 WORKDIR /app
 

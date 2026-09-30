@@ -1,0 +1,79 @@
+# Edge stack: TLS termination for the environment's hostnames (infra/env/<env>.env), and the
+# indy-vdr-proxy hedge (W10).
+#
+#   infra/scripts/deploy.sh edge
+#
+# Host networking so Caddy can reach services that are published on 127.0.0.1 only
+# (Docker-published ports bypass ufw, so internal services must never bind 0.0.0.0).
+#
+# Phase 9 W2: images come from the release bundle (release.env), pinned by digest; nothing is built
+# on a VM. The Caddyfile directory is mounted, not the file, so `caddy reload` sees a synced file
+# (a single-file bind mount keeps the old inode, 4-init trap 50).
+name: edge
+
+services:
+  caddy:
+    # Caddy 2.11.4 plus caddy-ratelimit (W6); the Caddyfile does not load on stock caddy.
+    image: ${REGISTRY:?release.env}/12id-caddy:${VERSION:?release.env}@${CADDY_DIGEST:?release.env}
+    network_mode: host
+    restart: unless-stopped
+    mem_limit: 128m
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:?env file}
+      EDGE_RATE_LIMIT_EXEMPT: ${EDGE_RATE_LIMIT_EXEMPT:?env file}
+      CONSOLE_HOST: ${CONSOLE_HOST:?env file}
+      API_HOST: ${API_HOST:?env file}
+      AGENT_HOST: ${AGENT_HOST:?env file}
+      MEDIATOR_HOST: ${MEDIATOR_HOST:?env file}
+      GENESIS_HOST: ${GENESIS_HOST:?env file}
+      VDR_HOST: ${VDR_HOST:?env file}
+    volumes:
+      - ./caddy:/etc/caddy:ro
+      # The environment's extra sites (infra/env/<env>/caddy/*.caddy); may be empty.
+      - ${ENV_DIR:?run through deploy.sh}/caddy:/etc/caddy-sites:ro
+      # Published genesis versions, outside the code tree so a tree sync never touches them.
+      - ${GENESIS_DIR:?run through deploy.sh}:/srv/genesis:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+  # W10 hedge: ledger reads over 443. Listens on localhost only; Caddy exposes GET/HEAD.
+  vdr-proxy:
+    image: ${REGISTRY}/12id-vdr-proxy:${VERSION}@${VDR_PROXY_DIGEST:?release.env}
+    network_mode: host
+    restart: unless-stopped
+    mem_limit: 128m
+    # tini as PID 1, so the healthcheck below can end the proxy and the restart policy brings it back.
+    init: true
+    # The healthcheck's failure count; tmpfs, so a restarted proxy starts from zero.
+    tmpfs: [/tmp]
+    command:
+      - --genesis
+      - /genesis/pool_transactions_genesis
+      - --name
+      - ${INDY_NAMESPACE:?env file}
+      - --host
+      - 127.0.0.1
+      - --port
+      - "3100"
+    volumes:
+      # The published, immutable genesis version, not the ledger container's copy.
+      - ${GENESIS_DIR}/${GENESIS_VERSION:?env file}:/genesis:ro
+    # The proxy does not recover from a failed pool start: after a pool timeout on 2026-09-27 it
+    # answered nothing until a manual restart (18-phase-9 W1). Docker does not restart an unhealthy
+    # container, so three failed probes in a row end the process (kill 1 reaches tini, which forwards
+    # it) and `restart: unless-stopped` starts a fresh one.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          if curl -fsS -m 10 -o /dev/null http://127.0.0.1:3100/genesis; then rm -f /tmp/failures; exit 0; fi;
+          n=$$(( $$(cat /tmp/failures 2>/dev/null || echo 0) + 1 )); echo $$n > /tmp/failures;
+          [ $$n -ge 3 ] && kill 1; exit 1
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  caddy-data:
+  caddy-config:

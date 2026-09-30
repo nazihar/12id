@@ -15,7 +15,8 @@
 set -euo pipefail
 
 TARGET="${1:?usage: pg-roles.sh <agent|mediator|all>}"
-ROOT="${ROOT:-/opt/12id/infra/staging}"
+ENV="${ENV:-staging}"
+ROOT="${ROOT:-/opt/12id/infra/env/$ENV}"
 export SOPS_AGE_KEY_FILE="${SOPS_AGE_KEY_FILE:-/opt/12id/secrets/age.key}"
 AGENT_PG_CONTAINER="${AGENT_PG_CONTAINER:-agent-agent-postgres-1}"
 MEDIATOR_PG_CONTAINER="${MEDIATOR_PG_CONTAINER:-mediator-postgres-1}"

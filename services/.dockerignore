@@ -2,3 +2,6 @@ node_modules
 **/node_modules
 spikes/src
 **/test
+# Local credentials never enter a build context (Phase 9 W2; services/spikes/.aws-spike.env holds AWS keys).
+**/.env*
+**/*.env

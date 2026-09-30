@@ -1,0 +1,206 @@
+# Agent stack (Phase 2 A10): agent-postgres, provision jobs, endorser-service, agent-service.
+#
+#   infra/scripts/deploy.sh agent
+#
+# secrets/agent.sops.env: AGENT_POSTGRES_PASSWORD (superuser: the Postgres container and the
+# provision job's admin account only), AGENT_ASKAR_STORE_KEY, AGENT_SERVICE_DB_PASSWORD,
+# ENDORSER_DB_PASSWORD, PLATFORM_AGENT_TOKEN (same value as platform.sops.env), AGENT_ENDORSER_TOKEN
+# (this file only). ENDORSER_ASKAR_STORE_KEY comes from secrets/ledger.sops.env.
+#
+# Phase 9 W2 (review M11): every secret reaches the containers as a file under /run/secrets
+# (NAME_FILE, and NAME_URL_PASSWORD_FILE for a database URL: services/credo-base/src/file-env.ts).
+# deploy.sh writes the files to /opt/12id/run-secrets; nothing secret is in the container
+# configuration. Images come from the release bundle (release.env), pinned by digest.
+#
+# Phase 7 H2/H3: one token per hop; the endorser on its own network, shared only with
+# agent-service and agent-postgres; one non-superuser role per service (infra/scripts/pg-roles.sh
+# agent, before the first deploy and after any restore). The endorser Askar store moved here from
+# the mediator's Postgres (runbooks/postgres-roles.md).
+#
+# Publishing: only 127.0.0.1 (Docker-published ports bypass ufw). Caddy proxies 3400 as
+# AGENT_HOST; 3410 (agent internal API) is for operator tooling over SSH only.
+name: agent
+
+x-image: &image ${REGISTRY:?release.env}/12id-services:${VERSION:?release.env}@${SERVICES_DIGEST:?release.env}
+
+# Non-root containers that read secret files (root:SECRETS_GID, mode 0440). Compose does not notice a
+# changed secret file, so the label carries a hash of this stack's secrets and `up -d` recreates the
+# container when one changes, as it did when they were environment values.
+x-secret-reader: &secret-reader
+  group_add: ['${SECRETS_GID:?run through deploy.sh}']
+  labels:
+    io.12id.secrets-rev: ${SECRETS_REV:?run through deploy.sh}
+
+x-ledger-env: &ledger-env
+  INDY_NAMESPACE: ${INDY_NAMESPACE:?env file}
+  GENESIS_URL: https://${GENESIS_HOST:?env file}/${GENESIS_VERSION:?env file}/pool_transactions_genesis
+  GENESIS_SHA256: ${GENESIS_SHA256:?env file}
+  # Credo's isProduction for the Indy network (Phase 7 review I1): "true" only on the production ledger.
+  INDY_NETWORK_PRODUCTION: ${INDY_NETWORK_PRODUCTION:?env file}
+  # The platform endorser (6-phase-1-findings W3), created by the ledger stack's bootstrap-endorser.
+  ENDORSER_DID: ${ENDORSER_DID:?env file}
+  LOG_LEVEL: ${AGENT_LOG_LEVEL:-info}
+
+x-agent-env: &agent-env
+  <<: *ledger-env
+  DIDCOMM_ENDPOINT: https://${AGENT_HOST:?env file}
+  DIDCOMM_PORT: "3400"
+  INTERNAL_API_HOST: 0.0.0.0
+  INTERNAL_API_PORT: "3410"
+  # Phase 3: the platform API presents this token on every internal call (health routes stay open).
+  INTERNAL_API_TOKEN_FILE: /run/secrets/PLATFORM_AGENT_TOKEN
+  ASKAR_STORE_ID: agent_root
+  ASKAR_STORE_KEY_FILE: /run/secrets/AGENT_ASKAR_STORE_KEY
+  POSTGRES_HOST: agent-postgres:5432
+  POSTGRES_USER: agent_service
+  POSTGRES_PASSWORD_FILE: /run/secrets/AGENT_SERVICE_DB_PASSWORD
+  DATABASE_URL: postgresql://agent_service@agent-postgres:5432/agent_service
+  DATABASE_URL_PASSWORD_FILE: /run/secrets/AGENT_SERVICE_DB_PASSWORD
+  ENDORSER_SERVICE_URL: http://endorser-service:3420
+  ENDORSER_SERVICE_TOKEN_FILE: /run/secrets/AGENT_ENDORSER_TOKEN
+  DRAIN_DEADLINE_MS: "15000"
+
+x-agent-secrets: &agent-secrets [PLATFORM_AGENT_TOKEN, AGENT_ASKAR_STORE_KEY, AGENT_SERVICE_DB_PASSWORD, AGENT_ENDORSER_TOKEN]
+
+x-endorser-env: &endorser-env
+  <<: *ledger-env
+  # The endorser Askar store, moved from the mediator's Postgres in Phase 7 (H3). Opened, never created.
+  ASKAR_STORE_ID: endorser
+  ASKAR_STORE_KEY_FILE: /run/secrets/ENDORSER_ASKAR_STORE_KEY
+  POSTGRES_HOST: agent-postgres:5432
+  POSTGRES_USER: endorser_service
+  POSTGRES_PASSWORD_FILE: /run/secrets/ENDORSER_DB_PASSWORD
+  # Its own tables: a separate database, same instance and role.
+  DATABASE_URL: postgresql://endorser_service@agent-postgres:5432/endorser_service
+  DATABASE_URL_PASSWORD_FILE: /run/secrets/ENDORSER_DB_PASSWORD
+  # Only agent-service holds this token (H2); platform-api never sees it.
+  INTERNAL_TOKEN_FILE: /run/secrets/AGENT_ENDORSER_TOKEN
+  HOST: 0.0.0.0
+  PORT: "3420"
+
+x-endorser-secrets: &endorser-secrets [ENDORSER_ASKAR_STORE_KEY, ENDORSER_DB_PASSWORD, AGENT_ENDORSER_TOKEN]
+
+services:
+  agent-postgres:
+    # Pinned by digest (Phase 9 M17): the digest staging ran on 2026-09-29.
+    image: postgres:15-alpine@sha256:fe0737ba566a2c5b2a28f34433c0a423261900ec17b9bf7ad115e1aae7e57f1b
+    restart: unless-stopped
+    mem_limit: 1g
+    environment:
+      POSTGRES_USER: postgres
+      # Read by the entrypoint as root, and used only on a fresh volume.
+      POSTGRES_PASSWORD_FILE: /run/secrets/AGENT_POSTGRES_PASSWORD
+    secrets: [AGENT_POSTGRES_PASSWORD]
+    volumes:
+      - agent-pgdata:/var/lib/postgresql/data
+    # endorser: so endorser-service reaches its databases without joining 12id-agent.
+    networks: [default, endorser]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # One-shot: creates the root Askar store (exactly one process may provision, findings W4)
+  # and the agent_service database + migrations.
+  agent-provision:
+    image: *image
+    <<: *secret-reader
+    command: ['agent-service/src/provision.ts']
+    environment:
+      <<: *agent-env
+      # Only used if the root store's database is missing (Askar CREATE DATABASE); pg-roles.sh
+      # creates it first. The long-running agent-service never holds the superuser.
+      POSTGRES_ADMIN_USER: postgres
+      POSTGRES_ADMIN_PASSWORD_FILE: /run/secrets/AGENT_POSTGRES_PASSWORD
+    secrets: [PLATFORM_AGENT_TOKEN, AGENT_ASKAR_STORE_KEY, AGENT_SERVICE_DB_PASSWORD, AGENT_ENDORSER_TOKEN, AGENT_POSTGRES_PASSWORD]
+    mem_limit: 512m
+    depends_on:
+      agent-postgres:
+        condition: service_healthy
+
+  # One-shot: endorser_service database + migrations. Never provisions the endorser store.
+  endorser-provision:
+    image: *image
+    <<: *secret-reader
+    command: ['endorser-service/src/provision.ts']
+    environment: *endorser-env
+    secrets: *endorser-secrets
+    mem_limit: 256m
+    networks: [endorser]
+    depends_on:
+      agent-postgres:
+        condition: service_healthy
+
+  endorser-service:
+    image: *image
+    <<: *secret-reader
+    command: ['endorser-service/src/main.ts']
+    restart: unless-stopped
+    mem_limit: 384m
+    environment: *endorser-env
+    secrets: *endorser-secrets
+    # Not published anywhere. Only on 12id-endorser, shared with agent-service and agent-postgres:
+    # platform-api, the console and the mediator cannot resolve it (Phase 7 H2).
+    networks: [endorser]
+    healthcheck:
+      test: ['CMD-SHELL', 'node -e "fetch(\"http://127.0.0.1:3420/healthz\").then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    depends_on:
+      endorser-provision:
+        condition: service_completed_successfully
+
+  agent-service:
+    image: *image
+    <<: *secret-reader
+    command: ['agent-service/src/main.ts']
+    restart: unless-stopped
+    mem_limit: 1g
+    # Must exceed DRAIN_DEADLINE_MS plus shutdown time (T3b).
+    stop_grace_period: 30s
+    environment: *agent-env
+    secrets: *agent-secrets
+    networks: [default, endorser]
+    ports:
+      - '127.0.0.1:3400:3400'
+      - '127.0.0.1:3410:3410'
+    healthcheck:
+      test: ['CMD-SHELL', 'node -e "fetch(\"http://127.0.0.1:3410/readyz\").then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    depends_on:
+      agent-provision:
+        condition: service_completed_successfully
+      endorser-service:
+        condition: service_healthy
+
+secrets:
+  AGENT_POSTGRES_PASSWORD:
+    file: ${RUN_SECRETS:?run through deploy.sh}/agent/AGENT_POSTGRES_PASSWORD
+  AGENT_ASKAR_STORE_KEY:
+    file: ${RUN_SECRETS}/agent/AGENT_ASKAR_STORE_KEY
+  AGENT_SERVICE_DB_PASSWORD:
+    file: ${RUN_SECRETS}/agent/AGENT_SERVICE_DB_PASSWORD
+  ENDORSER_DB_PASSWORD:
+    file: ${RUN_SECRETS}/agent/ENDORSER_DB_PASSWORD
+  PLATFORM_AGENT_TOKEN:
+    file: ${RUN_SECRETS}/agent/PLATFORM_AGENT_TOKEN
+  AGENT_ENDORSER_TOKEN:
+    file: ${RUN_SECRETS}/agent/AGENT_ENDORSER_TOKEN
+  ENDORSER_ASKAR_STORE_KEY:
+    file: ${RUN_SECRETS}/ledger/ENDORSER_ASKAR_STORE_KEY
+
+networks:
+  default:
+    name: 12id-agent
+  # Not `internal: true`: endorser-service still fetches the genesis and reaches the ledger.
+  endorser:
+    name: 12id-endorser
+
+volumes:
+  agent-pgdata:

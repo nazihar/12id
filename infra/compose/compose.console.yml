@@ -1,0 +1,98 @@
+# Console stack (Phase 4 C5): console-migrate (init job) + console (TanStack Start + Better Auth).
+#
+#   infra/scripts/deploy.sh console
+#
+# secrets/console.sops.env: BETTER_AUTH_SECRET, CONSOLE_TOKEN (must equal platform.sops.env's
+# CONSOLE_TOKEN), SMTP_URL (required in production: email OTP, invitations, password links),
+# CONSOLE_DB_PASSWORD (the `console` role on agent-postgres, infra/scripts/pg-roles.sh; Phase 7 H3).
+# Phase 9 W2 (review M11): all of them are files under /run/secrets (console/src/server/file-env.server.ts);
+# MAIL_FROM is not a secret and comes from the environment file.
+#
+# Network: `12id-agent` only, for agent-postgres and platform-api (http://platform-api:3500, the
+# console scope). Published on 127.0.0.1; Caddy serves it as CONSOLE_HOST.
+name: console
+
+x-image: &image ${REGISTRY:?release.env}/12id-console:${VERSION:?release.env}@${CONSOLE_DIGEST:?release.env}
+
+# Non-root secret readers: see compose.agent.yml.
+x-secret-reader: &secret-reader
+  group_add: ['${SECRETS_GID:?run through deploy.sh}']
+  labels:
+    io.12id.secrets-rev: ${SECRETS_REV:?run through deploy.sh}
+
+x-console-env: &console-env
+  NODE_ENV: production
+  DATABASE_URL: postgresql://console@agent-postgres:5432/console
+  DATABASE_URL_PASSWORD_FILE: /run/secrets/CONSOLE_DB_PASSWORD
+  BETTER_AUTH_URL: https://${CONSOLE_HOST:?env file}
+  BETTER_AUTH_SECRET_FILE: /run/secrets/BETTER_AUTH_SECRET
+  PLATFORM_API_URL: http://platform-api:3500
+  CONSOLE_TOKEN_FILE: /run/secrets/CONSOLE_TOKEN
+  # Only the `console` service needs mail; the migration and CLI jobs run without SMTP_URL.
+  SMTP_URL_FILE: /run/secrets/SMTP_URL
+  MAIL_FROM: ${MAIL_FROM:?env file}
+
+x-console-secrets: &console-secrets [CONSOLE_DB_PASSWORD, BETTER_AUTH_SECRET, CONSOLE_TOKEN, SMTP_URL]
+
+services:
+  # One-shot: creates the `console` database if missing and applies the Better Auth migrations.
+  console-migrate:
+    image: *image
+    <<: *secret-reader
+    command: ['node', 'scripts/migrate.ts']
+    environment: *console-env
+    secrets: *console-secrets
+    mem_limit: 256m
+    networks: [agent]
+
+  console:
+    image: *image
+    <<: *secret-reader
+    restart: unless-stopped
+    mem_limit: 512m
+    stop_grace_period: 20s
+    # Without SMTP_URL the console itself refuses to start ("SMTP_URL: required in production").
+    environment: *console-env
+    secrets: *console-secrets
+    ports:
+      - '127.0.0.1:3600:3600'
+    networks: [agent]
+    healthcheck:
+      test: ['CMD-SHELL', 'node -e "fetch(\"http://127.0.0.1:3600/api/health\").then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    depends_on:
+      console-migrate:
+        condition: service_completed_successfully
+
+  # Operator bootstrap and other Better Auth CLI work (profile `tools`, never started by `up`):
+  #   deploy.sh console run --rm console-tools \
+  #     npx auth create-admin --config src/server/auth.server.ts --email you@12id.example \
+  #     --password '<temporary>' --name 'Your Name' --role operator --yes
+  console-tools:
+    image: ${REGISTRY}/12id-console-tools:${VERSION}@${CONSOLE_TOOLS_DIGEST:?release.env}
+    <<: *secret-reader
+    profiles: [tools]
+    environment:
+      <<: *console-env
+      # The CLI only loads the auth config; NODE_ENV=production would demand SMTP_URL for it.
+      NODE_ENV: development
+    secrets: *console-secrets
+    networks: [agent]
+
+secrets:
+  CONSOLE_DB_PASSWORD:
+    file: ${RUN_SECRETS:?run through deploy.sh}/console/CONSOLE_DB_PASSWORD
+  BETTER_AUTH_SECRET:
+    file: ${RUN_SECRETS}/console/BETTER_AUTH_SECRET
+  CONSOLE_TOKEN:
+    file: ${RUN_SECRETS}/console/CONSOLE_TOKEN
+  SMTP_URL:
+    file: ${RUN_SECRETS}/console/SMTP_URL
+
+networks:
+  agent:
+    external: true
+    name: 12id-agent

@@ -1,0 +1,264 @@
+# Mediator stack (W4): postgres, valkey, drizzle migration, two mediator replicas, webhook sink.
+#
+#   infra/scripts/deploy.sh mediator
+#
+# Secrets (infra/env/<env>/secrets/mediator.sops.env) reach the containers as files under /run/secrets,
+# never as environment values (Phase 9 W2, review M11): deploy.sh writes them to /opt/12id/run-secrets.
+# The upstream mediator reads only environment variables, so its image has an entrypoint that loads
+# NAME_FILE values first (infra/build/mediator/secrets-entrypoint.sh); they stay out of `docker inspect`.
+#
+# Phase 7 H3: the mediator connects as its own non-superuser role `mediator` (MEDIATOR_DB_PASSWORD),
+# owner of drizzle, message_pickup and mediator only; run infra/scripts/pg-roles.sh mediator first.
+# POSTGRES_PASSWORD (superuser) stays with the postgres container and the backup script. The
+# endorser store no longer lives here (moved to agent-postgres).
+#
+# Every mediator setting below was load-bearing in Phase 0 (4-init §2.3, §7.3); most fail
+# silently when wrong. Do not "tidy" them.
+#
+# Nothing here publishes on 0.0.0.0: Docker-published ports bypass ufw. The replicas bind
+# 127.0.0.1 for Caddy; postgres and valkey are not published at all.
+name: mediator
+
+# Pinned upstream image plus two patched files (mediator/Dockerfile.patched): the Postgres pickup
+# queue never deleted messages handed to pickup-v1 holders (Phase 2 findings, A11), the
+# POST /admin/invitations route the platform API uses for per-wallet invitations (Phase 3 P1),
+# a 512 KiB WebSocket message cap (-p3, Phase 7 review M1), and indexable containment queries in
+# drizzle-storage (-p4, Phase 7 review M18; the indexes come from the mediator-indexes job below),
+# admin housekeeping routes for the platform sweep (-p5, Phase 7 review M4, M10), and no open startup
+# invitation while ADMIN_API_TOKEN is set (-p6, Phase 7 review L6).
+# Phase 9: from the release bundle (release.env), digest-pinned; the image's labels name the upstream
+# base and the patch level. The -p7 entrypoint reads NAME_FILE secrets.
+x-mediator-image: &mediator-image ${REGISTRY:?release.env}/12id-mediator:${VERSION:?release.env}@${MEDIATOR_DIGEST:?release.env}
+
+# Every non-root container that reads a secret file: the files are root:SECRETS_GID 0440 (deploy.sh).
+# Compose does not notice a changed secret file, so the label carries a hash of this stack's secrets:
+# `up -d` recreates the container when one changes, as it did for env values. (Root containers read the
+# files anyway; Postgres reads its password only on a fresh volume, so it keeps running.)
+x-secret-reader: &secret-reader
+  group_add: ['${SECRETS_GID:?run through deploy.sh}']
+  labels:
+    io.12id.secrets-rev: ${SECRETS_REV:?run through deploy.sh}
+
+x-mediator-env: &mediator-env
+  LOG_LEVEL: ${MEDIATOR_LOG_LEVEL:-info}
+  NODE_OPTIONS: --max-old-space-size=400
+
+  # Defaults to 3110. AGENT_ENDPOINTS only sets what is advertised.
+  AGENT_PORT: 3000
+  # WebSocket FIRST: the holder handshakes over the first advertised service.
+  # At least one http(s) URL is required or the mediator refuses to start.
+  AGENT_ENDPOINTS: wss://${MEDIATOR_HOST:?env file},https://${MEDIATOR_HOST}
+  # Upstream: a stable startup invitation across restarts, printed to the logs. Ignored since -p6:
+  # with ADMIN_API_TOKEN set (below) there is no startup invitation at all (Phase 7 review L6).
+  CREATE_NEW_INVITATION: "false"
+
+  STORAGE__TYPE: drizzle
+  STORAGE__DIALECT: postgres
+  # NAME_URL_PASSWORD(_FILE) puts the password into the URL (secrets-entrypoint.sh).
+  STORAGE__DATABASE_URL: postgresql://mediator@postgres:5432/drizzle
+  STORAGE__DATABASE_URL_PASSWORD_FILE: /run/secrets/MEDIATOR_DB_PASSWORD
+
+  # Askar is still required for KMS when storage is drizzle. HOST takes host:port here.
+  ASKAR__STORE_ID: mediator
+  ASKAR__STORE_KEY_FILE: /run/secrets/MEDIATOR_ASKAR_STORE_KEY
+  ASKAR__DATABASE__TYPE: postgres
+  ASKAR__DATABASE__HOST: postgres:5432
+  ASKAR__DATABASE__USER: mediator
+  ASKAR__DATABASE__PASSWORD_FILE: /run/secrets/MEDIATOR_DB_PASSWORD
+  # The store exists (pg-roles.sh creates the database), so the admin account is the same role.
+  ASKAR__DATABASE__ADMIN_USER: mediator
+  ASKAR__DATABASE__ADMIN_PASSWORD_FILE: /run/secrets/MEDIATOR_DB_PASSWORD
+
+  # Default is DirectDelivery, which loses every message sent while the wallet is closed.
+  MESSAGE_PICKUP__FORWARDING_STRATEGY: QueueAndLiveModeDelivery
+  MESSAGE_PICKUP__STORAGE__TYPE: postgres
+  # Bare hostname: no port allowed, and no port key exists.
+  MESSAGE_PICKUP__STORAGE__HOST: postgres
+  MESSAGE_PICKUP__STORAGE__USER: mediator
+  MESSAGE_PICKUP__STORAGE__PASSWORD_FILE: /run/secrets/MEDIATOR_DB_PASSWORD
+  MESSAGE_PICKUP__STORAGE__DATABASE: message_pickup
+  # none, NOT redis, with the Postgres pickup queue. The Postgres queue already delivers
+  # across instances (verified W5 M2), and `redis` silently disables every push
+  # notification/webhook for this queue type (findings W8).
+  MESSAGE_PICKUP__MULTI_INSTANCE_DELIVERY__TYPE: ${MULTI_INSTANCE_DELIVERY:-none}
+
+  # Placeholder Firebase block: REQUIRED for the webhook to fire with the Postgres queue.
+  # pushNotificationLoader only subscribes to queued messages when this block exists and
+  # multi-instance delivery is `none`. No Firebase project is configured and holders never
+  # register a device token, so the FCM send is skipped and only the webhook fires
+  # (verified W5 M3: 5 webhooks for 5 queued messages; without this block, 0).
+  PUSH_NOTIFICATIONS__FIREBASE__NOTIFICATION_TITLE: '12id'
+  PUSH_NOTIFICATIONS__FIREBASE__NOTIFICATION_BODY: 'You have a new message'
+
+  CACHE__TYPE: redis
+  CACHE__REDIS_URL: redis://valkey:6379
+
+  # Unauthenticated POST {connectionId}; kept on the internal network only. The platform API
+  # receives it (Phase 3 P7) and authenticates the caller by a secret path segment, so the whole
+  # URL lives in mediator.sops.env: http://platform-api:3500/internal/mediator/<MEDIATOR_WEBHOOK_SECRET>.
+  # Point it at http://webhook-sink:8080/mediator to capture webhooks for debugging.
+  PUSH_NOTIFICATIONS__WEBHOOK_URL_FILE: /run/secrets/MEDIATOR_WEBHOOK_URL
+
+  # Enables the patched POST /admin/invitations route (Phase 3 P1). Presented by the platform API.
+  ADMIN_API_TOKEN_FILE: /run/secrets/MEDIATOR_ADMIN_TOKEN
+
+x-mediator-secrets: &mediator-secrets
+  - MEDIATOR_DB_PASSWORD
+  - MEDIATOR_ASKAR_STORE_KEY
+  - MEDIATOR_WEBHOOK_URL
+  - MEDIATOR_ADMIN_TOKEN
+
+services:
+  postgres:
+    # Base images pinned by digest (Phase 9 M17): the digest staging ran on 2026-09-29.
+    image: postgres:15-alpine@sha256:fe0737ba566a2c5b2a28f34433c0a423261900ec17b9bf7ad115e1aae7e57f1b
+    restart: unless-stopped
+    mem_limit: 1g
+    environment:
+      POSTGRES_USER: postgres
+      # The entrypoint reads it as root before dropping to postgres (only used on a fresh volume).
+      POSTGRES_PASSWORD_FILE: /run/secrets/POSTGRES_PASSWORD
+    secrets: [POSTGRES_PASSWORD]
+    volumes:
+      # Creates message_pickup, drizzle and mediator (= ASKAR__STORE_ID) on a fresh volume; pg-roles.sh
+      # gives them to the `mediator` role. The endorser store moved to agent-postgres (Phase 7 H3).
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  valkey:
+    image: valkey/valkey:8-alpine@sha256:d2e18f3410b6f616de1417f570fa55261af2898b9c5b2cfb6781ce2373ea43d1
+    restart: unless-stopped
+    mem_limit: 256m
+    # Only Credo's cache lives here: multi-instance delivery is `none`, so no Redis streams carry
+    # messages (the queue is Postgres). A full cache should evict, not refuse the mediator's writes
+    # (Phase 7 review L13). Revisit if delivery ever moves to `redis` (it cannot today, see above).
+    command: ['valkey-server', '--maxmemory', '200mb', '--maxmemory-policy', 'allkeys-lru', '--appendonly', 'yes']
+    volumes:
+      - valkeydata:/data
+    healthcheck:
+      test: ['CMD', 'valkey-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Separate container from the same image, before the mediator starts.
+  # --database-url is mandatory: without it the migration exits 0 and creates nothing.
+  # Exit 0 proves nothing; deploy runs scripts/check-mediator-tables.sh afterwards.
+  migrate:
+    image: ${REGISTRY}/12id-mediator-migrate:${VERSION}@${MEDIATOR_MIGRATE_DIGEST:?release.env}
+    <<: *secret-reader
+    environment: *mediator-env
+    secrets: *mediator-secrets
+    # The image's secrets entrypoint first (it sets STORAGE__DATABASE_URL), then sh -c.
+    entrypoint: ['/usr/local/bin/secrets-entrypoint.sh', 'sh', '-c']
+    # MUST be a one-element list. A plain string `command:` is split into words by Compose,
+    # so `sh -c` receives only "cd" as its script and exits 0 having migrated nothing
+    # (observed on staging: Cmd=["cd","/app/apps/mediator"], no output, no tables).
+    command: ['cd /app/apps/mediator && pnpm run drizzle:migrate:postgres --database-url "$$STORAGE__DATABASE_URL"']
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  mediator-1:
+    image: *mediator-image
+    <<: *secret-reader
+    restart: unless-stopped
+    mem_limit: 512m
+    environment: *mediator-env
+    secrets: *mediator-secrets
+    ports:
+      - '127.0.0.1:3001:3000'
+    healthcheck: &mediator-healthcheck
+      # /health answers 202; curl -f accepts any 2xx.
+      test: ['CMD-SHELL', 'curl -fsS -o /dev/null http://127.0.0.1:3000/health']
+      interval: 10s
+      timeout: 3s
+      retries: 30
+      start_period: 30s
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      valkey:
+        condition: service_healthy
+
+  mediator-2:
+    image: *mediator-image
+    <<: *secret-reader
+    restart: unless-stopped
+    mem_limit: 512m
+    environment: *mediator-env
+    secrets: *mediator-secrets
+    ports:
+      - '127.0.0.1:3002:3000'
+    healthcheck: *mediator-healthcheck
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      valkey:
+        condition: service_healthy
+      # Staggered start: two replicas provisioning the Askar store at the same moment race
+      # on CREATE SCHEMA (`duplicate key value violates unique constraint
+      # 'pg_namespace_nspname_index'`). The loser only logs it today; do not rely on that.
+      mediator-1:
+        condition: service_healthy
+
+  # Phase 7 review M18: the secondary indexes drizzle-storage never creates (mediator/indexes.sql).
+  # One-shot, idempotent and online (CREATE INDEX CONCURRENTLY IF NOT EXISTS), as the owning
+  # `mediator` role. It waits for mediator-1 because message_pickup's table is created by the
+  # mediator on its first start. The directory is mounted, not the file: a single-file bind mount
+  # keeps a stale inode after a tree sync (4-init trap 50).
+  mediator-indexes:
+    image: postgres:15-alpine@sha256:fe0737ba566a2c5b2a28f34433c0a423261900ec17b9bf7ad115e1aae7e57f1b
+    restart: 'no'
+    environment:
+      PGHOST: postgres
+      PGUSER: mediator
+    secrets: [MEDIATOR_DB_PASSWORD]
+    volumes:
+      - ./mediator:/sql:ro
+    # psql has no *_FILE variable; the password lives only in this one-shot process.
+    entrypoint: ['sh', '-c']
+    command: ['PGPASSWORD="$$(cat /run/secrets/MEDIATOR_DB_PASSWORD)" exec psql -v ON_ERROR_STOP=1 -d drizzle -f /sql/indexes.sql']
+    depends_on:
+      mediator-1:
+        condition: service_healthy
+
+  # Logs every webhook the mediator sends, with a timestamp (evidence for W5 M2-M4). A debugging aid
+  # with no authentication, so it only runs on request (Phase 7 review L7):
+  #   infra/scripts/deploy.sh mediator --profile debug up -d webhook-sink
+  # then point MEDIATOR_WEBHOOK_URL at http://webhook-sink:8080/mediator, and stop it afterwards.
+  webhook-sink:
+    profiles: [debug]
+    image: node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32
+    restart: 'no'
+    mem_limit: 64m
+    command:
+      - node
+      - -e
+      - "require('http').createServer((q,s)=>{let b='';q.on('data',c=>b+=c);q.on('end',()=>{console.log(JSON.stringify({ts:new Date().toISOString(),method:q.method,url:q.url,body:b}));s.writeHead(200);s.end('ok')})}).listen(8080)"
+
+secrets:
+  POSTGRES_PASSWORD:
+    file: ${RUN_SECRETS:?run through deploy.sh}/mediator/POSTGRES_PASSWORD
+  MEDIATOR_DB_PASSWORD:
+    file: ${RUN_SECRETS}/mediator/MEDIATOR_DB_PASSWORD
+  MEDIATOR_ASKAR_STORE_KEY:
+    file: ${RUN_SECRETS}/mediator/MEDIATOR_ASKAR_STORE_KEY
+  MEDIATOR_WEBHOOK_URL:
+    file: ${RUN_SECRETS}/mediator/MEDIATOR_WEBHOOK_URL
+  MEDIATOR_ADMIN_TOKEN:
+    file: ${RUN_SECRETS}/mediator/MEDIATOR_ADMIN_TOKEN
+
+networks:
+  default:
+    # Named so one-off containers (the W3 endorser bootstrap, smoke issuer) can join it.
+    name: 12id-mediator
+
+volumes:
+  pgdata:
+  valkeydata:

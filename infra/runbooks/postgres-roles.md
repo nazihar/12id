@@ -1,5 +1,13 @@
 # Runbook: per-service Postgres roles, per-hop tokens and the endorser network (Phase 7 H2 + H3)
 
+> **Phase 9 W2 (2026-09-29): commands below are from the original rollout.** Today every stack deploys with
+> `infra/scripts/deploy.sh <stack>` (`ENV=staging` by default): no `EXTRA_SECRETS` (each compose file mounts
+> the secrets it needs, from any stack's file) and no `--build` (images come from `infra/compose/release.env`;
+> nothing is built on a VM). Secrets live in `infra/env/<env>/secrets/*.sops.env` and reach containers as
+> files under `/run/secrets`; change one with `infra/scripts/set-secret.sh`, then redeploy the stack.
+> The compose files are in `infra/compose/`, the staging-only parts in `infra/env/staging/`.
+> See [production-bringup.md](production-bringup.md).
+
 Review findings H2 and H3 (`implement/17-phase-7.md`):
 - Every service connected to Postgres as the superuser `postgres`.
 - The endorser's Askar key store sat on the mediator's instance.

@@ -983,7 +983,12 @@ Plan: [`18-phase-9-production.md`](18-phase-9-production.md); evidence (when sta
 
 - [x] W0: plan recorded; §12.1 decided; §12.18; `17-phase-7.md` L16
 - [x] W1: close Phase 7, **done 2026-09-28** on staging. **H1 done 2026-09-28** (and L5). **The Low batch is done on staging the same day** (L1, L4, L6, L7, L13, L14, L15, I1, I2). `AGENT_INTERNAL_TOKEN` is removed and `CONSOLE_TOKEN` is back in `platform.sops.env`. L11 (console sessions 24 h from sign-in) and L10 (the audit records each change) done the same day by owner decision. The old `endorser` database on the mediator instance is dropped, after an encrypted dump that was restore-tested
-- [ ] W2: production-capable infra: per-environment config, file secrets (M11), image-only compose and a release bundle (M17), pulled off-site backups + a second age recipient (M13), `indy-node-container` ledger stack with a genesis ceremony and a trustee-signed endorser bootstrap
+- [x] W2: production-capable infra: per-environment config, file secrets (M11), image-only compose and a release bundle (M17), pulled off-site backups + a second age recipient (M13), `indy-node-container` ledger stack with a genesis ceremony and a trustee-signed endorser bootstrap. **Done 2026-09-29** (`19-phase-9-production-findings.md`).
+  - Staging runs the bundle (`infra/compose` + `infra/env/staging.env` + `release.env`, images `ghcr.io/nazihar/12id-*@sha256`), and every smoke passed unchanged.
+  - `docker inspect` is clean: 0 of 32 secret values, where there were 88 exposures before.
+  - A backup pulled off-site was restored with the offline key only.
+  - The ceremony, the validators, the trustee-signed endorser bootstrap and the write probe were rehearsed on staging.
+  - von-network had lost consensus since 2026-09-28 (2 of 4 validators hung) and was restarted.
 - [ ] W3: Android SDK release (5b): rebuilt wrappers, configurable minisign trust anchor (M15), `maven.12id.com`, CI publishing to GHCR
 - [ ] W4: Phase 8 Hardening (load, failover, key rotation, DR drill)
 - [ ] W5: production bring-up on `*.12id.com` from one release `vX.Y.Z`, pinned by digest

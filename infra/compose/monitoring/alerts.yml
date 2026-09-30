@@ -1,0 +1,257 @@
+groups:
+  - name: platform
+    rules:
+      - alert: TargetDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: '{{ $labels.job }} target {{ $labels.instance }} is not being scraped'
+
+      - alert: EndpointDown
+        expr: probe_success{job="blackbox-http"} == 0
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: '{{ $labels.instance }} is failing from the VM'
+
+      # --- Phase 6 biometric gate -------------------------------------------------------
+      - alert: BiometricServiceDown
+        expr: probe_success{job="blackbox-http-local", instance="http://127.0.0.1:3430/healthz"} == 0
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'biometric-service is not answering'
+          description: >-
+            Gated offers and proof requests are refused and holders cannot start face checks. Exchanges
+            already held stay held until their check expires. Runbook: infra/runbooks/biometric-service.md.
+
+      - alert: BiometricFailureRateHigh
+        expr: >-
+          sum(biometric_attempts_last_15m{decision="failed"}) >= 10
+          and sum(biometric_attempts_last_15m{decision="failed"}) / clamp_min(sum(biometric_attempts_last_15m), 1) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'More than half of face checks failed in the last 15 minutes'
+          description: >-
+            A tenant's reference images or thresholds may be wrong, liveness may be rejecting real users,
+            or someone is trying presentation attacks. See each exchange's biometric log in the console.
+
+      - alert: BiometricVendorErrors
+        expr: biometric_vendor_failures_last_15m >= 3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'The biometric vendor failed or expired several sessions in the last 15 minutes'
+          description: >-
+            AWS returned FAILED or EXPIRED session results: capture problems on devices, or an AWS-side issue.
+
+      - alert: BiometricGateStuck
+        expr: biometric_gates_unsettled > 0
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Face checks are decided but their exchanges were never released or abandoned'
+          description: >-
+            platform-api could not tell agent-service to issue, accept or abandon (it retries every 30 s).
+            Holders are waiting. Check agent-service and platform-api logs for the gate id.
+
+      - alert: BiometricExpiryStalled
+        expr: biometric_gates_overdue_pending > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Pending face checks are more than 10 minutes past their expiry'
+          description: >-
+            platform-api's expiry loop is not running, so held exchanges are not abandoned.
+
+      - alert: CertificateExpiringSoon
+        expr: probe_ssl_earliest_cert_expiry{job="blackbox-http"} - time() < 14 * 86400
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: 'TLS certificate for {{ $labels.instance }} expires in under 14 days'
+
+      - alert: LedgerClientPortUnreachable
+        expr: probe_success{job="blackbox-indy-client"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Indy client port {{ $labels.instance }} is not answering'
+
+      - alert: LedgerBelowConsensusReachability
+        expr: sum(probe_success{job="blackbox-indy-client"}) < 3
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Fewer than 3 of 4 validator client ports answer'
+          description: >-
+            Port reachability only. Consensus has failed with all four ports open (findings W1);
+            LedgerWriteProbeFailing is the alert that detects that.
+
+      # Ledger write probe: scripts/ledger-write-probe.sh via 12id-ledger-probe.timer, every 15 min.
+      - alert: LedgerWriteProbeFailing
+        expr: ledger_write_probe_success == 0
+        # Two consecutive failed runs, so a single slow write does not page.
+        for: 20m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Ledger writes are not reaching consensus'
+          description: >-
+            A NYM written through the trustee was not readable back within 60 s on consecutive runs.
+            Reads can keep working while this fails. Check node-to-node connectivity
+            (DOCKER-USER rules, findings W1) and node logs for view changes.
+
+      - alert: LedgerWriteProbeStale
+        expr: time() - ledger_write_probe_last_run_timestamp_seconds > 45 * 60
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'The ledger write probe has not run for 45 minutes'
+
+      - alert: LedgerWriteProbeMissing
+        expr: absent(ledger_write_probe_last_run_timestamp_seconds)
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: 'No ledger write probe metrics: is 12id-ledger-probe.timer enabled?'
+
+      - alert: MediatorQueueBacklog
+        expr: sum(mediator_queue_messages) > 1000
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'More than 1000 messages queued for holders'
+          description: >-
+            Placeholder threshold. PickUpV1 holders that stay offline legitimately leave messages queued,
+            so tune this against real traffic before paging on it.
+
+      - alert: MediatorMessageStuckSending
+        expr: mediator_queue_oldest_age_seconds{state="sending"} > 600
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "A queued message has been in state 'sending' for over 10 minutes"
+
+      - alert: MediationRequestSpike
+        expr: sum(mediator_mediations_created_last_hour) > 100
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'More than 100 mediation records created in the last hour'
+          description: >-
+            Mediation is open (4-init §2.3): anyone holding the mediator invitation can register and
+            use the mediator as a relay. Placeholder threshold; tune against real onboarding volume.
+
+      - alert: DiskSpaceLow
+        expr: node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} < 0.2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Root filesystem has less than 20% free'
+
+      - alert: MemoryLow
+        expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Less than 10% of memory available'
+
+      - alert: ContainerRestartLoop
+        expr: changes(container_start_time_seconds{name!=""}[15m]) > 2
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Container {{ $labels.name }} restarted more than twice in 15 minutes'
+
+      # --- Phase 7 review M16: the application itself, not only its infrastructure --------------
+
+      - alert: WebhookDeadLetters
+        expr: delta(platform_webhook_deliveries{status="dead"}[1h]) > 5
+        labels:
+          severity: warning
+        annotations:
+          summary: 'More than 5 webhook deliveries dead-lettered in an hour'
+          description: >
+            A customer endpoint refused or timed out through all 12 attempts (about 2.5 h). Check
+            GET /v1/webhook/deliveries?status=dead for the tenant, and whether a secret rotation or a
+            URL change is behind it (review M8, M9).
+
+      - alert: WebhookBacklogStuck
+        expr: platform_webhook_oldest_age_seconds{status="pending"} > 900
+        for: 10m
+        annotations:
+          summary: 'A webhook delivery has been pending for more than 15 minutes'
+          description: >
+            The dispatcher should retry within about 5 minutes at first. A pending delivery this old
+            means the worker is not running, or every attempt is failing.
+        labels:
+          severity: warning
+
+      - alert: OutboxLag
+        expr: agent_outbox_oldest_undelivered_seconds > 600
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'agent-service outbox rows unacknowledged for more than 10 minutes'
+          description: >
+            platform-api's consumer reads the outbox and acknowledges it. A growing backlog means the
+            consumer stopped, so mirror rows and webhooks stop with it.
+
+      - alert: EndorserRefusals
+        expr: delta(endorser_decisions{allowed="false"}[1h]) > 3
+        labels:
+          severity: warning
+        annotations:
+          summary: 'The endorser refused more than 3 requests in an hour'
+          description: >
+            Every refusal is a request to sign something the policy does not allow, or a tenant at its
+            daily ledger-write ceiling (review M3). Check endorsement_audit.
+
+      - alert: EdgeServerErrors
+        expr: sum(rate(caddy_http_request_errors_total[5m])) > 0.2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'The edge is returning server errors'
+          description: 'More than 0.2 failed requests per second over 10 minutes, summed across all sites.'
+
+      - alert: MediatorOutOfBandGrowth
+        expr: delta(mediator_records{table="DidcommOutOfBand"}[24h]) > 500
+        labels:
+          severity: warning
+        annotations:
+          summary: 'The mediator gained more than 500 out-of-band records in a day'
+          description: >
+            One per wallet invitation, and unused ones are swept after 24 h (review M4, M10). Growth
+            like this means the sweep stopped, or something is minting invitations.
+
+      - alert: IdempotencyKeysGrowing
+        expr: platform_idempotency_keys_keys > 50000
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: 'More than 50000 idempotency keys stored'
+          description: 'They expire after 24 h; this many means the expiry loop stopped.'

@@ -1,0 +1,15 @@
+[Unit]
+# On the backup machine at another site, not on a 12id VM (Phase 9 W2, review M13).
+# /etc/12id-backup-pull.env: SOURCE=backup@<vm>, DEST=/srv/12id-backups, SSH_KEY=/home/backup/.ssh/12id-backup-pull
+Description=Pull and verify the 12id VM's encrypted backups
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=backup
+Group=backup
+EnvironmentFile=/etc/12id-backup-pull.env
+ExecStart=/usr/local/bin/12id-backup-pull.sh
+Nice=10
+IOSchedulingClass=idle

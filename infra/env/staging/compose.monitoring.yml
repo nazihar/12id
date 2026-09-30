@@ -1,0 +1,14 @@
+# Staging overlay for monitoring (Phase 9 W2): deploy.sh adds it after infra/compose/compose.monitoring.yml.
+# Probes the staging-only von-network ledger browser as well (infra/env/staging/caddy/staging.caddy).
+
+services:
+  prometheus:
+    configs:
+      - source: staging-http-targets
+        target: /etc/prometheus/targets/extra-http-staging.yml
+
+configs:
+  staging-http-targets:
+    content: |
+      - targets:
+          - https://ledger.12id.naziharitsolution.com/

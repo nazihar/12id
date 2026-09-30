@@ -7,6 +7,8 @@
  */
 import { z } from 'zod'
 
+import { resolveFileEnv } from './file-env.server'
+
 const secret = z.string().min(32, 'secrets must be at least 32 characters; generate them, never hand-type them')
 const postgresUrl = z.url().refine((url) => url.startsWith('postgres://') || url.startsWith('postgresql://'), 'must be a postgres URL')
 
@@ -38,7 +40,8 @@ const schema = z
 export type ServerEnv = z.infer<typeof schema>
 
 export function serverEnv(source: NodeJS.ProcessEnv = process.env): ServerEnv {
-  const result = schema.safeParse(source)
+  // Secrets arrive as NAME_FILE (Phase 9 M11), resolved before validation.
+  const result = schema.safeParse(resolveFileEnv(source))
   if (!result.success) {
     const problems = result.error.issues.map((issue) => `  ${issue.path.join('.') || '(root)'}: ${issue.message}`)
     throw new Error(`invalid console configuration:\n${problems.join('\n')}`)

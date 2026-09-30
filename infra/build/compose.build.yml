@@ -1,0 +1,93 @@
+# Build definitions of every 12id image (Phase 9 W2, review M17). Only CI (W3) and, until then,
+# infra/scripts/release.sh use this file; the deploy compose files in infra/compose have no `build:`
+# and nothing is ever built on a VM.
+#
+#   REGISTRY=ghcr.io/nazihar VERSION=sha-abc1234 REVISION=<full sha> \
+#     docker compose -f infra/build/compose.build.yml build
+#
+# One platform VERSION for every image. Base images are pinned by digest in each Dockerfile. The
+# mediator's upstream base and patch level are labels on its images (Dockerfile.patched lists the patches).
+name: 12id-build
+
+x-labels: &labels
+  org.opencontainers.image.source: https://github.com/nazihar/12id
+  org.opencontainers.image.version: ${VERSION:?VERSION}
+  org.opencontainers.image.revision: ${REVISION:?REVISION}
+
+x-mediator-labels: &mediator-labels
+  <<: *labels
+  io.12id.mediator.upstream: ghcr.io/openwallet-foundation/didcomm-mediator-credo/mediator:375518d
+  # -p1..-p6: patches (Dockerfile.patched items 1-6); -p7: the secrets entrypoint (Phase 9 M11).
+  io.12id.mediator.patch-level: p7
+
+services:
+  # agent-service, endorser-service, platform-api and biometric-service; compose picks the entry script.
+  services:
+    image: ${REGISTRY:?REGISTRY}/12id-services:${VERSION}
+    build:
+      context: ../../services
+      labels: *labels
+      platforms: [linux/amd64]
+
+  console:
+    image: ${REGISTRY}/12id-console:${VERSION}
+    build:
+      context: ../../console
+      target: runtime
+      labels: *labels
+      platforms: [linux/amd64]
+
+  # The Better Auth CLI image (operator bootstrap): the console's build stage.
+  console-tools:
+    image: ${REGISTRY}/12id-console-tools:${VERSION}
+    build:
+      context: ../../console
+      target: build
+      labels: *labels
+      platforms: [linux/amd64]
+
+  mediator:
+    image: ${REGISTRY}/12id-mediator:${VERSION}
+    build:
+      context: ./mediator
+      dockerfile: Dockerfile.patched
+      labels: *mediator-labels
+      platforms: [linux/amd64]
+
+  mediator-migrate:
+    image: ${REGISTRY}/12id-mediator-migrate:${VERSION}
+    build:
+      context: ./mediator
+      dockerfile: Dockerfile.migrate
+      labels: *mediator-labels
+      platforms: [linux/amd64]
+
+  caddy:
+    image: ${REGISTRY}/12id-caddy:${VERSION}
+    build:
+      context: ./caddy
+      labels: *labels
+      platforms: [linux/amd64]
+
+  vdr-proxy:
+    image: ${REGISTRY}/12id-vdr-proxy:${VERSION}
+    build:
+      context: ./vdr-proxy
+      labels: *labels
+      platforms: [linux/amd64]
+
+  # Credo 0.7 one-off jobs: bootstrap-endorser, the write probe, the staging smokes.
+  ledger-tools:
+    image: ${REGISTRY}/12id-ledger-tools:${VERSION}
+    build:
+      context: ../ledger
+      labels: *labels
+      platforms: [linux/amd64]
+
+  # The genesis ceremony: the pinned indy_node image plus age.
+  ledger-ceremony:
+    image: ${REGISTRY}/12id-ledger-ceremony:${VERSION}
+    build:
+      context: ../ledger/ceremony
+      labels: *labels
+      platforms: [linux/amd64]

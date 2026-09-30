@@ -513,6 +513,13 @@ The edge blocks hold under path normalisation and header casing; the port surfac
 - **Files on tmpfs:** nothing decrypted at rest, but a reboot leaves every container crash-looping until an operator runs the deploy script.
 - Either way the mediator is third-party and reads only env vars: a wrapper keeps its values out of `docker inspect`, not out of its own `/proc/<pid>/environ`.
 
+**Status (2026-09-29): done on staging (Phase 9 W2, owner decision "files on disk").**
+- **How it works:** `deploy.sh` writes each mounted secret to `/opt/12id/run-secrets/<stack>/<KEY>`: the directory is root 0700, each file `root:12000 0440`, and the reading containers run with `group_add: 12000`.
+  - Services and console read `NAME_FILE`, and a database password arrives as `NAME_URL_PASSWORD_FILE` (`credo-base/src/file-env.ts`).
+  - The mediator has an entrypoint wrapper.
+  - Postgres, Grafana, the exporters and Alertmanager read their files natively.
+- **Evidence:** `check-inspect-clean.sh` found 88 exposures in 34 containers before and **0 of 32 values in 35 containers** after. Every smoke passed. Details: `19-phase-9-production-findings.md` W2.
+
 ### M13 · Medium · Backups on the VM, one age recipient
 **Where:** `infra/scripts/backup-postgres.sh:12,23` (`KEEP_DAYS` rotation, VM-local), `.sops.yaml` (single recipient), the owner item "back up the age key" (Appendix A).
 **Impact:** disk loss or a mis-typed `rm` takes the data and the only key that decrypts the backups; the script's own header calls this "not a production pattern".
@@ -521,6 +528,17 @@ The edge blocks hold under path normalisation and header casing; the port surfac
 - Backups go to `/opt/12id/backups` nightly at 02:30 UTC and are kept 7 days (`backup-postgres.sh:16-18`).
 - They are encrypted to the only age key, `/opt/12id/secrets/age.key`, which is on the same VM (`6-phase-1-findings.md` §W9).
 - Recommended in the meantime: copy the age key somewhere safe off the VM. It costs nothing.
+
+**Status (2026-09-29): done on staging (Phase 9 W2).** The owner chose a backup machine at another site that pulls, instead of object storage.
+- **Built:**
+  - A second, offline age recipient in `.sops.yaml` and in every backup file.
+  - Atomic backup directories.
+  - `backup-pull.sh`: `rrsync -ro`, 30 daily + 12 monthly copies.
+  - Production also backs up the validators' volumes and the genesis.
+- **Evidence:**
+  - A pull from another machine: its key can't run commands, write, or leave `/opt/12id/backups`.
+  - A restore of the pulled copy **with the offline key only**: counts equal to live.
+- **Still an owner action:** the real backup machine, and moving the staging offline key to offline storage. Details: `19-phase-9-production-findings.md` W2.4.
 
 ### M16 · Medium · Alert coverage
 **Where:** `infra/staging/monitoring/alerts.yml` — 14 alerts, all infrastructure-level (targets, TLS, ledger, mediator queue, disk, memory, restarts).
@@ -558,6 +576,12 @@ The edge blocks hold under path normalisation and header casing; the port surfac
   - there is no CI.
 - **Correction:** "a `docker compose pull` can move a database major silently" is wrong. `postgres:15-alpine` stays on 15 and `valkey/valkey:8-alpine` stays on 8; only patch releases change.
 - **Owner decision:** kept open until the publishing phase (tag policy, digest pins, CI with 5b.3), with production images built fresh then. Until then, staging deploys every stack from one build per step.
+
+**Status (2026-09-29): tags and pins done (Phase 9 W2); CI stays with W3.**
+- The deploy compose files have no `build:`. Every image is `${REGISTRY}/12id-<name>:${VERSION}@${DIGEST}` from `infra/compose/release.env`, which `infra/scripts/release.sh build|tag` writes.
+- Every third-party and base image is pinned by digest.
+- Staging runs one version, `sha-f4d1849-dirty`, from GHCR for all nine images.
+- That build ran on the staging VM once, by owner decision, because the dev PC's disk was full. CI (W3) takes over building.
 
 ### M18 · Medium · The mediator's databases have no secondary indexes
 **Where:** DDL read out of the pinned image `mediator:375518d` (`@credo-ts/drizzle-storage@0.6.0`, `migrations/{core,didcomm,tenants,…}/postgres/*.sql`) and `phase0/mediator-src/packages/transport-queue-postgres/migrations/001-initial-schema.sql`.
@@ -623,11 +647,22 @@ Confirm the exact predicate shapes with `auto_explain` / `pg_stat_statements` on
 ### L2 · Low · Grafana and the ledger browser are public
 Grafana has its own login and rate limit; the von-network browser exposes `/status` (node versions, uptime) and all ledger reads. Both are staging-only components, but they will be copied to production unless the runbook says otherwise. Fix: `basic_auth` or an IP allowlist in Caddy for both; production should have neither.
 
+**Status (2026-09-29): closed for production by construction (Phase 9 W2).**
+- The shared Caddyfile (`infra/compose/caddy/Caddyfile`) has no ledger browser and no Grafana site.
+- Staging adds them from `infra/env/staging/caddy/staging.caddy`, and `infra/env/production/caddy/` is empty.
+- Production reaches Grafana over an SSH tunnel (`GRAFANA_ROOT_URL=http://127.0.0.1:3300`) and runs no ledger browser.
+- Staging is unchanged (public, behind Grafana's own login), as before.
+
 ### L16 · Low · The staging ledger's trustee seed is public (added 2026-09-28)
 **Where:** von-network. `phase0/von-network/bin/von_generate_transactions:98` runs `generate_indy_pool_transactions`, which uses fixed test seeds. `manage:922` defaults `LEDGER_SEED` to `000000000000000000000000Trustee1`, and `docs/AddNewNode.md:825` publishes it with DID `V4SGRU86Z58d6TV7PBUe6f`. The client ports 9702–9708 are open to the internet by design, because phones read the ledger.
 **Evidence:** *source read* (2026-09-28, while planning Phase 9). Not exercised against staging.
 **Impact:** anyone can sign ledger writes as Trustee on staging: create stewards and endorsers, publish schemas and credential definitions under any DID, change the pool configuration. It affects staging data only. It rules von-network out for production.
 **Fix:** production runs its own `indy-node-container` network, set up by a genesis ceremony (random seeds, trustee keys offline): [`18-phase-9-production.md`](18-phase-9-production.md) W2.5, `4-init-post-phase-0.md` §12.1. Staging can move to the same tooling after production is up (owner call).
+
+**Status (2026-09-29): the production ledger stack is built and rehearsed (Phase 9 W2).**
+- Built: `compose.ledger-nodes.yml`, the ceremony (random seeds, never printed, custody as age files), a trustee-signed endorser bootstrap, and a write probe on a role-less DID.
+- Rehearsed as a scratch project on staging, including stopping 1 and then 2 of the 4 validators (`19-phase-9-production-findings.md` W2.5).
+- Staging still runs von-network, so L16 stays open for staging only.
 
 ### L6 · Low · The open startup invitation still exists
 `compose.mediator.yml` `CREATE_NEW_INVITATION: "false"` reuses a **multi-use open-mediation** invitation the image prints at startup; `/invite` is blocked at the edge but the URL is in every replica's log. Fix: patch `index.js` to skip invitation creation when `ADMIN_API_TOKEN` is set, or accept it and restrict log access.
@@ -866,7 +901,7 @@ Two cheap adjacent wins while in here: `GET /v1/ledger` returns static, env-deri
 | 8 | ✅ **Done 2026-09-22.** M4 + M10 + M18: configurable per-principal rate limits; wallet / mediation / queue sweep (OOB-based "never connected", 30 d grace for revoked); mediator index service. ✅ **M18 done 2026-09-22** (drizzle-storage patch `-p4` + 14 indexes) | 429 probe; staging sweep run; `EXPLAIN` before/after on 10 k synthetic rows. **M18 passed:** 12 ms → 0.09 ms on 10 k wallets; 0 `to_jsonb` forms on staging. **M4/M10 passed:** invitation 429 probe; first sweep `connected: 4, revoked: 0` |
 | 9 | ✅ **Done 2026-09-22.** M3: endorser daily ceiling (`ENDORSER_DAILY_CEILING`) | policy unit test. **Passed:** 32/32, count query checked on Postgres |
 | 10 | ✅ **Done 2026-09-22.** M12: nonce CSP | Playwright CSP spec. **Passed:** `e2e:staging` 3/3 with the CSP guard, 0 violations |
-| 11 | ✅ **Done 2026-09-22.** M14: SDK log floor + https check | JVM tests; `apiDump`. **Passed:** 44/44, `apiCheck` green. Phone smoke not run |
+| 11 | ✅ **Done 2026-09-22.** M14: SDK log floor + https check | JVM tests; `apiDump`. **Passed:** 44/44, `apiCheck` green. Phone smoke **passed 2026-09-30** (Phase 9 W2): no Debug or Verbose line in the app log |
 | 12 | ✅ **Done 2026-09-23.** M16: application alerts (SQL + Caddy metrics) | each fired once. **Passed:** 7 new rules fired to Alertmanager and were restored; 26 rules, 22/22 targets up |
 | 13 | ✅ **Done 2026-09-28.** H1: deletion routes + retention job + the §5.3 customer document (2–3 d); plus operator masking and flagged operator keys (owner) | staging issue → delete → grep every store. **Passed:** erase probe over the public API, 0 matches in platform rows and bodies, agent 404 for the Credo records, masked operator view with an audited reveal, `e2e:staging` 3/3, both smokes |
 | 14 | ✅ **Done 2026-09-28.** L1, L4, L6, L7, L13, L14, L15, I1, I2 (L5 done with H1) | probes / unit tests; `valkey-cli config get maxmemory-policy` returns `allkeys-lru`; one agent-service call per offer instead of two; `curl -I /v1/ledger` shows `Cache-Control`. **Passed on staging:**

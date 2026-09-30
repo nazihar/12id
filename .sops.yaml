@@ -1,9 +1,11 @@
-# SOPS encryption rules for 12id (Phase 1 W9).
+# SOPS encryption rules for 12id (Phase 1 W9; Phase 9 W2 layout and second recipient).
 #
-# Recipient: the staging VM's age key (/opt/12id/secrets/age.key on id-dev).
-# The matching private key exists only on the VM and in the operator's password manager.
-# To add an operator key, append its age public key to the comma-separated list and run
-# `sops updatekeys` on each encrypted file.
+# Each environment's secrets are encrypted to two recipients:
+#   - the VM's age key (/opt/12id/secrets/age.key on that VM), which deploy.sh uses;
+#   - the environment's offline key (infra/env/<env>/backup-recipients.txt), kept offline by the owner,
+#     so the secrets (and the backups) can be recovered when the VM and its key are both lost (M13).
+# After changing a list, run `sops updatekeys -y <file>` on each file, on the VM (it can decrypt them).
 creation_rules:
-  - path_regex: infra/staging/secrets/.*\.sops\.(env|yaml|json)$
-    age: age1ftkynx64gy2frgt40rn0s9layhn95ykrgl8unr4uzrz8h40acsmqz0lc5q
+  - path_regex: infra/env/staging/secrets/.*\.sops\.(env|yaml|json)$
+    age: age1ftkynx64gy2frgt40rn0s9layhn95ykrgl8unr4uzrz8h40acsmqz0lc5q,age10yjjvjjafjllprv3xwzxjmnqerxnp8uv5lh6pvfkqam0s2gzzc4qv6junc
+  # Production (W5): the production VM's key and the production offline key, added at bring-up.

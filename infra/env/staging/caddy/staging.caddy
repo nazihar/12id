@@ -1,0 +1,31 @@
+# Staging-only sites (Phase 9 W2), imported by infra/compose/caddy/Caddyfile, which defines the
+# snippets used here. Production has none of them: no ledger browser and no public Grafana (review L2),
+# and its smokes use the platform API, not a smoke issuer.
+
+# von-network ledger browser (W2).
+ledger.12id.naziharitsolution.com {
+	import hardening
+
+	# /register writes NYMs with any role, ENDORSER included, and has no authentication.
+	# Bootstrap scripts call it on the VM at 127.0.0.1:9000, never through this host.
+	@register path /register /register/*
+	respond @register "Forbidden" 403
+
+	reverse_proxy 127.0.0.1:9000
+}
+
+# Grafana (W7), with its own login. Prometheus and Alertmanager are not exposed; use an SSH
+# tunnel to 127.0.0.1:9090 and :9093.
+grafana.12id.naziharitsolution.com {
+	import hardening
+
+	reverse_proxy 127.0.0.1:3300
+}
+
+# W8 smoke issuer: the DIDComm endpoint used by the smoke tests. It listens only while a
+# smoke run is in progress (502 otherwise). The mediator and phones must both reach it.
+smoke-issuer.12id.naziharitsolution.com {
+	import hardening
+
+	reverse_proxy 127.0.0.1:3200
+}
