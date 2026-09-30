@@ -193,7 +193,7 @@ implementation("com.12id:holder-sdk-android:X.Y.Z")
 1. Create the public repo `nazihar/maven` and turn on Pages (deploy from branch `main`).
 2. Add a DNS record: `maven.12id.com` CNAME to `nazihar.github.io`, then set the custom domain and "Enforce HTTPS" in Pages.
 3. Add one Actions secret in `nazihar/12id`, `MAVEN_REPO_TOKEN`: a fine-grained PAT with Contents: read and write on `nazihar/maven` only.
-4. Add a tag ruleset on `nazihar/12id` so only the owner can create `v*`, `sdk-android-v*` and `native-v*`.
+4. ~~Tag ruleset~~: not available for private repos on GitHub Free; the owner is the only one who can push, so it waits for a paid plan or a second contributor.
 5. For each of the nine `ghcr.io/nazihar/12id-*` packages, open Package settings → Manage Actions access, and add `nazihar/12id` with the Write role. The packages were first pushed by hand in W2, so the workflow's token may not write to them until this is done.
 
 GHCR needs no secret: the workflow's `GITHUB_TOKEN` pushes to `ghcr.io/nazihar` once step 5 is done.
@@ -220,7 +220,7 @@ GHCR needs no secret: the workflow's `GITHUB_TOKEN` pushes to `ghcr.io/nazihar` 
   - depends on W5 step 2, which generates the production keys.
 - **5b.3: CI on GitHub Actions** (GitHub-hosted runners):
   - checks on pushes to `master` and on PRs, filtered by path:
-    - services: `tsc` + tests + `npm audit --audit-level=high`;
+    - services: `tsc` + tests + `npm audit --omit=dev --audit-level=high` (what ships; L12);
     - console: `tsc` / Vitest / `check:client`;
     - SDK: build + JVM tests + `apiCheck`;
   - the release workflows above;

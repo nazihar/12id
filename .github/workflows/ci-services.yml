@@ -43,4 +43,5 @@ jobs:
       - run: npm ci
       - run: npm run typecheck --workspaces --if-present
       - run: npm test --workspaces --if-present
-      - run: npm audit --audit-level=high
+      # What ships (review L12): dev-only tooling advisories do not block a push; run a full `npm audit` when bumping.
+      - run: npm audit --omit=dev --audit-level=high

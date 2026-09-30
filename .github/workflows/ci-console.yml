@@ -36,4 +36,5 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run check:client
-      - run: npm audit --audit-level=high
+      # What ships (review L12): dev-only tooling advisories do not block a push; run a full `npm audit` when bumping.
+      - run: npm audit --omit=dev --audit-level=high
