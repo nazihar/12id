@@ -19,7 +19,7 @@ dependencyResolutionManagement {
             url = uri("build/m2")
             content { includeGroup("com.12id") }
         }
-        // The public repository (GitHub Pages, nazihar/maven): whatever was not published locally, usually
+        // The public repository (GitHub Pages, nazihar/12id-maven): whatever was not published locally, usually
         // com.12id:holder-sdk-native, which only native/build.sh on a Linux host can produce.
         maven {
             name = "12id"

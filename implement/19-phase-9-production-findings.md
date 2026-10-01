@@ -261,7 +261,7 @@ published (von-network holds 9702–9708), clients on `12id-ledger`. Removed aft
   without an explicit per-action go-ahead). The owner opens the smoke tunnel themself.
 
 ### Not done yet in W3
-- CI has not run: the owner commits and pushes, then does the one-time setup (`18-…` W3: `nazihar/maven` + Pages +
+- CI has not run: the owner commits and pushes, then does the one-time setup (`18-…` W3: `nazihar/12id-maven` + Pages +
   CNAME, `MAVEN_REPO_TOKEN`, tag ruleset, GHCR Actions access), then tags `native-v0.2.1-12id.1`.
 - M15 (minisign on device).
 - The 16 KB smoke once staging's wallet creation is fast again.

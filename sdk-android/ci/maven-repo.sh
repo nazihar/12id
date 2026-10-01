@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The public Maven repository is a checkout of nazihar/maven, served by GitHub Pages at maven.12id.com
+# The public Maven repository is a checkout of nazihar/12id-maven, served by GitHub Pages at maven.12id.com
 # (Phase 9 W3). The release workflows publish into the checkout with -PpublishRepo, so Gradle merges each
 # artifact's maven-metadata.xml with the versions already there, and then push it.
 #

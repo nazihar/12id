@@ -81,7 +81,7 @@ afterEvaluate {
         repositories {
             maven {
                 name = 'local'
-                // -PpublishRepo=<dir>: CI publishes into a checkout of the public repository (nazihar/maven).
+                // -PpublishRepo=<dir>: CI publishes into a checkout of the public repository (nazihar/12id-maven).
                 url = findProperty('publishRepo') ?: rootProject.layout.buildDirectory.dir('m2')
             }
         }

@@ -30,7 +30,7 @@ jobs:
           [ "${GITHUB_REF_NAME#sdk-android-v}" = "$want" ] || { echo "tag $GITHUB_REF_NAME, sdkVersion $want" >&2; exit 1; }
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          repository: nazihar/maven
+          repository: nazihar/12id-maven
           token: ${{ secrets.MAVEN_REPO_TOKEN }}
           path: maven-repo
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1

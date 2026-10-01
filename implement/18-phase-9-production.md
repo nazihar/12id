@@ -178,7 +178,7 @@ W2, W3 and W5 can partly run in parallel. W6 waits on hardware.
 |---|---|---|
 | Artifacts | **Two artifacts, and the customer declares one.**<br>• `com.12id:holder-sdk-android` is the SDK, the fork (its sources merged into the SDK module and no longer published on their own) and the vendored `java-multibase`. About 3 MB.<br>• `com.12id:holder-sdk-native` is the three rebuilt UniFFI wrappers (Askar, AnonCreds, Indy VDR) in one AAR: the `.so` files for arm64-v8a, armeabi-v7a and x86_64, plus their Kotlin bindings. About 20 MB. It arrives transitively | One coordinate for the customer, and the SDK and the fork can never drift apart. The native part changes only with an Askar, AnonCreds or VDR bump, so SDK releases stay small (the Pages limit is 1 GB) |
 | Wrapper sources | Build scripts in the monorepo (`sdk-android/native/`), pinned to an upstream tag. **No separate GitHub fork** | Same pattern as the vendored `ariesframework` |
-| Public repository | **A static Maven repository on GitHub Pages.** It is a public repo, `nazihar/maven`, that holds only built artifacts, and it is served at `maven.12id.com` via a CNAME. This replaces "a static repo behind the production Caddy" | GitHub Packages' Maven registry needs a token even for public packages (GHCR does not), and we cannot ask customers for one. Pages needs no VM, costs nothing, and needs no customer token. The custom domain lets us move to Maven Central later without breaking a consumer |
+| Public repository | **A static Maven repository on GitHub Pages.** It is a public repo, `nazihar/12id-maven`, that holds only built artifacts, and it is served at `maven.12id.com` via a CNAME. This replaces "a static repo behind the production Caddy" | GitHub Packages' Maven registry needs a token even for public packages (GHCR does not), and we cannot ask customers for one. Pages needs no VM, costs nothing, and needs no customer token. The custom domain lets us move to Maven Central later without breaking a consumer |
 | CI triggers | **Tags, not merges:**<br>• pushes to `master` and PRs run checks only;<br>• `vX.Y.Z-rc.N` builds every image once and pushes `sha-<short>` + `X.Y.Z-rc.N`, and staging deploys it;<br>• `vX.Y.Z` on the same commit retags those digests with no rebuild;<br>• `sdk-android-vX.Y.Z` publishes the SDK;<br>• `native-vX.Y.Z` rebuilds and publishes the wrappers | Production runs the digests staging tested. GHCR does not collect an image for every commit |
 | Actions minutes | `nazihar/12id` is private on a free account, so it gets 2,000 minutes a month. The emulator matrix and the Rust build run on tags or by hand, never on every push | |
 
@@ -191,9 +191,9 @@ implementation("com.12id:holder-sdk-android:X.Y.Z")
 ```
 
 **The owner's one-time setup outside the repo:**
-1. Create the public repo `nazihar/maven` and turn on Pages (deploy from branch `main`).
+1. Create the public repo `nazihar/12id-maven` and turn on Pages (deploy from branch `main`).
 2. Add a DNS record: `maven.12id.com` CNAME to `nazihar.github.io`, then set the custom domain and "Enforce HTTPS" in Pages.
-3. Add one Actions secret in `nazihar/12id`, `MAVEN_REPO_TOKEN`: a fine-grained PAT with Contents: read and write on `nazihar/maven` only.
+3. Add one Actions secret in `nazihar/12id`, `MAVEN_REPO_TOKEN`: a fine-grained PAT with Contents: read and write on `nazihar/12id-maven` only.
 4. ~~Tag ruleset~~: not available for private repos on GitHub Free; the owner is the only one who can push, so it waits for a paid plan or a second contributor.
 5. For each of the nine `ghcr.io/nazihar/12id-*` packages, open Package settings → Manage Actions access, and add `nazihar/12id` with the Write role. The packages were first pushed by hand in W2, so the workflow's token may not write to them until this is done.
 
@@ -211,7 +211,7 @@ GHCR needs no secret: the workflow's `GITHUB_TOKEN` pushes to `ghcr.io/nazihar` 
 - **5b.2: the SDK artifact and the repository:**
   - merge the fork's sources into `:sdk`. The `ariesframework` module stays for its own tests and is not published. `apiDump` ignores `org.hyperledger.*`;
   - vendor `java-multibase`, which removes JitPack;
-  - publish to a local directory in Maven layout. CI copies it into `nazihar/maven`;
+  - publish to a local directory in Maven layout. CI copies it into `nazihar/12id-maven`;
   - the sample resolves only from that repository, and `docs/integration.md` shrinks to the snippet above.
 - **M15: minisign verification of the genesis on the device:**
   - the trust anchor is configurable: `OneTwoIdConfig` takes one or more minisign public keys;
@@ -226,7 +226,7 @@ GHCR needs no secret: the workflow's `GITHUB_TOKEN` pushes to `ghcr.io/nazihar` 
     - SDK: build + JVM tests + `apiCheck`;
   - the release workflows above;
   - the emulator job (x86_64, API 24/26/28/36, `native/src/androidTest`: all three libraries load and answer a call) runs on `native-v*` and by hand. The native libraries are what differ between ABIs and API levels, so an SDK release runs the JVM tests, `apiCheck` and a sample build from the published artifacts instead;
-  - `sdk-android-v*` and `native-v*` publish into a checkout of `nazihar/maven` (so `maven-metadata.xml` keeps every version), refuse a version that already exists, and push. `sdk-android-v*` attaches the API dump to the GitHub release;
+  - `sdk-android-v*` and `native-v*` publish into a checkout of `nazihar/12id-maven` (so `maven-metadata.xml` keeps every version), refuse a version that already exists, and push. `sdk-android-v*` attaches the API dump to the GitHub release;
   - the workflows are `.github/workflows/ci-{services,console,sdk-android}.yml` and `release-{images,native,sdk-android}.yml`.
 - Phone checks still owed: ~~`smoke:sdk-android` (M14, the M1 mediator cap)~~ **passed 2026-09-30** (`19-phase-9-production-findings.md` W2), and re-onboarding after a `never_connected` revocation (M10).
 
