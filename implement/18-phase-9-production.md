@@ -16,8 +16,8 @@
   - Built: the native artifact (5b.1), the merged SDK artifact (5b.2) and the workflows (5b.3). **`smoke:sdk-android` passed with the rebuilt libraries on the phone (7/7) and on x86_64 emulators API 26/28/36.** Evidence in `19-…` W3.
   - **minSdk 24 kept (owner, 2026-10-01: the first customer requires it).** Android 7.0 lacks the Let's Encrypt roots; the SDK now carries them as a fallback (fork change F8) and passes the smoke on API 24.
   - **Released 2026-10-01:** `com.12id:holder-sdk-native:0.2.1-12id.1` (tag `native-v0.2.1-12id.1`, CI emulator matrix API 24/26/28/36 green) and `com.12id:holder-sdk-android:0.1.0` + biometric add-ons (tag `sdk-android-v0.1.0`) on `https://maven.12id.com`. The sample builds from there alone, and `smoke:sdk-android` passed 7/7 on the phone with that build.
-  - **Carried over:** M15 (minisign on device) needs W5's production keys, so it lands with W5; it ships as an SDK release. The M10 phone check (re-onboarding after a `never_connected` revocation) is still owed.
-- Next: W5 (bring-up, then M15). W4 can start on staging now.
+  - **Carried over:** M15 (minisign on device) needs W5's production keys, so it lands with W5; it ships as an SDK release. The M10 phone check (re-onboarding after a `never_connected` revocation) is still owed. The image workflow (`release-images.yml`) has not run yet: its first run is W5 step 0.
+- Next: W5, starting with step 0 (the first image release through CI), then M15. W4 can start on staging now.
 
 ## Context
 Phases 0–6 are built and verified on the staging VM `id-dev` (`*.12id.naziharitsolution.com`, [`4-init-post-phase-0.md`](4-init-post-phase-0.md) §10):
@@ -171,7 +171,7 @@ W2, W3 and W5 can partly run in parallel. W6 waits on hardware.
    - Rehearse locally (Docker Desktop), then as a scratch Compose project on staging.
 6. **Runbooks:** new `infra/runbooks/ledger-ceremony.md` and `production-bringup.md`; `genesis-rotation.md` gains "move a validator to its own host".
 
-### W3 — Android SDK release and CI (Phase 5b, `17-phase-7.md` Appendix A) — ~6–8 d ✅ 2026-10-01 (except M15, which waits for W5's keys, and the M10 phone check)
+### W3 — Android SDK release and CI (Phase 5b, `17-phase-7.md` Appendix A) — ~6–8 d ✅ 2026-10-01 (except M15, which waits for W5's keys, the M10 phone check, and the image workflow's first run, which is W5 step 0)
 
 **Decided (owner, 2026-09-30).** The aim is to keep things simple for the customer and for us, with as little configuration outside the repo as possible.
 
@@ -254,6 +254,17 @@ GHCR needs no secret: the workflow's `GITHUB_TOKEN` pushes to `ghcr.io/nazihar` 
   - the drill rebuilds the full stack on a scratch VM from the backup machine's copy, with the offline age key only, including the ledger node data.
 
 ### W5 — Production bring-up (after W1 + W2; its minisign keys complete W3's M15) — ~3 d
+0. **The first image release through CI** (`release-images.yml`, written in W3, never run yet):
+   - one-time: connect each of the nine `ghcr.io/nazihar/12id-*` packages to `nazihar/12id` (Package settings →
+     Connect repository). They were first pushed by hand in W2, so the source label alone does not link them, and the
+     link is what gives the workflow's `GITHUB_TOKEN` write access;
+   - tag `v0.1.0-rc.1`: CI builds the nine images once and pushes `sha-<short>` + `0.1.0-rc.1`; expect to tune
+     the runner (disk space, as for the native build) on the first run;
+   - deploy `release-0.1.0-rc.1.env` (from the GitHub pre-release, committed as `infra/compose/release.env`) on
+     staging and run every smoke. Staging pulls from GHCR slowly (~21 KB/s, W2): bring large images over through the
+     PC if needed;
+   - tag `v0.1.0` on the same commit: CI adds `0.1.0` to the same digests (no rebuild) and attaches the bundle;
+     production (step 4) deploys it.
 1. **Provision and harden the VM:**
    - key-only SSH, ufw (22/80/443 + the 4 client ports), fail2ban, unattended-upgrades;
    - Docker pinned;
