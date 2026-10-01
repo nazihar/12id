@@ -260,9 +260,29 @@ published (von-network holds 9702–9708), clients on `12id-ledger`. Removed aft
 - **Auto mode refuses some staging actions** even with an allow rule (a reverse tunnel, and writes on a remote host
   without an explicit per-action go-ahead). The owner opens the smoke tunnel themself.
 
+### First release (2026-10-01)
+- **`native-v0.2.1-12id.1`:** CI built the libraries (65 min) and ran the native test on x86_64 emulators API 24, 26, 28
+  and 36. Three fixes to `release-native.yml` on the way:
+  - API 36 never booted: `Not enough space to create userdata partition (7309 MB available, 7373 MB needed)`. The
+    emulator job now frees disk first (.NET, Haskell, Boost, Swift) and uses a 6 GB data partition and 3 GB RAM
+    (private-repo runners: 2 vCPU, ~7 GB).
+  - The first version of that clean-up also deleted the tool cache, where `setup-java` had installed the JDK, and all
+    four emulators failed at "Install Android SDK". The clean-up now runs first and keeps the tool cache.
+  - A re-run uses the workflow of the tagged commit, so each fix meant moving the (unpublished) tag.
+- **The libraries CI built** pass the same checks as the local build: `NEEDED` only `libc`/`libm`/`libdl`, no
+  `__extenddftf2` or C++ runtime import (only libc's `__cxa_atexit`/`__cxa_finalize`), 16 KB aligned, 3 ABIs.
+- **`sdk-android-v0.1.0`:** the first run failed safely at the sample build (before publishing):
+  `maven.12id.com` still served GitHub's `*.github.io` certificate. GitHub's DNS check had hung for a day with
+  correct DNS; re-saving the domain restarted it and Let's Encrypt issued `CN=maven.12id.com` (until 2026-12-30). The
+  re-run published the SDK and both add-ons.
+- **Customer path verified:** the sample (debug + minified release) built with the local repository removed and every
+  `com.12id` artifact downloaded from `https://maven.12id.com`; **`smoke:sdk-android` PASSED 7/7 on the phone** with
+  that build. Smoke keys revoked.
+- **Repository:** `nazihar/maven` was renamed `nazihar/12id-maven`; its default branch is `master`.
+- CI audit: `ci-console` failed on a high `brace-expansion` advisory from dev tooling only. `npm audit fix`
+  (lockfile only) cleared it; both checks now audit `--omit=dev` (what ships, L12).
+
 ### Not done yet in W3
-- CI has not run: the owner commits and pushes, then does the one-time setup (`18-…` W3: `nazihar/12id-maven` + Pages +
-  CNAME, `MAVEN_REPO_TOKEN`, tag ruleset, GHCR Actions access), then tags `native-v0.2.1-12id.1`.
 - M15 (minisign on device).
 - The 16 KB smoke once staging's wallet creation is fast again.
 - M10's phone check (re-onboarding after a `never_connected` revocation).

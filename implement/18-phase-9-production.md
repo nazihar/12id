@@ -1,6 +1,6 @@
 # Phase 9 — Production (plan)
 
-**Status (2026-09-28):**
+**Status (2026-10-01):**
 - W0 (this document and the updates to the other docs) is done.
 - **W1 (close Phase 7) is done on staging.** Its evidence stays with each finding in `17-phase-7.md`.
 - **W2 is done (2026-09-29): staging runs the bundle.** Evidence is in [`19-phase-9-production-findings.md`](19-phase-9-production-findings.md).
@@ -12,11 +12,12 @@
   - ~~GHCR namespace~~ decided: `ghcr.io/nazihar` (owner, 2026-09-29). Staging was moved there the same day with identical digests.
   - The owner's backup machine.
   - ~~`smoke:sdk-android` on the phone~~: passed 2026-09-30.
-- **W3 started (2026-09-30).** The owner settled distribution and CI (W3 below): two SDK artifacts, a GitHub Pages Maven repository at `maven.12id.com`, and CI driven by tags.
+- **W3 is done (2026-10-01): the Android SDK is released on `maven.12id.com`.** The owner settled distribution and CI (W3 below): two SDK artifacts, a GitHub Pages Maven repository, and CI driven by tags.
   - Built: the native artifact (5b.1), the merged SDK artifact (5b.2) and the workflows (5b.3). **`smoke:sdk-android` passed with the rebuilt libraries on the phone (7/7) and on x86_64 emulators API 26/28/36.** Evidence in `19-…` W3.
   - **minSdk 24 kept (owner, 2026-10-01: the first customer requires it).** Android 7.0 lacks the Let's Encrypt roots; the SDK now carries them as a fallback (fork change F8) and passes the smoke on API 24.
-  - Open: CI's first run (after the owner's push and one-time setup) and M15.
-- Next: W5 (bring-up) and W3 (SDK release, CI). W4 can start on staging now.
+  - **Released 2026-10-01:** `com.12id:holder-sdk-native:0.2.1-12id.1` (tag `native-v0.2.1-12id.1`, CI emulator matrix API 24/26/28/36 green) and `com.12id:holder-sdk-android:0.1.0` + biometric add-ons (tag `sdk-android-v0.1.0`) on `https://maven.12id.com`. The sample builds from there alone, and `smoke:sdk-android` passed 7/7 on the phone with that build.
+  - **Carried over:** M15 (minisign on device) needs W5's production keys, so it lands with W5; it ships as an SDK release. The M10 phone check (re-onboarding after a `never_connected` revocation) is still owed.
+- Next: W5 (bring-up, then M15). W4 can start on staging now.
 
 ## Context
 Phases 0–6 are built and verified on the staging VM `id-dev` (`*.12id.naziharitsolution.com`, [`4-init-post-phase-0.md`](4-init-post-phase-0.md) §10):
@@ -170,7 +171,7 @@ W2, W3 and W5 can partly run in parallel. W6 waits on hardware.
    - Rehearse locally (Docker Desktop), then as a scratch Compose project on staging.
 6. **Runbooks:** new `infra/runbooks/ledger-ceremony.md` and `production-bringup.md`; `genesis-rotation.md` gains "move a validator to its own host".
 
-### W3 — Android SDK release and CI (Phase 5b, `17-phase-7.md` Appendix A) — ~6–8 d
+### W3 — Android SDK release and CI (Phase 5b, `17-phase-7.md` Appendix A) — ~6–8 d ✅ 2026-10-01 (except M15, which waits for W5's keys, and the M10 phone check)
 
 **Decided (owner, 2026-09-30).** The aim is to keep things simple for the customer and for us, with as little configuration outside the repo as possible.
 
@@ -191,8 +192,8 @@ implementation("com.12id:holder-sdk-android:X.Y.Z")
 ```
 
 **The owner's one-time setup outside the repo:**
-1. Create the public repo `nazihar/12id-maven` and turn on Pages (deploy from branch `main`).
-2. Add a DNS record: `maven.12id.com` CNAME to `nazihar.github.io`, then set the custom domain and "Enforce HTTPS" in Pages.
+1. Create the public repo `nazihar/12id-maven` (renamed from `maven`, 2026-10-01) and turn on Pages (deploy from its default branch, `master`).
+2. Add a DNS record: `maven.12id.com` CNAME to `nazihar.github.io`, then set the custom domain and "Enforce HTTPS" in Pages. GitHub's DNS check hung for a day with correct DNS; re-saving the domain restarted it and the certificate followed within the hour.
 3. Add one Actions secret in `nazihar/12id`, `MAVEN_REPO_TOKEN`: a fine-grained PAT with Contents: read and write on `nazihar/12id-maven` only.
 4. ~~Tag ruleset~~: not available for private repos on GitHub Free; the owner is the only one who can push, so it waits for a paid plan or a second contributor.
 5. For each of the nine `ghcr.io/nazihar/12id-*` packages, open Package settings → Manage Actions access, and add `nazihar/12id` with the Write role. The packages were first pushed by hand in W2, so the workflow's token may not write to them until this is done.
@@ -252,7 +253,7 @@ GHCR needs no secret: the workflow's `GITHUB_TOKEN` pushes to `ghcr.io/nazihar` 
   - scenarios: lose the endorser key, a wallet database, the mediator queue, the whole VM;
   - the drill rebuilds the full stack on a scratch VM from the backup machine's copy, with the offline age key only, including the ledger node data.
 
-### W5 — Production bring-up (after W1 + W2; before W3's SDK release build) — ~3 d
+### W5 — Production bring-up (after W1 + W2; its minisign keys complete W3's M15) — ~3 d
 1. **Provision and harden the VM:**
    - key-only SSH, ufw (22/80/443 + the 4 client ports), fail2ban, unattended-upgrades;
    - Docker pinned;
@@ -313,7 +314,7 @@ GHCR needs no secret: the workflow's `GITHUB_TOKEN` pushes to `ghcr.io/nazihar` 
 - Legal: privacy policy, terms, DPA (these use W7).
 
 ## Order
-W1 and W2 first. Then W5, which generates the production minisign keys, then the W3 SDK release build. W4 runs on production-shaped staging as soon as W2 lands; its DR drill runs after W5. W7 follows H1. W6 starts when the hardware arrives.
+W1, W2 and W3 are done (W3 released the SDK on 2026-10-01). Next is W5, which generates the production minisign keys; an SDK release with M15 follows. W4 runs on production-shaped staging as soon as W2 lands; its DR drill runs after W5. W7 follows H1. W6 starts when the hardware arrives.
 
 ## Go-live gate
 - **Phase 7 closed:** H1 is on production, and the Low batch is done.
