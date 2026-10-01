@@ -17,6 +17,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
+import org.hyperledger.ariesframework.agent.IsrgTrust
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
@@ -206,7 +207,8 @@ internal class PlatformClient(
     companion object {
         private val JSON = "application/json".toMediaType()
 
-        fun defaultHttpClient(): OkHttpClient = OkHttpClient.Builder()
+        // IsrgTrust: Let's Encrypt roots after the system's, so Android 7.0 (minSdk 24) reaches the platform (W3).
+        fun defaultHttpClient(): OkHttpClient = IsrgTrust.applyTo(OkHttpClient.Builder())
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .build()

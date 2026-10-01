@@ -220,7 +220,7 @@ published (von-network holds 9702–9708), clients on `12id-ledger`. Removed aft
 - **x86_64 emulators, steps 1–3 PASSED on API 26, 28 and 36** (onboarding, connect, offer accept/decline). This is the
   first time the SDK has run on an emulator (Phase 5 finding 9).
 - **API 24 (Android 7.0): the native libraries load** (instrumentation test: Askar, AnonCreds, Indy VDR calls pass), but
-  **the SDK cannot reach the platform**: `CertPathValidatorException: Trust anchor for certification path not found`.
+  at first **the SDK could not reach the platform** (fixed the next day, below): `CertPathValidatorException: Trust anchor for certification path not found`.
   Android 7.0's trust store lacks ISRG Root X1 (added in 7.1.1), and Let's Encrypt no longer serves the cross-signed
   chain. New finding, below.
 - **16 KB pages (API 37 `ps16k` emulator):** the native instrumentation test passed; Android noted
@@ -230,10 +230,26 @@ published (von-network holds 9702–9708), clients on `12id-ledger`. Removed aft
 - The smoke's `adb logcat -c` is now best effort: the API 26 image refuses it ("failed to clear the 'main' log").
 
 ### Found on the way
-- **minSdk 24 and Let's Encrypt (new, needs an owner decision).** Android 7.0 (API 24) cannot validate our
-  certificates. Options: raise `minSdk` to 25; ship ISRG Root X1 (and X2) as extra trust anchors in the SDK's own
-  OkHttp clients and the framework's (the platform, genesis and mediator connections); or use a CA that Android 7.0
-  trusts. Android 7.0 is a very small share of active devices.
+- **minSdk 24 and Let's Encrypt — fixed 2026-10-01.** The owner keeps `minSdk 24` (the first customer requires it).
+  Staging's chain is `YE1 → Root YE → ISRG Root X2 → ISRG Root X1`; Android 7.0 has none of those roots.
+  - **Fix (fork change F8, `IsrgTrust`):** the SDK and the fork carry the four Let's Encrypt roots (X1, X2, YE, YR)
+    and check them only after the system trust store rejects a chain, on every HTTPS/WSS client (platform API,
+    genesis, mediator HTTP + WebSocket, invitation short URLs). Hostname verification and the app's network
+    security config are unchanged. YE/YR also cover older devices once Let's Encrypt drops the cross-signs.
+    Fingerprints checked (X1/X2 against the published values, YE against the Root YE staging sends) and pinned
+    by `IsrgTrustTest`. Fork JVM tests 8/8, SDK 44/44, `apiCheck` clean.
+  - **The sample** gets the same roots in a network security config for its own backend: a customer app needs
+    that only for its own Let's Encrypt servers (integration guide).
+  - **Verified:** `smoke:sdk-android` steps 1–3 **PASSED on the API 24 emulator** (Ready 4 s after launch), and the
+    full 7 steps **PASSED again on the phone** with the fix in.
+  - On the way: raising the sample's backend timeout to 60 s made step 4 fail twice on the phone. The first token
+    request of a push-woken process never reaches the backend and hangs until the timeout; the default 10 s
+    recovers in time, 60 s did not. Reverted. The woken process also asks for the token several times (5 in the
+    passing run); worth a look when the SDK's token path is next touched.
+  - The fork's `ktlintCheck` is broken independently (ktlint-gradle 13 refuses the pinned ktlint 0.49.1); CI does
+    not run it.
+  - The smoke tunnel went stale once (the window still open, requests hanging): open it with
+    `-o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes`.
 - **The async Askar call hangs in the instrumentation test, with the upstream libraries as well.** `provision` never
   completes inside the `:native` test APK on API 24 and 36 (also with upstream's arm64 libraries under ARM translation),
   while the same call works in the app on every device above. All Rust threads are idle in the dump, so the continuation
@@ -248,5 +264,5 @@ published (von-network holds 9702–9708), clients on `12id-ledger`. Removed aft
 - CI has not run: the owner commits and pushes, then does the one-time setup (`18-…` W3: `nazihar/maven` + Pages +
   CNAME, `MAVEN_REPO_TOKEN`, tag ruleset, GHCR Actions access), then tags `native-v0.2.1-12id.1`.
 - M15 (minisign on device).
-- The API 24 decision above, and the 16 KB smoke once staging's wallet creation is fast again.
+- The 16 KB smoke once staging's wallet creation is fast again.
 - M10's phone check (re-onboarding after a `never_connected` revocation).

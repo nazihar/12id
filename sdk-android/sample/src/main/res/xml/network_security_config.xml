@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The sample's own connections (CustomerBackend) on Android 7.0: its trust store predates ISRG Root X1, so a
+     Let's Encrypt backend fails there. The system store stays first; these are the Let's Encrypt roots. The SDK
+     needs none of this for its own connections (IsrgTrust); a customer app needs it only for its own
+     Let's Encrypt servers (docs/integration.md). -->
+<network-security-config>
+    <base-config>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="@raw/isrg_root_x1" />
+            <certificates src="@raw/isrg_root_x2" />
+            <certificates src="@raw/isrg_root_ye" />
+            <certificates src="@raw/isrg_root_yr" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

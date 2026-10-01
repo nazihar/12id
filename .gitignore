@@ -39,4 +39,6 @@ Thumbs.db
 !infra/compose/release.env
 # Phase 9 W3: the native build's pinned inputs (no secrets)
 !sdk-android/native/versions.env
+# Phase 9 W3: public Let's Encrypt root certificates for the sample's network security config (not keys)
+!sdk-android/sample/src/main/res/raw/isrg_root_*.pem
 !infra/build/

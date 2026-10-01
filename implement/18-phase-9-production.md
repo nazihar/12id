@@ -14,7 +14,8 @@
   - ~~`smoke:sdk-android` on the phone~~: passed 2026-09-30.
 - **W3 started (2026-09-30).** The owner settled distribution and CI (W3 below): two SDK artifacts, a GitHub Pages Maven repository at `maven.12id.com`, and CI driven by tags.
   - Built: the native artifact (5b.1), the merged SDK artifact (5b.2) and the workflows (5b.3). **`smoke:sdk-android` passed with the rebuilt libraries on the phone (7/7) and on x86_64 emulators API 26/28/36.** Evidence in `19-…` W3.
-  - Open: CI's first run (after the owner's push and one-time setup), M15, and a decision on API 24 (Android 7.0 cannot validate Let's Encrypt certificates).
+  - **minSdk 24 kept (owner, 2026-10-01: the first customer requires it).** Android 7.0 lacks the Let's Encrypt roots; the SDK now carries them as a fallback (fork change F8) and passes the smoke on API 24.
+  - Open: CI's first run (after the owner's push and one-time setup) and M15.
 - Next: W5 (bring-up) and W3 (SDK release, CI). W4 can start on staging now.
 
 ## Context

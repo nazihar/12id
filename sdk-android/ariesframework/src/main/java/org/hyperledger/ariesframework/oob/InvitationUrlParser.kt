@@ -4,6 +4,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
+import org.hyperledger.ariesframework.agent.IsrgTrust
 import org.hyperledger.ariesframework.agent.MessageSerializer
 import org.hyperledger.ariesframework.connection.messages.ConnectionInvitationMessage
 import org.hyperledger.ariesframework.oob.messages.OutOfBandInvitation
@@ -49,6 +50,7 @@ object InvitationUrlParser {
     private suspend fun invitationFromShortUrl(url: String): Pair<OutOfBandInvitation?, ConnectionInvitationMessage?> {
         var invitationJson = withContext(Dispatchers.IO) {
             URL(url).openConnection().run {
+                IsrgTrust.applyTo(this) // 12id fork change (F8)
                 this as HttpURLConnection
                 if (contentType != "application/json") {
                     throw Exception("Invalid content-type from short url: $contentType")

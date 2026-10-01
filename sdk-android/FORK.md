@@ -25,6 +25,7 @@ Every change is marked in the source with a `fork change` comment (`Phase 0 fork
 
 | F6 | `ariesframework/consumer-rules.pro` | R8 keep rules for the framework's serializable models, the UniFFI bindings and JNA | Apps that minify would otherwise strip classes resolved by name at runtime (verified by the sample's minified release build) |
 | F7 | `ariesframework/build.gradle` | The UniFFI wrappers come from `:native` (rebuilt, `native/README.md`) instead of the `org.hyperledger` artifacts; `java-multibase` is vendored (`third_party/java-multibase`) instead of resolved from JitPack; androidx core/appcompat and Material dropped (unused); no publication of its own | Phase 9 W3: one repository for consumers, and x86_64 libraries that load |
+| F8 | `agent/IsrgTrust.kt` (new), `agent/OutboundTransport.kt`, `oob/InvitationUrlParser.kt` | The Let's Encrypt roots (ISRG X1, X2, YE, YR) as a fallback after the system trust store, on the framework's HTTP/WebSocket client and the invitation short-URL fetch; the SDK's `PlatformClient` uses it too | minSdk 24: Android 7.0 predates ISRG Root X1 and could not validate any Let's Encrypt certificate (Phase 9 W3) |
 
 The slf4j binding that makes the framework's logs visible lives in the SDK (`sdk/src/main/java/org/slf4j/impl/`), not in the fork.
 

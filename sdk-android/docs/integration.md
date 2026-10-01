@@ -10,7 +10,8 @@ on the phone, the mediator and the issuing organisation. No credential or key ev
 
 | | |
 |---|---|
-| Android | `minSdk 24`. Native libraries for `arm64-v8a`, `armeabi-v7a` and `x86_64` (emulators), 16 KB page aligned. Verified on Android 14 (arm64-v8a) and on x86_64 emulators at API 26, 28 and 36. **Android 7.0 (API 24) cannot validate the platform's Let's Encrypt certificate** (its trust store lacks ISRG Root X1): support for it is being decided |
+| Android | `minSdk 24`. Native libraries for `arm64-v8a`, `armeabi-v7a` and `x86_64` (emulators), 16 KB page aligned. Verified on Android 14 (arm64-v8a) and on x86_64 emulators at API 24, 26, 28 and 36 |
+| Android 7.0 (API 24) | Its trust store predates Let's Encrypt's root (ISRG Root X1). The SDK carries the Let's Encrypt roots for its own connections, so it works there unchanged. If **your app** also calls your own server with a Let's Encrypt certificate, add the same roots to your app's network security config (the sample does: `sample/src/main/res/xml/network_security_config.xml` and `res/raw/isrg_root_*.pem`) |
 | Language | Kotlin with coroutines (every SDK call is a `suspend` function) |
 | Size | most of an app's added size is the three native libraries (Askar, AnonCreds, Indy VDR, in `com.12id:holder-sdk-native`, which comes with the SDK). Ship an App Bundle or ABI splits so each device downloads one ABI |
 | Push | optional but strongly recommended: your backend receives `wallet.sync_requested` and pushes the app, which calls `OneTwoId.sync()` |
