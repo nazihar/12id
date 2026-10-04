@@ -11,6 +11,9 @@
  * Env: PLATFORM_API (default staging). Resumable: wallets already in the run's files are skipped,
  * and the wallet's idempotency key (`load-<run>-<n>`) returns the same wallet on a retry.
  * `--invitation-url <url>` skips the platform and uses that (multi-use) invitation: local-mediator.ts.
+ * `--handshake connections` keeps only connections/1.0 in the invitation, so the mediation connection is
+ * made the way the Kotlin SDK makes it (connections/1.0, legacy DIDs) rather than with DID Exchange and
+ * did:peer:4, which a Credo holder picks by default. The mediator's per-message cost differs between the two.
  */
 import '../smoke/bindings.ts'
 import 'reflect-metadata'
@@ -36,6 +39,17 @@ const baseUrl = env('PLATFORM_API', 'https://api.12id.naziharitsolution.com')
 const directInvitation = process.argv.includes('--invitation-url') ? argValue('invitation-url') : undefined
 const api = directInvitation ? undefined : platformClient(baseUrl, env('PLATFORM_API_KEY'))
 const file = walletsFile(run, `${from}`)
+const handshake = argValue('handshake', 'default')
+
+/** Rewrites an `?oob=` invitation URL to offer connections/1.0 only. */
+function connectionsOnly(url: string): string {
+  const parsed = new URL(url)
+  const invitation = JSON.parse(Buffer.from(parsed.searchParams.get('oob') ?? '', 'base64url').toString('utf8')) as { handshake_protocols?: string[] }
+  invitation.handshake_protocols = (invitation.handshake_protocols ?? []).filter((p) => p.includes('connections/1.0'))
+  if (invitation.handshake_protocols.length === 0) throw new Error('the invitation does not offer connections/1.0')
+  parsed.searchParams.set('oob', Buffer.from(JSON.stringify(invitation)).toString('base64url'))
+  return parsed.toString()
+}
 
 async function createHolder(n: number, mediatorInvitationUrl: string) {
   const agent = new Agent({
@@ -68,7 +82,7 @@ async function onboard(n: number): Promise<LoadWallet> {
     wallet = created
     invitationUrl = (await platformClient(baseUrl, created.walletToken).must<{ invitationUrl: string }>('GET', '/v1/wallet/mediator-invitation')).invitationUrl
   }
-  const agent = await createHolder(n, invitationUrl)
+  const agent = await createHolder(n, handshake === 'connections' ? connectionsOnly(invitationUrl) : invitationUrl)
   try {
     const mediation = await agent.modules.didcomm.mediationRecipient.findDefaultMediator()
     if (!mediation || mediation.state !== 'granted') throw new Error(`mediation not granted (${mediation?.state ?? 'none'})`)

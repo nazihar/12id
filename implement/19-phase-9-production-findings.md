@@ -340,3 +340,51 @@ Plan: `C:\Users\arad\.claude\plans\read-the-md-files-dreamy-cookie.md` (A load, 
     (indy-vdr-proxy's cargo build). `release-images.yml` now frees disk first (the tool cache too: no `setup-*` here), the
     unpublished tag was moved, and the second run passed (run 37177377935, commit `0c2401c`).
   - Polling the Actions API every minute from two loops tripped GitHub's secondary rate limit; poll every few minutes.
+
+### Staging on `v0.1.0-rc.1` (2026-10-04)
+- **Deploy:** the infra tree was swapped, the old one kept as `/opt/12id/infra.prev-w4`, and every stack was deployed from the rc.
+  - GHCR now downloads at about 10 MB/s on the VM (W2 measured 21 KB/s), so all nine images pulled in under 4 minutes.
+  - The VM needed a GHCR login first: the owner added a `read:packages` token with `docker login`.
+- **Checks:** every service healthy; `check-inspect-clean.sh` 0 of 32; 22/22 targets up; edge probes as before;
+  `smoke:platform-credo` PASSED, `smoke:biometric-credo` 18/18, `e2e:staging` 3/3.
+- **Trap: `git archive` on Windows applies `core.autocrlf`.** The first tree reached the VM with CRLF scripts
+  (`/usr/bin/env: 'bash\r'`) and was replaced before any deploy. Use `git -c core.autocrlf=false archive`.
+
+### A — mediator load test on staging (2026-10-04)
+- **Setup:**
+  - tenant `load-w4` (per-key limit 0);
+  - 3,000 wallets onboarded in about 13 minutes (0 failures);
+  - the generator PC exempt at the edge;
+  - polls over HTTPS/HTTP/2, one connection per wallet, every 10 s (the SDK's profile);
+  - injected forwards at 2 per second;
+  - `load-sampler.sh` running on the VM.
+- **First ramp: HTTP 500 at 1,000 wallets (about 100 polls/s), 72 % then 99.8 % of polls.**
+  - The mediator logged `TimeoutError` (Credo's 10 s processed-message wait), and mediator Postgres was at 137 % CPU,
+    running one statement at a time:
+    `select … from "Did" where context_correlation_id = $1 and ((alternative_dids @> $2 or did = $3) and role = $4)`.
+  - `alternative_dids` had no index, and the OR forced a **sequential scan of `Did`: 88 ms, 9,514 buffers at 6k rows**
+    (23 MB table), on every poll. M18's index list missed this column.
+  - **Fix: `12id_did_alternative_dids_gin`** in `infra/compose/mediator/indexes.sql`; the plan becomes a BitmapOr of
+    two index scans, **0.17 ms**. Applied on staging with the `mediator-indexes` one-shot.
+- **Second limit: the mediator process.** With the index, Postgres sat at 10–30 % CPU while each replica held a full core.
+
+  | Wallets (polls/s) | p50 | p95 | p99 | Errors |
+  |---|---|---|---|---|
+  | 200 (20/s) | 42 ms | 80 ms | 151 ms | 0 |
+  | 400 (40/s) | 47 ms | 125 ms | 217 ms | 0 |
+  | 600 (60/s) | 130 ms | 691 ms | 914 ms | 0 |
+  | 800 (80/s) | — | — | — | 36 %, then 100 % HTTP 500 |
+
+  - **Two replicas on staging's 4 vCPU (shared with four von-network validators at about 0.6 of a core) carry 600 open
+    wallets; the knee is between 60 and 80 polls/s.**
+  - Past the knee there is **no recovery while the load lasts**. The serial queue keeps processing requests whose
+    HTTP session has already timed out (`http transport session has been closed`), and every poll fails until the load
+    drops; the backlog then takes about 4 minutes to drain. **Memory reached 509–512 MiB of 512 MiB** and stayed there
+    after the load; a restart cleared it.
+- **CPU profile of one replica at 20 polls/s** (Node inspector, 30 s; the replica was restarted afterwards to close it):
+  - 54.5 % idle, so about **22 ms of CPU per poll**: one replica tops out near 40–45 polls/s.
+  - The busy time is spread across Credo's per-message work: reply encryption 6.4 %; the holder's `did:peer:4`
+    resolution about 5 % (pure-JS base58 decode 3.6 %, `@stablelib` key conversion 3.6 %); garbage collection 6.9 %;
+    zod, drizzle and class-validator about 1–3 % each. No single hotspot.
+  - **Caveat:** these wallets were onboarded by Credo holders, which pick DID Exchange and `did:peer:4`; the SDK uses
+    `connections/1.0` (`did:peer:1` in the mediator). `onboard.ts --handshake connections` reproduces the SDK's path.
