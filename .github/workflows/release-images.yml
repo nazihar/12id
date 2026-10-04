@@ -23,6 +23,14 @@ jobs:
     env:
       TAG: ${{ github.ref_name }}
     steps:
+      # The first run (v0.1.0-rc.1, 2026-10-04) ran out of disk while nine images built in parallel
+      # (indy-vdr-proxy's cargo build). This job uses no setup-* action, so the tool cache can go too.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/local/share/boost /usr/share/swift \
+            /usr/local/lib/android /opt/hostedtoolcache /usr/local/share/powershell /usr/local/julia*
+          docker image prune --all --force > /dev/null
+          df -h /
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
