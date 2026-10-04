@@ -5,6 +5,8 @@
 # secrets/console.sops.env: BETTER_AUTH_SECRET, CONSOLE_TOKEN (must equal platform.sops.env's
 # CONSOLE_TOKEN), SMTP_URL (required in production: email OTP, invitations, password links),
 # CONSOLE_DB_PASSWORD (the `console` role on agent-postgres, infra/scripts/pg-roles.sh; Phase 7 H3).
+# BETTER_AUTH_SECRET_PREVIOUS only during a rotation (Phase 9 W4, runbooks/key-rotation.md), with
+# CONSOLE_AUTH_SECRET_VERSION in the env file.
 # Phase 9 W2 (review M11): all of them are files under /run/secrets (console/src/server/file-env.server.ts);
 # MAIL_FROM is not a secret and comes from the environment file.
 #
@@ -26,13 +28,16 @@ x-console-env: &console-env
   DATABASE_URL_PASSWORD_FILE: /run/secrets/CONSOLE_DB_PASSWORD
   BETTER_AUTH_URL: https://${CONSOLE_HOST:?env file}
   BETTER_AUTH_SECRET_FILE: /run/secrets/BETTER_AUTH_SECRET
+  # Rotation without losing 2FA enrollments (console/src/server/auth-secrets.server.ts). 0 = unversioned.
+  BETTER_AUTH_SECRET_VERSION: ${CONSOLE_AUTH_SECRET_VERSION:-0}
+  BETTER_AUTH_SECRET_PREVIOUS_FILE: /run/secrets/BETTER_AUTH_SECRET_PREVIOUS
   PLATFORM_API_URL: http://platform-api:3500
   CONSOLE_TOKEN_FILE: /run/secrets/CONSOLE_TOKEN
   # Only the `console` service needs mail; the migration and CLI jobs run without SMTP_URL.
   SMTP_URL_FILE: /run/secrets/SMTP_URL
   MAIL_FROM: ${MAIL_FROM:?env file}
 
-x-console-secrets: &console-secrets [CONSOLE_DB_PASSWORD, BETTER_AUTH_SECRET, CONSOLE_TOKEN, SMTP_URL]
+x-console-secrets: &console-secrets [CONSOLE_DB_PASSWORD, BETTER_AUTH_SECRET, BETTER_AUTH_SECRET_PREVIOUS, CONSOLE_TOKEN, SMTP_URL]
 
 services:
   # One-shot: creates the `console` database if missing and applies the Better Auth migrations.
@@ -67,6 +72,20 @@ services:
       console-migrate:
         condition: service_completed_successfully
 
+  # BETTER_AUTH_SECRET rotation, step 2 (Phase 9 W4, runbooks/key-rotation.md): moves every stored TOTP
+  # secret to the current secret version, so BETTER_AUTH_SECRET_PREVIOUS can be removed. Profile only:
+  #   deploy.sh console run --rm console-reencrypt
+  console-reencrypt:
+    image: *image
+    <<: *secret-reader
+    profiles: [rotate]
+    restart: 'no'
+    command: ['node', 'scripts/reencrypt-2fa.ts']
+    environment: *console-env
+    secrets: *console-secrets
+    mem_limit: 256m
+    networks: [agent]
+
   # Operator bootstrap and other Better Auth CLI work (profile `tools`, never started by `up`):
   #   deploy.sh console run --rm console-tools \
   #     npx auth create-admin --config src/server/auth.server.ts --email you@12id.example \
@@ -87,6 +106,9 @@ secrets:
     file: ${RUN_SECRETS:?run through deploy.sh}/console/CONSOLE_DB_PASSWORD
   BETTER_AUTH_SECRET:
     file: ${RUN_SECRETS}/console/BETTER_AUTH_SECRET
+  # Empty outside a rotation (deploy.sh mounts an empty file for an unset key).
+  BETTER_AUTH_SECRET_PREVIOUS:
+    file: ${RUN_SECRETS}/console/BETTER_AUTH_SECRET_PREVIOUS
   CONSOLE_TOKEN:
     file: ${RUN_SECRETS}/console/CONSOLE_TOKEN
   SMTP_URL:

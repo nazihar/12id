@@ -228,6 +228,25 @@ services:
       mediator-1:
         condition: service_healthy
 
+  # Askar store key rotation for the mediator's `mediator` store (Phase 9 W4, runbooks/key-rotation.md).
+  # The upstream image has no tool for it, so this one-shot runs ours from the services image, with
+  # the mediator's own role and current key; the next key arrives on stdin. Only through
+  # infra/scripts/rotate-askar-key.sh mediator, with both replicas stopped.
+  askar-rekey:
+    profiles: [rekey]
+    image: ${REGISTRY}/12id-services:${VERSION}@${SERVICES_DIGEST:?release.env}
+    <<: *secret-reader
+    restart: 'no'
+    command: ['credo-base/src/askar-rekey.ts']
+    environment:
+      ASKAR_STORE_ID: mediator
+      ASKAR_STORE_KEY_FILE: /run/secrets/MEDIATOR_ASKAR_STORE_KEY
+      POSTGRES_HOST: postgres:5432
+      POSTGRES_USER: mediator
+      POSTGRES_PASSWORD_FILE: /run/secrets/MEDIATOR_DB_PASSWORD
+    secrets: [MEDIATOR_ASKAR_STORE_KEY, MEDIATOR_DB_PASSWORD]
+    mem_limit: 256m
+
   # Logs every webhook the mediator sends, with a timestamp (evidence for W5 M2-M4). A debugging aid
   # with no authentication, so it only runs on request (Phase 7 review L7):
   #   infra/scripts/deploy.sh mediator --profile debug up -d webhook-sink

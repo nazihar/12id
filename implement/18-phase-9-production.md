@@ -18,6 +18,14 @@
   - **Released 2026-10-01:** `com.12id:holder-sdk-native:0.2.1-12id.1` (tag `native-v0.2.1-12id.1`, CI emulator matrix API 24/26/28/36 green) and `com.12id:holder-sdk-android:0.1.0` + biometric add-ons (tag `sdk-android-v0.1.0`) on `https://maven.12id.com`. The sample builds from there alone, and `smoke:sdk-android` passed 7/7 on the phone with that build.
   - **Carried over:** M15 (minisign on device) needs W5's production keys, so it lands with W5; it ships as an SDK release. The M10 phone check (re-onboarding after a `never_connected` revocation) is still owed. The image workflow (`release-images.yml`) has not run yet: its first run is W5 step 0.
 - Next: W5, starting with step 0 (the first image release through CI), then M15. W4 can start on staging now.
+- **W4 started 2026-10-01: the tools and runbooks are built locally** (`19-…` W4). This covers:
+  - the load driver;
+  - the agent throughput settings;
+  - validator self-heal;
+  - a rotation tool for each kind of key, including a versioned `BETTER_AUTH_SECRET` that keeps 2FA enrollments;
+  - `key-rotation.md` and `disaster-recovery.md`.
+
+  Owner choices: load on staging from the dev PC, hybrid holders, every rotation rehearsed live on staging, and a whole-VM DR rehearsal in WSL now. The staging runs need images with this code: the rc of W5 step 0 carries them.
 
 ## Context
 Phases 0–6 are built and verified on the staging VM `id-dev` (`*.12id.naziharitsolution.com`, [`4-init-post-phase-0.md`](4-init-post-phase-0.md) §10):

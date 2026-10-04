@@ -8,6 +8,11 @@
 #   age -d -i <offline key> trustee-1.seed.age | deploy.sh ledger run --rm -T bootstrap-endorser
 #   deploy.sh ledger run --rm write-probe                # from 12id-ledger-probe.timer afterwards
 #
+# Endorser rotation (Phase 9 W4, runbooks/key-rotation.md):
+#   age -d … trustee-1.seed.age | deploy.sh ledger run --rm -T bootstrap-endorser src/bootstrap-endorser.ts --rotate
+#   (ENDORSER_DID=<new> in the env file, deploy.sh agent)
+#   age -d … trustee-1.seed.age | deploy.sh ledger run --rm -T bootstrap-endorser src/bootstrap-endorser.ts --demote <old did>
+#
 # secrets/ledger.sops.env: ENDORSER_ASKAR_STORE_KEY, LEDGER_PROBE_SEED (64 hex characters; generate it
 # with `set-secret.sh ledger LEDGER_PROBE_SEED --generate`). ENDORSER_DB_PASSWORD comes from agent.sops.env.
 # Since Phase 7 H3 the endorser store is on agent-postgres, owned by `endorser_service`: run
@@ -35,6 +40,8 @@ services:
       <<: *genesis-env
       ENDORSER_REGISTRAR: trustee
       ENDORSER_ALIAS: ${ENDORSER_ALIAS:?env file}
+      # Picks the current endorser once the store holds more than one (after a rotation).
+      ENDORSER_DID: ${ENDORSER_DID:-}
       # Askar on Postgres: the store id is also the database name (created by pg-roles.sh).
       ASKAR_STORE_ID: endorser
       ASKAR_STORE_KEY_FILE: /run/secrets/ENDORSER_ASKAR_STORE_KEY

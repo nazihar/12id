@@ -28,6 +28,11 @@ describe('loadConfig', () => {
     assert.throws(() => loadConfig({ ...valid, ENDORSER_DID: 'did:indy:von:9WnSruRkr6b3V7XX9zPjka' }), /not in INDY_NAMESPACE/)
   })
 
+  it('takes the Askar pool size from the environment (review L9)', () => {
+    assert.equal(loadConfig(valid).ASKAR_MAX_CONNECTIONS, undefined)
+    assert.equal(loadConfig({ ...valid, ASKAR_MAX_CONNECTIONS: '20' }).ASKAR_MAX_CONNECTIONS, 20)
+  })
+
   it('rejects a short internal token', () => {
     assert.throws(() => loadConfig({ ...valid, INTERNAL_TOKEN: 'short' }), /INTERNAL_TOKEN/)
   })

@@ -21,6 +21,7 @@ import { consoleDb } from './db.server'
 import * as schema from './db/auth-schema'
 import { startAuthHousekeeping } from './data-protection.server'
 import { sendMail } from './email.server'
+import { authSecretOptions } from './auth-secrets.server'
 import { serverEnv } from './env.server'
 
 const env = serverEnv()
@@ -28,7 +29,8 @@ const env = serverEnv()
 export const auth = betterAuth({
   appName: '12id Console',
   baseURL: env.BETTER_AUTH_URL,
-  secret: env.BETTER_AUTH_SECRET,
+  // One secret, or a versioned set during a rotation (Phase 9 W4, auth-secrets.server.ts).
+  ...authSecretOptions(env),
   trustedOrigins: [env.BETTER_AUTH_URL],
   database: drizzleAdapter(consoleDb().db, { provider: 'pg', schema }),
   emailAndPassword: {

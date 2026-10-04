@@ -129,6 +129,9 @@ to decrypt: keep the secret with the backups' key material.
 3. Run `infra/scripts/pg-roles.sh mediator` (or `agent`) so the restored objects belong to the service role again.
 4. Start the replicas and run `check-mediator-tables.sh --after-start`, then `smoke:credo`.
 
+Which databases must be restored together, what users see, and the commands for each stack and for a
+whole VM: [disaster-recovery.md](disaster-recovery.md) (Phase 9 W4).
+
 ## Off-site copies (the backup machine, Phase 9 W2)
 A machine at another site pulls `/opt/12id/backups` nightly. The VM cannot reach it, and the key it
 uses can only read that one directory, so a compromised VM can neither delete the copies nor use the key.

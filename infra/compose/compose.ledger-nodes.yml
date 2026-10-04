@@ -23,7 +23,25 @@ x-node: &node
   # The upstream project publishes only moving `-main` tags, so the digest is the version (1.13.2, Debian 12).
   image: ghcr.io/hyperledger-indy/indy-node-container/indy_node:1.13.2-debian12-main@sha256:d1f7d24fda5cfd1e20eed657a3deefe051280336c86a261070b9219a61c42ebe
   restart: unless-stopped
+  # tini as PID 1, so the healthcheck below can end a hung node and the restart policy brings it back.
   init: true
+  # A validator that hangs at start ("Starting ledger…") never opens its client port, and nothing restarted
+  # it: on staging two of four hung for 21 h and writes stopped (19-phase-9-production-findings W2).
+  # Three failed checks in a row (after the start period, which covers a catch-up) end PID 1. The
+  # failure count lives on a tmpfs, so a restarted node starts from zero (the vdr-proxy pattern).
+  tmpfs: [/healthstate]
+  healthcheck:
+    test:
+      - CMD-SHELL
+      - >-
+        if python3 -c 'import os, socket; socket.create_connection(("127.0.0.1", int(os.environ["INDY_CLIENT_PORT"])), 5).close()';
+        then rm -f /healthstate/failures; exit 0; fi;
+        n=$$(( $$(cat /healthstate/failures 2>/dev/null || echo 0) + 1 )); echo $$n > /healthstate/failures;
+        [ $$n -ge 3 ] && kill 1; exit 1
+    interval: 60s
+    timeout: 15s
+    retries: 3
+    start_period: 300s
   mem_limit: 1g
   stop_grace_period: 30s
   # Our configuration over the image's (stdout logging), then the image's own init script.

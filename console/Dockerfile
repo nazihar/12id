@@ -17,8 +17,8 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
 COPY --from=build /app/dist ./dist
 COPY drizzle ./drizzle
-COPY scripts/migrate.ts ./scripts/migrate.ts
-COPY src/server/file-env.server.ts ./src/server/file-env.server.ts
+COPY scripts/migrate.ts scripts/reencrypt-2fa.ts ./scripts/
+COPY src/server/file-env.server.ts src/server/auth-secrets.server.ts ./src/server/
 USER node
 EXPOSE 3600
 CMD ["node", "node_modules/srvx/bin/srvx.mjs", "--prod", "--host", "0.0.0.0", "--port", "3600", "-s", "../client", "dist/server/server.js"]

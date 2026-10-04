@@ -30,6 +30,7 @@ export async function createEndorserAgent(config: EndorserServiceConfig, logger:
           host: config.POSTGRES_HOST,
           user: config.POSTGRES_USER,
           password: config.POSTGRES_PASSWORD,
+          maxConnections: config.ASKAR_MAX_CONNECTIONS,
         }),
       }),
       indyVdr: new IndyVdrModule({

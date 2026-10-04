@@ -49,6 +49,11 @@ export class KeyRing {
     return { dataKey, wrapped: seal(this.#master, dataKey, aad.dataKey(tenantId)) }
   }
 
+  /** Wraps an existing data key (master key rotation, rotate-master-key.ts). */
+  wrap(tenantId: string, dataKey: Buffer): Buffer {
+    return seal(this.#master, dataKey, aad.dataKey(tenantId))
+  }
+
   unwrap(tenantId: string, wrapped: Buffer): Buffer {
     return open(this.#master, wrapped, aad.dataKey(tenantId))
   }

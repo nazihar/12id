@@ -19,7 +19,7 @@ the browser only ever holds a Better Auth session cookie. Plan: `implement/11-ph
 
    | File | Key | Notes |
    |---|---|---|
-   | `console.sops.env` | `BETTER_AUTH_SECRET` | signs sessions and encrypts TOTP secrets; rotating it signs everyone out |
+   | `console.sops.env` | `BETTER_AUTH_SECRET` | signs sessions and encrypts TOTP secrets; rotate it only as in [key-rotation.md](key-rotation.md#console-auth-secret) (everyone signs in again, 2FA enrollments are kept) |
    | `console.sops.env` | `CONSOLE_TOKEN` | **same value** as `platform.sops.env: CONSOLE_TOKEN` |
    | `console.sops.env` | `SMTP_URL` | `smtps://user:password@host:465` or `smtp://…:587`; URL-encode `@`, `/`, `:` in the password. Required: the console refuses to start in production without it |
    | `console.sops.env` | `MAIL_FROM` | optional; default `12id Console <no-reply@12id.naziharitsolution.com>`. Set it if the provider only sends from verified addresses |
@@ -98,8 +98,9 @@ set-password link; the link works once and expires in one hour).
   2FA for the account directly in the `console` database (`update "user" set two_factor_enabled=false;
   delete from two_factor where user_id=…`) and the user re-enrolls at next sign-in. Record it in
   the ticket; there is no UI for it on purpose.
-- **Rotate `CONSOLE_TOKEN`.** Change it in both sops files, then `deploy.sh platform up -d` and
-  `deploy.sh console up -d`. Console calls fail with 401 between the two.
+- **Rotate `CONSOLE_TOKEN`.** `set-secret.sh platform,console CONSOLE_TOKEN --generate` writes the same
+  value into both sops files; then `deploy.sh platform` and `deploy.sh console`. Console calls fail with
+  401 between the two ([key-rotation.md](key-rotation.md)).
 - **Rate limits.** Better Auth: sign-in 3 attempts / 10 s per IP, password-reset requests 3 / minute
   per IP; the edge adds 300 requests / minute per IP. Inviting many people at once from one office
   IP hits the reset limit (they can use the "expired link" path later).

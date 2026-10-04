@@ -51,6 +51,14 @@ describe('loadConfig', () => {
     })
   })
 
+  it('takes the Askar pool size from the environment, or leaves Askar its default (review L9)', () => {
+    assert.equal(loadConfig(valid).ASKAR_MAX_CONNECTIONS, undefined)
+    // Compose passes an unset setting as an empty string.
+    assert.equal(loadConfig({ ...valid, ASKAR_MAX_CONNECTIONS: '' }).ASKAR_MAX_CONNECTIONS, undefined)
+    assert.equal(loadConfig({ ...valid, ASKAR_MAX_CONNECTIONS: '40' }).ASKAR_MAX_CONNECTIONS, 40)
+    assert.throws(() => loadConfig({ ...valid, ASKAR_MAX_CONNECTIONS: '0' }), /ASKAR_MAX_CONNECTIONS/)
+  })
+
   it('parses roles and the concurrency flag', () => {
     const config = loadConfig({ ...valid, AGENT_ROLES: 'verifier', PROCESS_MESSAGES_CONCURRENTLY: 'true' })
     assert.deepEqual(config.AGENT_ROLES, ['verifier'])

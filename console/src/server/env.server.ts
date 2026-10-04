@@ -19,6 +19,10 @@ const schema = z
     /** Public origin of the console, e.g. https://12id.naziharitsolution.com. */
     BETTER_AUTH_URL: z.url(),
     BETTER_AUTH_SECRET: secret,
+    /** Rotation (Phase 9 W4, auth-secrets.server.ts): the version of BETTER_AUTH_SECRET; 0 = unversioned, as before. */
+    BETTER_AUTH_SECRET_VERSION: z.coerce.number().int().min(0).default(0),
+    /** Rotation: the secret being retired, decrypt-only until scripts/reencrypt-2fa.ts has run. Blank = unset. */
+    BETTER_AUTH_SECRET_PREVIOUS: z.preprocess((value) => (value === '' ? undefined : value), secret.optional()),
     /** platform-api on the private network; the console scope is never reached over the internet. */
     PLATFORM_API_URL: z.url(),
     CONSOLE_TOKEN: secret,
@@ -31,6 +35,12 @@ const schema = z
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === 'production' && !env.SMTP_URL) {
       ctx.addIssue({ code: 'custom', path: ['SMTP_URL'], message: 'required in production: email OTP, invitations and password reset send mail' })
+    }
+    if (env.BETTER_AUTH_SECRET_PREVIOUS && env.BETTER_AUTH_SECRET_VERSION === 0) {
+      ctx.addIssue({ code: 'custom', path: ['BETTER_AUTH_SECRET_VERSION'], message: 'a previous secret needs BETTER_AUTH_SECRET_VERSION 1 or higher (runbooks/key-rotation.md)' })
+    }
+    if (env.BETTER_AUTH_SECRET_PREVIOUS && env.BETTER_AUTH_SECRET_PREVIOUS === env.BETTER_AUTH_SECRET) {
+      ctx.addIssue({ code: 'custom', path: ['BETTER_AUTH_SECRET_PREVIOUS'], message: 'equals BETTER_AUTH_SECRET; generate a new current secret' })
     }
     if (env.NODE_ENV === 'production' && env.MAIL_OUTBOX_FILE) {
       ctx.addIssue({ code: 'custom', path: ['MAIL_OUTBOX_FILE'], message: 'not allowed in production: it would write sign-in codes to disk' })

@@ -47,6 +47,8 @@ const configSchema = z.object({
    */
   POSTGRES_ADMIN_USER: z.string().min(1).optional(),
   POSTGRES_ADMIN_PASSWORD: z.string().min(1).optional(),
+  /** Askar's Postgres pool for the root store and every tenant profile (review L9); unset or empty = Askar's default. */
+  ASKAR_MAX_CONNECTIONS: z.preprocess((value) => (value === '' ? undefined : value), z.coerce.number().int().positive().max(200).optional()),
 
   // agent-service's own tables (tenants, catalogue, outbox). A database separate from the Askar store.
   DATABASE_URL: z.url().refine((url) => url.startsWith('postgres://') || url.startsWith('postgresql://'), 'must be a postgres URL'),

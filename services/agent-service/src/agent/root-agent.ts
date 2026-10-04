@@ -60,6 +60,7 @@ function tenantModules(config: AgentServiceConfig, genesisTransactions: string, 
         password: config.POSTGRES_PASSWORD,
         adminUser: config.POSTGRES_ADMIN_USER,
         adminPassword: config.POSTGRES_ADMIN_PASSWORD,
+        maxConnections: config.ASKAR_MAX_CONNECTIONS,
       }),
     }),
     indyVdr: new IndyVdrModule({

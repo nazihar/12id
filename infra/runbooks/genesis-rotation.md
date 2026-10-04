@@ -64,6 +64,7 @@ a new genesis version.
    that did not move and refreshes.
 
 ## Signing key
+Rotation procedure (Phase 9 W4): [key-rotation.md, Genesis signing key](key-rotation.md#genesis-signing-key).
 - Private key: `/opt/12id/secrets/minisign.key` on the VM, also stored as `MINISIGN_SECRET_KEY_B64` in `infra/env/staging/secrets/genesis.sops.env`.
 - Public key: `infra/env/staging/genesis-signing.pub` (key id `169255404DD823AD`).
 - **If the key is lost or rotated,** every consumer that verifies signatures needs the new public key. Publish the next genesis version signed with the new key, and ship the public key through the same channel as the URL change.

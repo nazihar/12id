@@ -21,6 +21,8 @@ const configSchema = z.object({
   POSTGRES_HOST: z.string().regex(/^[^:]+:\d+$/, 'POSTGRES_HOST must be host:port'),
   POSTGRES_USER: z.string().min(1),
   POSTGRES_PASSWORD: z.string().min(1),
+  /** Askar's Postgres pool (review L9); unset or empty = Askar's default. */
+  ASKAR_MAX_CONNECTIONS: z.preprocess((value) => (value === '' ? undefined : value), z.coerce.number().int().positive().max(200).optional()),
 
   /** endorser-service's own tables (bindings, audit), separate from the Askar store. */
   DATABASE_URL: z.url().refine((url) => url.startsWith('postgres://') || url.startsWith('postgresql://'), 'must be a postgres URL'),

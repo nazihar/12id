@@ -59,6 +59,11 @@ x-agent-env: &agent-env
   ENDORSER_SERVICE_URL: http://endorser-service:3420
   ENDORSER_SERVICE_TOKEN_FILE: /run/secrets/AGENT_ENDORSER_TOKEN
   DRAIN_DEADLINE_MS: "15000"
+  # Throughput (Phase 9 W4 load test; reviews M1 and L9). The defaults keep the behaviour before W4:
+  # one message at a time across all tenants, and Askar's own pool size.
+  PROCESS_MESSAGES_CONCURRENTLY: ${AGENT_PROCESS_MESSAGES_CONCURRENTLY:-false}
+  TENANT_SESSION_LIMIT: ${AGENT_TENANT_SESSION_LIMIT:-100}
+  ASKAR_MAX_CONNECTIONS: ${AGENT_ASKAR_MAX_CONNECTIONS:-}
 
 x-agent-secrets: &agent-secrets [PLATFORM_AGENT_TOKEN, AGENT_ASKAR_STORE_KEY, AGENT_SERVICE_DB_PASSWORD, AGENT_ENDORSER_TOKEN]
 
@@ -77,6 +82,7 @@ x-endorser-env: &endorser-env
   INTERNAL_TOKEN_FILE: /run/secrets/AGENT_ENDORSER_TOKEN
   HOST: 0.0.0.0
   PORT: "3420"
+  ASKAR_MAX_CONNECTIONS: ${ENDORSER_ASKAR_MAX_CONNECTIONS:-}
 
 x-endorser-secrets: &endorser-secrets [ENDORSER_ASKAR_STORE_KEY, ENDORSER_DB_PASSWORD, AGENT_ENDORSER_TOKEN]
 

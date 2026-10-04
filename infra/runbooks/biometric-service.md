@@ -75,7 +75,7 @@ The device receives 15-minute credentials from the same role, narrowed by a sess
 
 ## Master key rotation
 
-There is no online re-wrap tool yet. Rotation means: stop biometric-service, run a one-off script that unwraps every `tenant_keys.wrapped_key` with the old key and re-wraps it with the new one in one transaction, swap the key in sops, start the service. Only the data keys change; ciphertexts do not. Write that script before the first production key exists.
+`infra/scripts/rotate-biometric-key.sh` (Phase 9 W4): it stops biometric-service, re-wraps every `tenant_keys.wrapped_key` from the current key to a generated next key in one transaction (`src/rotate-master-key.ts`), then swaps the key in sops and starts the service. Only the data keys change; ciphertexts do not. Steps and checks: [key-rotation.md](key-rotation.md#biometric-master-key).
 
 ## Restore
 

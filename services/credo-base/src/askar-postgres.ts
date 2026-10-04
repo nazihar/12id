@@ -13,6 +13,12 @@ export interface PostgresStoreOptions {
   adminUser?: string
   adminPassword?: string
   connectTimeoutSeconds?: number
+  /**
+   * Size of Askar's Postgres pool (review L9). Unset = Askar's own default. Every tenant session and
+   * every concurrently processed message holds a connection, so with PROCESS_MESSAGES_CONCURRENTLY the
+   * pool, not Credo, decides how many messages run at once (sized by the Phase 9 W4 load test).
+   */
+  maxConnections?: number
 }
 
 export function postgresStore(options: PostgresStoreOptions): AskarModuleConfigStoreOptions {
@@ -21,7 +27,11 @@ export function postgresStore(options: PostgresStoreOptions): AskarModuleConfigS
     key: options.key,
     database: {
       type: 'postgres',
-      config: { host: options.host, connectTimeout: options.connectTimeoutSeconds ?? 10 },
+      config: {
+        host: options.host,
+        connectTimeout: options.connectTimeoutSeconds ?? 10,
+        ...(options.maxConnections !== undefined ? { maxConnections: options.maxConnections } : {}),
+      },
       credentials: {
         account: options.user,
         password: options.password,

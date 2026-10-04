@@ -286,3 +286,42 @@ published (von-network holds 9702–9708), clients on `12id-ledger`. Removed aft
 - M15 (minisign on device).
 - The 16 KB smoke once staging's wallet creation is fast again.
 - M10's phone check (re-onboarding after a `never_connected` revocation).
+
+## W4 — Phase 8 Hardening (started 2026-10-01)
+
+**Owner choices (2026-10-01):**
+- The load test runs on staging, generated from the dev PC over the real Caddy/TLS path. It ramps to staging's knee, and the 10k target is re-run on the production VM in W5.
+- Holders are hybrid: real Credo onboarding, then a lightweight PickUpV1 driver.
+- Every rotation is rehearsed live on staging, after a backup.
+- The whole-VM DR rehearsal runs now in a WSL distro on E:; the gating drill comes after W5.
+
+Plan: `C:\Users\arad\.claude\plans\read-the-md-files-dreamy-cookie.md` (A load, B failover, C rotation, D DR).
+
+### Summary
+| Item | Built | Verified |
+|---|---|---|
+| A1 load tools | `infra/load/`: `onboard.ts` (real Credo holder per wallet; keys exported from its Askar store), `poll.ts` (PickUpV1 like the SDK: batch-pickup every 10 s, one HTTP/2 connection per wallet, ramp steps, stop rule, JSON per step), `inject.ts` (forwards to the mediator → queue → wake webhook), `delivery-report.ts`, `exchanges.ts` (A4), `cleanup.ts` + `cleanup.sql`, `local-mediator.ts` | `didcomm.test.ts` 5/5, including Credo's own envelope service reading ours and vice versa; local end to end against a Credo mediator: 300 wallets onboarded, 20 injected → 20 picked up, 0 lost, 0 duplicated |
+| A2 sampler | `infra/scripts/load-sampler.sh` (TCP established on :443/:3001/:3002, Postgres backends by database/state, textfile metrics) | syntax only; runs on the VM |
+| A4 knobs | `ASKAR_MAX_CONNECTIONS` (credo-base `postgresStore`, agent + endorser config); compose passes `AGENT_PROCESS_MESSAGES_CONCURRENTLY`, `AGENT_TENANT_SESSION_LIMIT`, `AGENT_/ENDORSER_ASKAR_MAX_CONNECTIONS` from the env file, defaults = behaviour before W4 | credo-base 26/26, agent-service 60/60, endorser-service 33/33 |
+| B1 validator self-heal | `compose.ledger-nodes.yml`: client-port healthcheck; three failures end PID 1 (tini) and the restart policy restarts the node (the vdr-proxy pattern) | YAML parsed; rehearsal on staging (`w4l`) pending |
+| C rotation tools | `set-secret.sh`: several stacks at once, `--also` derived keys, `--generate-base64`, `--from`; `rotate-biometric-key.sh` + `rotate-master-key.ts`; `rotate-askar-key.sh` + `credo-base/src/askar-rekey.ts` (+ mediator `askar-rekey` one-shot); `bootstrap-endorser.ts --rotate / --demote`; console versioned `BETTER_AUTH_SECRET` (`auth-secrets.server.ts`, `scripts/reencrypt-2fa.ts`, `console-reencrypt` one-shot) | set-secret against a stand-in sops; biometric 35/35 (3 new, real Postgres); Askar rekey 2/2 against real Postgres (two profiles, old key refused, re-run detected); console Vitest 39/39 (5 new), build + `check:client` clean; ledger `tsc` |
+| C/D runbooks | `runbooks/key-rotation.md` (inventory of every secret + one procedure each), `runbooks/disaster-recovery.md` (scenarios, restore order, whole VM); links from backup-restore, biometric-service, console, genesis-rotation | written; "Rehearsed on staging" lines pending |
+
+### Found on the way
+- **The DIDComm v1 content cipher is ChaCha20-Poly1305 IETF with a 12-byte nonce,** although the header says
+  `xchacha20poly1305_ietf` (what Credo, ACA-Py and the Kotlin framework all write and read). The first packer used
+  XChaCha (24-byte nonce) and round-tripped with itself, but Credo refused it. The cross-test with Credo's
+  `DidCommEnvelopeService` caught this before staging.
+- **The SDK polls over HTTPS, not the WebSocket** (`MessageSender` picks the mediator connection's first service;
+  Phase 5 observed https with return-route). At 10k wallets that is about 1,000 HTTPS requests a second through
+  Caddy. `mediator_per_ip` (300/min) counts every poll: one phone uses 6/min, so a carrier NAT with more than
+  about 50 open apps would hit it. A2 measures this; it decides M1's `mediator_per_ip`.
+- **Credo's PickUpV1 handler deletes queued rows before it sends the batch** (`takeFromQueue … deleteMessages: true`),
+  so a replica killed between the two loses those messages. B2 measures it.
+- **`BETTER_AUTH_SECRET` encrypts every TOTP secret,** so the "rotate it, everyone signs out" note (console.md) would
+  have broken every 2FA enrollment. Better Auth 1.7.4's versioned secrets plus the re-encryption one-shot keep them;
+  `CONSOLE_AUTH_SECRET_VERSION=0` keeps today's behaviour exactly.
+- The driver costs about 1.6 ms of CPU per poll (pack + unpack), about 630 polls/s per core, so the PC is not
+  the bottleneck at 10k (1,000/s).
+- The DB tests found a local Postgres on 127.0.0.1:55432 (`TEST_DATABASE_URL` default) that the Phase 2 tests use;
+  the biometric and Askar rekey tests ran against it.
