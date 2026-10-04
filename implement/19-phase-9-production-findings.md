@@ -325,3 +325,18 @@ Plan: `C:\Users\arad\.claude\plans\read-the-md-files-dreamy-cookie.md` (A load, 
   the bottleneck at 10k (1,000/s).
 - The DB tests found a local Postgres on 127.0.0.1:55432 (`TEST_DATABASE_URL` default) that the Phase 2 tests use;
   the biometric and Askar rekey tests ran against it.
+
+### B1 validator failover on staging's von-network (2026-10-04)
+- **One of four down** (`docker stop von-node4-1`, 04:34Z): a vdr-proxy NYM read answered 200 in 0.09 s, and the write
+  probe passed in 0.18 s. `LedgerClientPortUnreachable` for :9708 went pending.
+- **Two of four down** (node3 as well, 04:34:48Z): reads still answered 200 (f + 1 = 2 replies), and the write probe failed
+  after 45 s.
+  - `LedgerClientPortUnreachable` (×2) and `LedgerBelowConsensusReachability` were firing in Alertmanager by 04:39.
+  - `LedgerWriteProbeFailing` went pending at 04:36:16 and fired at about 04:56 (its 20 min `for:`); Alertmanager had all three.
+- **Restart** (05:03:04Z): the write probe passed 16 s later, and all four client ports answered. Neither node hung at start this time.
+- Still the owner's: confirm the `[FIRING]` / `[RESOLVED]` mails for these three alerts reached the ops address.
+- **Rollout and CI:**
+  - The first image release, `v0.1.0-rc.1` (W5 step 0), failed with `No space left on device` while building the nine images
+    (indy-vdr-proxy's cargo build). `release-images.yml` now frees disk first (the tool cache too: no `setup-*` here), the
+    unpublished tag was moved, and the second run passed (run 37177377935, commit `0c2401c`).
+  - Polling the Actions API every minute from two loops tripped GitHub's secondary rate limit; poll every few minutes.
