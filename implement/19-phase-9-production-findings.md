@@ -388,3 +388,51 @@ Plan: `C:\Users\arad\.claude\plans\read-the-md-files-dreamy-cookie.md` (A load, 
     zod, drizzle and class-validator about 1–3 % each. No single hotspot.
   - **Caveat:** these wallets were onboarded by Credo holders, which pick DID Exchange and `did:peer:4`; the SDK uses
     `connections/1.0` (`did:peer:1` in the mediator). `onboard.ts --handshake connections` reproduces the SDK's path.
+- **The SDK's handshake does not change the knee.** 1,000 wallets onboarded over `connections/1.0` (`did:peer:1` in
+  the mediator, like the 38 real SDK connections) gave 400 wallets: p95 124 ms; 600: p95 563 ms; 800: collapse
+  (15 %, then 100 % errors). The limit is the mediator's per-message cost, not `did:peer:4` resolution.
+
+### A4 — agent throughput (reviews L9, M1, M2; 2026-10-04)
+30 full Credo holders, each behind the mediator, ran offer → accept → done in a loop for 5 minutes through the
+public API, over a background of 300 polling wallets.
+
+| Agent setting | Exchanges/min | offer → done p50 | p95 | p99 | agent-service peak | agent Postgres peak |
+|---|---|---|---|---|---|---|
+| serial (`PROCESS_MESSAGES_CONCURRENTLY=false`, today) | **119** | 15.4 s | 20.7 s | 22.0 s | 0.70 core | 0.27 core |
+| concurrent (`true`) | 113 | 15.7 s | 26.9 s | 36.2 s | 0.43 core | 0.30 core |
+
+- No errors either way. The time per exchange is the holders' pickup cycles through the mediator (two mediated
+  messages per exchange), not agent-service: it never reached a full core.
+- **Decision for now: keep serial processing** (no gain, a worse tail); staging was reverted. Revisit when one
+  agent-service process holds a core.
+- **L9:** Askar's Postgres pool showed 10 connections to `agent_root` (Askar's default) and was never short;
+  `ASKAR_MAX_CONNECTIONS` stays unset.
+
+### B2 — mediator replica failover under load (Phase 1 M6; 2026-10-04)
+Load for every run: 300 wallets polling (30/s), forwards injected at 5/s for 3.5–6 min, and every message id
+tracked (`delivery-report.ts`).
+- **`docker kill` is not a crash test.** Docker never restarts a container an operator killed or stopped, whatever
+  its restart policy: mediator-1 stayed `Exited (137)`, `restarts=0`, until started by hand. The surviving
+  replica carried everything; **0 of 1,641 accepted messages were lost, 0 duplicated**. But 158 forwards and up to 43 %
+  of polls per minute got 503: whenever the lone replica missed Caddy's 3 s health check, Caddy had no healthy
+  upstream left.
+- **A real crash (`kill -9` of the replica's process from the host), clean run:** Docker restarted it
+  (`restarts` +1) and it was healthy **12 s** later.
+  - Errors only in that minute: 19 polls (1.05 %) and 2 of 1,050 forwards (502/503).
+  - **0 lost, 0 duplicated**; delivery p50 5.1 s, p99 10 s.
+- **The delete-before-send window is real.** Credo's pickup v1 takes rows with `deleteMessages: true` before writing
+  the reply. In a run disturbed by a leftover second outage, one message (1 of 897), queued 10 s before the kill,
+  never arrived. Clean runs lost none. **Owner decision pending:** accept it (narrow window; the exchange is
+  abandoned by reconciliation and re-offered) or a `-p7` patch that deletes only after the reply is written.
+- **Fix: Caddy retries the other replica.** `lb_try_duration 5s` / `lb_try_interval 250ms` on the mediator site:
+  a refused connection to a dead replica is retried on the live one.
+  - Crash run again: **all 1,050 forwards accepted**, one poll error in the whole run (0.06 %), 0 lost, 0 duplicated.
+  - Applied on staging (Caddyfile).
+- **Open: a replica exited cleanly (code 0, nothing logged) twice.** mediator-1 at 07:53:35 and mediator-2 at 07:59:51,
+  each about 4 min 21 s after a crash restart, and each restarted by Docker in about 12 s.
+  - Not reproduced by a plain mass disconnect.
+  - Nothing in the mediator, its queue package or `pg-pubsub` calls `process.exit`.
+  - The mediator now runs with `NODE_OPTIONS=… --trace-exit`, so the next one logs the stack.
+- The staging VM's clock runs **22 s behind** the dev PC (matters when matching logs).
+- **Trap:** stopping a backgrounded test script left its remote steps running, and it killed mediator-2 later. Check for
+  leftovers (`Get-CimInstance Win32_Process … b2-run.sh`) after stopping a test.

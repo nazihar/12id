@@ -41,7 +41,9 @@ x-secret-reader: &secret-reader
 
 x-mediator-env: &mediator-env
   LOG_LEVEL: ${MEDIATOR_LOG_LEVEL:-info}
-  NODE_OPTIONS: --max-old-space-size=400
+  # --trace-exit (Phase 9 W4): a replica twice exited with code 0 and no log line after a crash test;
+  # this prints the stack of whatever calls process.exit.
+  NODE_OPTIONS: --max-old-space-size=400 --trace-exit
 
   # Defaults to 3110. AGENT_ENDPOINTS only sets what is advertised.
   AGENT_PORT: 3000
