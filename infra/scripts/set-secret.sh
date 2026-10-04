@@ -56,7 +56,8 @@ dir="infra/env/$ENV/secrets"
 value=''
 case "$MODE" in
   set)
-    read -rs -p "Value for $KEY (hidden): " value; echo
+    # A piped value without a final newline still counts (read returns non-zero at end of input).
+    read -rs -p "Value for $KEY (hidden): " value || [ -n "$value" ]; echo
     value="${value// /}"
     [ -n "$value" ] || { echo "empty value, nothing changed" >&2; exit 1; }
     ;;

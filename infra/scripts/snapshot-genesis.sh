@@ -64,13 +64,18 @@ else
   echo "warning: MINISIGN_KEY not set; publishing without a signature" >&2
 fi
 
+# World-readable whatever the caller's umask: the non-root vdr-proxy mounts it (Phase 9 W4: a v2 published
+# under umask 077 was 0700 and vdr-proxy crash-looped on "Permission denied").
 mkdir -p "$target"
+chmod 0755 "$target"
 cp "$tmp"/"$FILE"* "$target/"
 chmod 0444 "$target"/*
 
 rm -rf "$GENESIS_ROOT/current.tmp"
 cp -r "$target" "$GENESIS_ROOT/current.tmp"
 chmod u+w "$GENESIS_ROOT/current.tmp" "$GENESIS_ROOT/current.tmp"/*
+chmod 0755 "$GENESIS_ROOT/current.tmp"
+chmod 0644 "$GENESIS_ROOT/current.tmp"/*
 rm -rf "$GENESIS_ROOT/current"
 mv "$GENESIS_ROOT/current.tmp" "$GENESIS_ROOT/current"
 

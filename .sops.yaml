@@ -7,5 +7,5 @@
 # After changing a list, run `sops updatekeys -y <file>` on each file, on the VM (it can decrypt them).
 creation_rules:
   - path_regex: infra/env/staging/secrets/.*\.sops\.(env|yaml|json)$
-    age: age1ftkynx64gy2frgt40rn0s9layhn95ykrgl8unr4uzrz8h40acsmqz0lc5q,age10yjjvjjafjllprv3xwzxjmnqerxnp8uv5lh6pvfkqam0s2gzzc4qv6junc
+    age: age13wc3chpmnf98wm0t8599km70n6xhcg2kzw4rgzdcz9ujfg64hs2stj2t2v,age10yjjvjjafjllprv3xwzxjmnqerxnp8uv5lh6pvfkqam0s2gzzc4qv6junc
   # Production (W5): the production VM's key and the production offline key, added at bring-up.

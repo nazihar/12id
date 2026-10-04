@@ -61,7 +61,7 @@ Deploy the receiving side first, then the caller: the interruption is the time b
 There is no dual-token window (owner: keep it simple). **Check:** `smoke:platform-credo` (agent, mediator
 and the wake path), `e2e:staging` (console), `smoke:biometric-credo` (biometric).
 
-Rehearsed on staging: pending.
+Rehearsed on staging 2026-10-04: all seven tokens (PLATFORM_AGENT, CONSOLE, MEDIATOR_ADMIN, AGENT_ENDORSER, BIOMETRIC_INTERNAL, the mediator webhook secret + URL, PLATFORM_ADMIN) in one pass; five stacks redeployed in 74 s; `smoke:platform-credo`, `smoke:biometric-credo` 18/18, `e2e:staging` 3/3; `check-inspect-clean.sh` 0.
 
 ## Single tokens
 One reader: `set-secret.sh <stack> <KEY> --generate` (or the hidden prompt for a provider's value), then
@@ -79,7 +79,7 @@ infra/scripts/deploy.sh agent
 `MONITORING_DB_PASSWORD` is read by the exporters (`deploy.sh monitoring`); `PLATFORM_RO_PASSWORD` by
 platform-api. **Check:** the stack's services healthy, `psql` as the role with the new password.
 
-Rehearsed on staging: pending.
+Rehearsed on staging 2026-10-04: `AGENT_SERVICE_DB_PASSWORD`; agent-service healthy, 0 authentication failures.
 
 ## Superuser passwords
 Postgres reads `POSTGRES_PASSWORD_FILE` only when it creates a volume, so the running instance keeps the
@@ -114,7 +114,7 @@ current secret's version; `BETTER_AUTH_SECRET_PREVIOUS` decrypts the old values 
 3. Retire the old secret: `set-secret.sh console BETTER_AUTH_SECRET_PREVIOUS --unset`, `deploy.sh console`.
 
 **Check:** `e2e:staging` 3/3 (sign-in with TOTP for an account enrolled before the rotation).
-Rehearsed on staging: pending.
+Rehearsed on staging 2026-10-04: version 0 → 1; `e2e:staging` 3/3 with the previous secret in place (6 TOTP enrollments still bare-hex), `console-reencrypt` → `{"reencrypted":6}` (a re-run: `alreadyCurrent: 6`), previous secret removed, `e2e:staging` 3/3 again.
 
 ## Biometric master key
 The master key wraps one data key per tenant; rotation re-wraps them (`services/biometric-service/src/
@@ -127,7 +127,7 @@ It generates `BIOMETRIC_MASTER_KEY_NEXT`, stops biometric-service, re-wraps with
 then promotes it, removes `_NEXT` and redeploys. On a failed re-wrap nothing changed and the service
 restarts on the current key. **Check:** `smoke:biometric-credo` 18/18 (it reads the tenant's stored
 mock configuration).
-Rehearsed on staging: pending.
+Rehearsed on staging 2026-10-04: 3 tenant keys re-wrapped; `smoke:biometric-credo` 18/18 on the new key.
 
 ## Askar store keys
 One `rekey` re-encrypts the whole store, so the agent's root store covers every tenant profile in it
@@ -149,7 +149,7 @@ and the current one no longer does), promotes the key and redeploys. A failure l
 
 **Check:** agent: `smoke:platform-credo`; endorser: a schema publish (`smoke:platform-credo` publishes);
 mediator: `smoke:credo` and `smoke:platform-credo` (existing wallets keep polling).
-Rehearsed on staging: pending.
+Rehearsed on staging 2026-10-04: first on scratch restores of that night's dumps (`mediator` 4,160 items, `agent_root` 6,242, `endorser`: all `rekeyed`, the mediator's store opened with our Askar), then live: agent (26 s, `smoke:platform-credo`), endorser (`bootstrap-endorser` → `existing`, schema publish), mediator (both replicas back in 50 s, existing wallets' polls 0 errors, `smoke:platform-credo`).
 
 ## Endorser DID
 A new endorser identity: a new DID and key in the same store, registered with role ENDORSER, then the
@@ -171,7 +171,7 @@ DID's key).
 4. Retire the old DID (the trustee resets its role; its past endorsements stay valid):
    `… | deploy.sh ledger run --rm -T -e ENDORSER_REGISTRAR=trustee bootstrap-endorser src/bootstrap-endorser.ts --demote <old did>`.
 
-Rehearsed on staging: pending.
+Rehearsed on staging 2026-10-04 with von-network's trustee: `--rotate` wrote `NiDNzVvC7DfuJ5s3itjp5Q` (role ENDORSER), `ENDORSER_DID` switched, an existing tenant's schema (txn 1957) carries the new endorser, a new tenant onboarded, `--demote` reset `9WnSruRkr6b3V7XX9zPjka` to role null. Found: an empty `LEDGER_PROBE_SEED` file made the run fail after the rotation (fixed in `bootstrap-endorser.ts`).
 
 ## Genesis signing key
 The minisign key signs each published genesis version. **The SDK will compile in 12id's public keys,
@@ -185,7 +185,7 @@ trusts a new backup, then retire the old primary.
 3. Replace `infra/env/$ENV/genesis-signing.pub`; keep the old public key until every SDK in use trusts
    the new one.
 
-Rehearsed on staging: pending.
+Rehearsed on staging 2026-10-04: new key `B84C710C4BA2C31C`, genesis `v2` (same content and sha256 as v1) signed and verified, `GENESIS_VERSION=v2` + the new public key deployed (agent, platform, edge, monitoring); `/v1/ledger` advertises v2. Found: publishing under `umask 077` left `v2/` mode 0700 and the non-root vdr-proxy crash-looped (`snapshot-genesis.sh` now sets 0755/0444); `set-secret.sh` dropped a piped value without a final newline (fixed). The old key is `/opt/12id/secrets/minisign.key.prev-w4` until it goes offline.
 
 ## Age key
 The VM's age key decrypts every sops file and the VM-side backups. Every file is also encrypted to the
@@ -199,7 +199,7 @@ environment's offline key, so the old VM key can be destroyed once the files are
    decrypts with the new key) and run a backup (`backup-postgres.sh` derives the VM recipient from the key).
 5. Older backups and the git history stay readable with the offline key; destroy the old VM key.
 
-Rehearsed on staging: pending.
+Rehearsed on staging 2026-10-04: new VM recipient `age13wc3…`, all eight files re-keyed and decrypting with it, the old key refused; a deploy and a backup on the new key (the new backup does not open with the old key). The old key is `/opt/12id/secrets/age.key.prev-w4` until the owner destroys it.
 
 ## TLS
 Caddy obtains and renews certificates by itself (`CertificateExpiringSoon` alerts at 14 days). If a

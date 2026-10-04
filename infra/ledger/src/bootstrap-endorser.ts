@@ -294,8 +294,16 @@ async function demote(did: string, prefix: string) {
 
 /** The write probe's own DID: role-less, so its key can only write attributes about itself. */
 async function registerProbe(): Promise<{ nym: string; result: 'created' | 'existing' } | undefined> {
-  if (!trustee || !(process.env.LEDGER_PROBE_SEED || process.env.LEDGER_PROBE_SEED_FILE)) return undefined
-  const probe = signerFromSeed(env('LEDGER_PROBE_SEED'))
+  if (!trustee) return undefined
+  // Unset, or an empty secret file (deploy.sh mounts one for a key the sops file lacks, as on staging):
+  // there is no probe DID to register. Found by the W4 endorser rotation on staging.
+  let seed: string
+  try {
+    seed = env('LEDGER_PROBE_SEED')
+  } catch {
+    return undefined
+  }
+  const probe = signerFromSeed(seed)
   const existing = await readNym(probe.nym)
   if (existing) {
     if (existing.verkey !== probe.verkey) throw new Error(`probe NYM ${probe.nym} exists with another verkey`)

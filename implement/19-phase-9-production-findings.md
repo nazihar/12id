@@ -436,3 +436,29 @@ tracked (`delivery-report.ts`).
 - The staging VM's clock runs **22 s behind** the dev PC (matters when matching logs).
 - **Trap:** stopping a backgrounded test script left its remote steps running, and it killed mediator-2 later. Check for
   leftovers (`Get-CimInstance Win32_Process … b2-run.sh`) after stopping a test.
+
+### C — every key rotated live on staging (2026-10-04)
+Each step followed `runbooks/key-rotation.md`, after a fresh backup, with the smokes afterwards; the section's
+"Rehearsed" line has the detail.
+
+| Secret | Result |
+|---|---|
+| Seven internal and admin tokens (shared ones through `set-secret.sh a,b`, the webhook URL through `--also`) | five stacks redeployed in 74 s; smokes, biometric 18/18, e2e 3/3; inspect 0 |
+| `AGENT_SERVICE_DB_PASSWORD` (+ `pg-roles.sh`) | healthy, 0 authentication failures |
+| `BETTER_AUTH_SECRET` (version 0 → 1, `console-reencrypt`) | 6 TOTP enrollments kept; e2e 3/3 before and after the previous secret was removed |
+| Biometric master key (`rotate-biometric-key.sh`) | 3 tenant keys re-wrapped; biometric 18/18 |
+| Askar store keys, agent / endorser / mediator (`rotate-askar-key.sh`) | scratch restores first (all `rekeyed`), then live: 26 s / restart / 50 s of downtime; smokes; existing wallets keep polling |
+| Endorser DID (`bootstrap-endorser --rotate`, `--demote`, von-network's trustee) | new endorser `NiDNzVvC7DfuJ5s3itjp5Q`; an existing tenant's schema carries it; a new tenant onboarded; the old one reset to role null |
+| Genesis signing key | genesis v2 signed by `B84C710C4BA2C31C`; `/v1/ledger` → v2 |
+| VM age key | 8 files re-keyed; the old key refused; deploy and backup on the new key |
+
+**Found on the way** (all fixed):
+- `bootstrap-endorser.ts` treated an empty `LEDGER_PROBE_SEED` secret file as a seed and failed after the rotation.
+- `set-secret.sh` dropped a piped value with no final newline (`read` returns non-zero at end of input, and `set -e` ended the script silently).
+- `snapshot-genesis.sh` inherited the caller's umask, so a version directory published under `umask 077` was 0700 and the non-root vdr-proxy crash-looped. It now sets 0755/0444.
+- My own load-test receiver held port 3201 and made two smokes fail with `EADDRINUSE`; stop it before a smoke.
+
+**Owner:**
+- Move `/opt/12id/secrets/minisign.key.prev-w4` offline, or delete it.
+- Delete `/opt/12id/secrets/age.key.prev-w4` once the offline key is confirmed to open the older backups.
+- Staging's tenants keep working; tenant `w4-endorser-rotation-check-…` is a leftover of the endorser check.
