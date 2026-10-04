@@ -17,6 +17,10 @@
 -- Hot path: the recipient DID of every inbound envelope (role 'received' / 'created').
 create index concurrently if not exists "12id_did_recipient_key_fingerprints_gin" on "Did" using gin (recipient_key_fingerprints jsonb_path_ops);
 create index concurrently if not exists "12id_did_did_idx" on "Did" (context_correlation_id, did);
+-- Phase 9 W4 load test (2026-10-04): DidRepository's lookup by DID is
+-- `(alternative_dids @> $2 OR did = $3) AND role = $4`; without this index the OR forced a sequential
+-- scan of "Did" (88 ms at 6k rows, every poll), and the mediator timed out from 1k polling wallets.
+create index concurrently if not exists "12id_did_alternative_dids_gin" on "Did" using gin (alternative_dids);
 
 -- Connection by our DID (+ their DID), by out-of-band id (platform wake mapping, review M10), by id.
 create index concurrently if not exists "12id_connection_did_idx" on "DidcommConnection" (context_correlation_id, did);
