@@ -18,14 +18,23 @@
   - **Released 2026-10-01:** `com.12id:holder-sdk-native:0.2.1-12id.1` (tag `native-v0.2.1-12id.1`, CI emulator matrix API 24/26/28/36 green) and `com.12id:holder-sdk-android:0.1.0` + biometric add-ons (tag `sdk-android-v0.1.0`) on `https://maven.12id.com`. The sample builds from there alone, and `smoke:sdk-android` passed 7/7 on the phone with that build.
   - **Carried over:** M15 (minisign on device) needs W5's production keys, so it lands with W5; it ships as an SDK release. The M10 phone check (re-onboarding after a `never_connected` revocation) is still owed. The image workflow (`release-images.yml`) has not run yet: its first run is W5 step 0.
 - Next: W5, starting with step 0 (the first image release through CI), then M15. W4 can start on staging now.
-- **W4 started 2026-10-01: the tools and runbooks are built locally** (`19-…` W4). This covers:
-  - the load driver;
-  - the agent throughput settings;
-  - validator self-heal;
-  - a rotation tool for each kind of key, including a versioned `BETTER_AUTH_SECRET` that keeps 2FA enrollments;
-  - `key-rotation.md` and `disaster-recovery.md`.
-
-  Owner choices: load on staging from the dev PC, hybrid holders, every rotation rehearsed live on staging, and a whole-VM DR rehearsal in WSL now. The staging runs need images with this code: the rc of W5 step 0 carries them.
+- **W4 ran on staging on 2026-10-04** (`19-…` W4). It deployed `v0.1.0-rc.1`, the first image release through CI, which is also W5 step 0's rc.
+  - **A, load:**
+    - Found and fixed a missing mediator index (`Did.alternative_dids`): 88 ms per poll became 0.17 ms.
+    - **Staging's two mediator replicas carry about 600 open wallets.** Each replica tops out near 40 polls/s on Credo's per-message CPU (profiled), so **10k wallets need about 30 mediator cores**: an owner decision before go-live (below).
+    - The agent's concurrency switch gives no gain at this scale (kept off); the Askar pool default (10) is enough.
+  - **B, failover:**
+    - Validators: 1 of 4 down, everything continues; 2 down, writes stop and the three alerts fire and arrive by mail.
+    - A crashed mediator replica is back in 7–12 s with no message lost. Caddy now retries the other replica, so clients barely notice.
+    - Open: the pickup delete-before-send window (owner decision) and one unexplained clean exit (`--trace-exit` is on).
+  - **C, rotation:** every key class was rotated live on staging and every smoke passed. The rehearsal found three bugs, all fixed.
+  - **D, DR:**
+    - Every database restored with counts equal to live.
+    - **The whole VM was rebuilt from the repo, a pulled backup and the offline key only in about 8 minutes** (WSL rehearsal, `dr-rebuild.sh`). It found `pg-roles.sh` failing on a fresh instance (fixed).
+    - The gating drill against production stays after W5.
+  - **Owner decisions:**
+    1. **Mediator capacity for the target wallet count:** more replicas and hosts, a longer poll interval, and/or a cheaper mediator per message.
+    2. **The delete-before-send window:** accept it, or a `-p7` patch.
 
 ## Context
 Phases 0–6 are built and verified on the staging VM `id-dev` (`*.12id.naziharitsolution.com`, [`4-init-post-phase-0.md`](4-init-post-phase-0.md) §10):

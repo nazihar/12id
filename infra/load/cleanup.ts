@@ -18,7 +18,13 @@ console.log(`run ${run}: revoking ${queue.length} wallets`)
 const outcome: Record<string, number> = {}
 async function worker() {
   for (let w = queue.shift(); w; w = queue.shift()) {
-    const { status } = await api.call('DELETE', `/v1/wallets/${w.walletId}`).catch(() => ({ status: 0 }))
+    let status = 0
+    // The edge's per-IP limit (api_per_ip) answers 429 with Retry-After: 60; wait it out and retry.
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      status = (await api.call('DELETE', `/v1/wallets/${w.walletId}`).catch(() => ({ status: 0 }))).status
+      if (status !== 429) break
+      await new Promise((resolve) => setTimeout(resolve, 61_000))
+    }
     // 404: already revoked by an earlier run of this script.
     outcome[status] = (outcome[status] ?? 0) + 1
   }

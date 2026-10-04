@@ -68,7 +68,8 @@ infra/scripts/check-inspect-clean.sh
 ```
 Postgres needs its roles before the services connect: on a fresh VM start the two Postgres containers
 first (`deploy.sh mediator up -d postgres`, `deploy.sh agent up -d agent-postgres`), run `pg-roles.sh all`,
-then the full list. Operator accounts: `deploy.sh console run --rm console-tools npx auth create-admin …`
+then the full list, then `pg-roles.sh all` once more: the services create their tables on first start, and
+only then can the monitoring grants be applied (Phase 9 W4). Operator accounts: `deploy.sh console run --rm console-tools npx auth create-admin …`
 ([console.md](console.md)).
 
 ## 5. Backups

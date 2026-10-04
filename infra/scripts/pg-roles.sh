@@ -107,10 +107,15 @@ SQL
 
 # monitor <container> <db> <table...>: the exporters' read-only role (pg_monitor + SELECT on the
 # tables their custom queries read, monitoring/postgres-exporter*-queries.yml).
+# Only tables that exist are granted: on a fresh instance (a new VM, a DR rebuild) the services create
+# their tables on first start, so run this script again after the first deploy (Phase 9 W4: the DR
+# rehearsal stopped on `relation "DidcommConnection" does not exist`).
 monitor() {
   local container="$1" db="$2"; shift 2
   local grants=""
-  for table in "$@"; do grants+="GRANT SELECT ON TABLE \"$table\" TO monitoring_ro;"$'\n'; done
+  for table in "$@"; do
+    grants+="SELECT format('GRANT SELECT ON TABLE %I TO monitoring_ro', '$table') WHERE to_regclass(format('%I', '$table')) IS NOT NULL \\gexec"$'\n'
+  done
   psql_in "$container" <<SQL
 SET client_min_messages = warning;
 GRANT pg_monitor TO monitoring_ro;
@@ -157,7 +162,8 @@ GRANT CONNECT ON DATABASE drizzle TO platform_ro;
 SQL
   psql_in "$c" drizzle <<SQL
 GRANT USAGE ON SCHEMA public TO platform_ro;
-GRANT SELECT ("id", "out_of_band_id", "thread_id") ON "DidcommConnection" TO platform_ro;
+SELECT 'GRANT SELECT ("id", "out_of_band_id", "thread_id") ON "DidcommConnection" TO platform_ro'
+ WHERE to_regclass('"DidcommConnection"') IS NOT NULL \gexec
 SQL
   monitor "$c" message_pickup queued_message live_session
   monitor "$c" drizzle DidcommMediation DidcommOutOfBand DidcommConnection  # review M16: record growth

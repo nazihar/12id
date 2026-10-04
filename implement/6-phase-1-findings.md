@@ -8,7 +8,7 @@
 | W2 Ledger | **done:** consensus verified, signed genesis `v1` published |
 | W3 Endorser DID | **done**, on Postgres-backed Askar (restore-drilled) |
 | W4 Mediator | **done:** two replicas, migration fixed, pinned config (multi-instance `none` + Firebase placeholder) |
-| W5 Mediator verification | **done** for M1 (TLS, Credo and native holder), M2/M3/M4 (webhooks), M5 (cross-replica). **Open:** M6 (kill a replica with messages queued) |
+| W5 Mediator verification | **done** for M1 (TLS, Credo and native holder), M2/M3/M4 (webhooks), M5 (cross-replica). **Open:** M6 (kill a replica with messages queued). *Phase 9 W4 (2026-10-04): done: a crashed replica restarts in 7–12 s with 0 messages lost in clean runs; `19-phase-9-production-findings.md` W4 B2* |
 | W6 Abuse controls | **partial:** `/invite` blocked, per-IP rate limiting live, mediation-spike alert live. **Open:** per-user invitation gating design |
 | W7 Monitoring | **done:** 14 targets, 14 rules, ledger write probe. **Open:** alert email (owner's app password), `indy-node-monitor`/dashboards, deliberately firing each alert |
 | W8 Smoke tests | **done:** `smoke:credo` and `smoke:android` both PASSED over the staging edge |

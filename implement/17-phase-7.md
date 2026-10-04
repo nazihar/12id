@@ -179,6 +179,8 @@ Severity is exploitability × impact against the **production** threat model (cu
   - `smoke:platform-credo` PASSED with setup through the console client.
 
 ### M2 · Medium · Webhook dispatcher head-of-line blocking
+*Phase 9 W4 (2026-10-04): the defaults (8 slots, 2 per tenant) stayed unchanged; at the load test's rates the dispatcher was never the limit.*
+
 **Where:** `services/platform-api/src/webhooks/dispatcher.ts:95-127` — `for (const delivery of claimed) { … await deliverOnce(…) }` with `batch = 20`, `timeoutMs = 10_000`.
 **Evidence:** *source read*. Deliveries are attempted strictly one after another; the claim is global, not per tenant.
 **Impact:** one customer endpoint that hangs makes each tick take up to 20 × 10 s; every other tenant's `credential.state_changed` waits behind it. The wake path (`wallet.sync_requested`, the push trigger) is delayed by an unrelated tenant.
@@ -357,6 +359,8 @@ Hashed tokens with prefix lookup and length-checked `timingSafeEqual` (`auth/tok
 ## 3. Findings — Track 2: agent-service, endorser-service, credo-base
 
 ### M1 · Medium · Public DIDComm endpoint: 5 MB junk, serial processing
+*Phase 9 W4 (2026-10-04): the concurrency switch was measured and stays off (no gain). The SDK polls over HTTPS, so `mediator_per_ip` (300/min) counts every poll: one open app uses 6/min, so a carrier NAT with more than about 50 open apps would hit it. Raise or drop the mediator's per-IP limit before go-live; the load test showed the mediator's own CPU, not abuse, is the binding limit (`19-phase-9-production-findings.md` W4).*
+
 **Where:** `node_modules/@credo-ts/node/build/transport/DidCommHttpInboundTransport.mjs:19` (`limit: "5mb"`), `services/agent-service/src/config.ts` (`PROCESS_MESSAGES_CONCURRENTLY` default false), `Caddyfile` (`agent_per_ip 300`, no `request_body`).
 **Evidence:** *run* — `POST https://agent.<domain>/ -H 'content-type: application/ssi-agent-wire' --data '{"protected":"x"}'` → `500 Error processing message` with `X-Powered-By: Express` (junk reaches Credo). The body limit and serial processing are *source read*.
 **Impact:** 300 × 5 MB per minute per IP is JSON-parsed and unpacked in the one queue every tenant shares; legitimate holder replies (credential requests, presentations) wait behind it. No authentication exists on this endpoint by design.
@@ -468,6 +472,8 @@ The fix:
   - A second run changed nothing.
 
 ### L9 · Low · Askar pool size
+**Phase 9 W4 (2026-10-04): verified under load on staging.** 30 concurrent exchanges over 300 polling wallets used 10 connections to `agent_root` (Askar's default) and never ran short; `ASKAR_MAX_CONNECTIONS` exists now but stays unset. The concurrency switch gave no throughput gain and a worse tail, so it stays off (`19-phase-9-production-findings.md` W4 A4).
+
 `credo-base/src/askar-postgres.ts:24` sets only `connectTimeout`; `maxConnections` is Askar's default. With `TENANT_SESSION_LIMIT=100` and serial processing this is fine today; verify under the Phase 8 load profile before enabling concurrency.
 
 ### Strengths (keep)
@@ -584,6 +590,8 @@ The edge blocks hold under path normalisation and header casing; the port surfac
 - That build ran on the staging VM once, by owner decision, because the dev PC's disk was full. CI (W3) takes over building.
 
 ### M18 · Medium · The mediator's databases have no secondary indexes
+*Phase 9 W4 (2026-10-04): the list missed `Did.alternative_dids`. DidRepository's lookup `(alternative_dids @> $2 OR did = $3)` scanned all of `Did` on every poll (88 ms at 6k rows), and the mediator timed out from 1k wallets. `12id_did_alternative_dids_gin` fixes it (0.17 ms).*
+
 **Where:** DDL read out of the pinned image `mediator:375518d` (`@credo-ts/drizzle-storage@0.6.0`, `migrations/{core,didcomm,tenants,…}/postgres/*.sql`) and `phase0/mediator-src/packages/transport-queue-postgres/migrations/001-initial-schema.sql`.
 **Evidence:** *run* — `CREATE INDEX` count per bundle: core 0, didcomm 0, tenants 0, action-menu 0, drpc 0, question-answer 0, openid4vc 0, anoncreds 1. The only constraints are the composite PK `(context_correlation_id, id)` and `UNIQUE (context_correlation_id, thread_id)` on connections. The pickup queue has `(connection_id)`, `(connection_id, state)`, `(created_at)` but nothing on `recipient_dids`.
 **What runs against them:** each inbound envelope — including every wallet's `PickUpV1` poll every 10 s — is unpacked and then resolved: `Did` by `recipient_key_fingerprints` (jsonb, no GIN) → `DidcommConnection` by `did` / `their_did` (no index); a `forward` is routed by `DidcommMediation.recipient_keys` (text[], no GIN); a connection request is matched to `DidcommOutOfBand.invitation_requests_thread_ids` (text[], no GIN); the queue take is `WHERE (connection_id = $1 OR $2 = ANY(recipient_dids)) AND state = 'pending' ORDER BY created_at` (`patch/TransportQueuePostgres.js:105-110`) — the `OR … ANY(text[])` branch defeats the `connection_id` index, so it scans the whole queue per poll. platform-api's own `select out_of_band_id from "DidcommConnection" where id = $1` (`mediator-client.ts:56`) hits the *second* column of the composite PK, also a scan (cached per wallet, so once).

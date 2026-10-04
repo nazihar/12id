@@ -970,11 +970,11 @@ Findings and the ordered fix set: [`17-phase-7.md`](17-phase-7.md) §10 (this wa
 
 Planned in detail as Phase 9 workstream W4 ([`18-phase-9-production.md`](18-phase-9-production.md)). It is part of the go-live gate.
 
-- [ ] Load test the mediator with the real profile: N open wallets each polling every 10 s (`PickUpV1`), plus one webhook per queued message
-- [ ] Failover test: kill one Indy validator, confirm reads and writes continue
-- [ ] Multi-instance mediator: confirm queued messages and webhooks survive instance loss
-- [ ] Key rotation runbook
-- [ ] Disaster recovery: what happens if we lose the Endorser key, a wallet database, the mediator queue
+- [x] Load test the mediator with the real profile: N open wallets each polling every 10 s (`PickUpV1`), plus one webhook per queued message. *Phase 9 W4 (2026-10-04, staging): a missing `Did.alternative_dids` index fixed (88 ms to 0.17 ms per poll); two replicas carry about 600 wallets and each tops out near 40 polls/s, so the 10k target needs about 30 mediator cores (owner decision; `19-phase-9-production-findings.md` W4)*
+- [x] Failover test: kill one Indy validator, confirm reads and writes continue. *W4 2026-10-04: 1 of 4 down, reads and writes continue; 2 of 4, writes stop and the alerts fire and arrive by mail; production validators now restart themselves when they hang*
+- [x] Multi-instance mediator: confirm queued messages and webhooks survive instance loss. *W4 2026-10-04: a crashed replica is back in 7–12 s with 0 messages lost in the clean runs; Caddy retries the other replica; the pickup delete-before-send window remains an owner decision*
+- [x] Key rotation runbook (`infra/runbooks/key-rotation.md`; every key class rotated live on staging 2026-10-04)
+- [x] Disaster recovery: what happens if we lose the Endorser key, a wallet database, the mediator queue (`infra/runbooks/disaster-recovery.md`; whole-VM rehearsal from the offline key passed 2026-10-04; the gating drill against production follows W5)
 - [ ] Document the wallet-recovery and no-revocation stories for customers
 
 ### Phase 9 — Production — **planned 2026-09-28**
@@ -990,7 +990,7 @@ Plan: [`18-phase-9-production.md`](18-phase-9-production.md); evidence (when sta
   - The ceremony, the validators, the trustee-signed endorser bootstrap and the write probe were rehearsed on staging.
   - von-network had lost consensus since 2026-09-28 (2 of 4 validators hung) and was restarted.
 - [ ] W3: Android SDK release (5b): rebuilt wrappers, configurable minisign trust anchor (M15), `maven.12id.com`, CI publishing to GHCR
-- [ ] W4: Phase 8 Hardening (load, failover, key rotation, DR drill)
+- [ ] W4: Phase 8 Hardening (load, failover, key rotation, DR drill). **Ran on staging 2026-10-04**: all four parts done; open are the mediator capacity decision for the target wallet count, the delete-before-send window, and the DR drill against production after W5
 - [ ] W5: production bring-up on `*.12id.com` from one release `vX.Y.Z`, pinned by digest
 - [ ] W6: iOS (blocked on a Mac, an Apple developer account and an iPhone)
 - [ ] W7: customer-facing documents (§5.3, no revocation, wallet recovery, §5.2)

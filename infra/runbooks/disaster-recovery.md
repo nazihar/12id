@@ -97,8 +97,9 @@ need `BETTER_AUTH_SECRET` (and `BETTER_AUTH_SECRET_PREVIOUS` during a rotation) 
 
 ## The whole VM
 Inputs, and nothing from the lost VM: the repo (release bundle + `infra/env/<env>*`), the backup
-machine's newest copy, the environment's **offline age key**, and the trustee seeds only if the ledger
-cannot be restored.
+machine's newest copy, the environment's **offline age key**, a **GHCR read token** (owner-held), and the
+trustee seeds only if the ledger cannot be restored. Steps 2, 4 and 5 are scripted in
+`infra/scripts/dr-rebuild.sh` (`prep`, `restore`, `deploy`, `check`); the 2026-10-04 rehearsal ran it.
 1. **A new VM** as in [production-bringup.md](production-bringup.md) §1, with its own new age key.
 2. **Secrets:** on a machine holding the offline key, re-key the environment's sops files to the new VM
    key (`.sops.yaml`, `sops updatekeys` with `SOPS_AGE_KEY_FILE` = the offline key), commit, copy the tree.
@@ -107,8 +108,9 @@ cannot be restored.
    the same genesis from `genesis.tar.gz.age` to `/opt/12id/genesis`. Same IPs → nothing changes for
    clients. A new public IP: the genesis carries the old client IP, so publish a rotated genesis
    ([genesis-rotation.md](genesis-rotation.md)) before the SDKs can reach the ledger.
-4. **Databases:** start the two Postgres containers, restore every dump (as above, `pg_restore --create`),
-   then `pg-roles.sh all`.
+4. **Databases:** start the two Postgres containers, `pg-roles.sh all`, restore every dump (as above,
+   `pg_restore --create`), then `pg-roles.sh all` again (ownership, and the monitoring grants on tables that
+   only exist after the restore).
 5. **Stacks:** the deploy order of production-bringup.md §4, then `check-inspect-clean.sh`.
 6. **DNS:** point the hostnames at the new VM (if the address changed).
 7. **Smokes:** the W5 list; then re-enable the backup timer and the backup machine's pull key.
@@ -116,8 +118,8 @@ cannot be restored.
 ## Drills
 | Drill | Where | Last run |
 |---|---|---|
-| One database into a scratch Postgres | staging (backup-restore.md "Restore drill") | pending (W4) |
+| Every database into a scratch Postgres | staging (`19-…` W4 D2) | 2026-10-04: 10 dumps in 12 s, 11 key counts equal to live |
 | Restore with the offline key only | another machine (backup-restore.md) | 2026-09-29 (W2) |
-| Mediator queue lost, live | staging, load-test tenant's rows only | pending (W4) |
-| Whole VM, rehearsal | WSL distro on the dev PC, from staging's pulled backups and the offline key | pending (W4) |
+| Mediator queue lost, live | staging, load-test tenant's rows only | not run: the rows cannot be isolated without a cross-instance join, and the outcome is the table above |
+| Whole VM, rehearsal | WSL distro on the dev PC, from staging's pulled backups and the offline key | 2026-10-04: about 8 min of machine time (pull 16 s, restore 36 s, deploy 331 s); every service healthy, counts equal to the backup, edge probes and API calls through the restored wallets and mediator |
 | Whole VM, the gating drill | a scratch VM, from production's pulled backups | after W5 |

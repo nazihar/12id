@@ -462,3 +462,39 @@ Each step followed `runbooks/key-rotation.md`, after a fresh backup, with the sm
 - Move `/opt/12id/secrets/minisign.key.prev-w4` offline, or delete it.
 - Delete `/opt/12id/secrets/age.key.prev-w4` once the offline key is confirmed to open the older backups.
 - Staging's tenants keep working; tenant `w4-endorser-rotation-check-…` is a leftover of the endorser check.
+
+### D — disaster recovery (2026-10-04)
+- **D1:** `runbooks/disaster-recovery.md`: scenarios, what restores together (`agent_root` with `agent_service`;
+  `drizzle` with `mediator`), what users see, the single-database procedure, the whole VM.
+- **D2, every database into a scratch Postgres on the VM:** the newest backup's checksums verified, 10 dumps
+  restored in 12 s. Tenants 16, wallets 4,129, `agent_root` items 6,402, endorsement audit 135, console users 9,
+  biometric keys 3, mediations 4,157, mediator Askar items 4,168, queued messages 378: **every count equals live**.
+  - The live "queue lost" drill was not run: the load tenant's queued rows can't be isolated without a
+    cross-instance join, and deleting rows would only show they are gone.
+- **D3, whole-VM rehearsal in a WSL distro (`12id-dr`, Ubuntu 24.04, Docker Engine 29.1) on E:, from the repo, a
+  pull by the real `backup-pull.sh`, and the staging offline key only:**
+  - **Pull:** a dedicated key confined to `rrsync -ro`: 13 copies (160 MB) in 16 s.
+  - **Prep:** a new host age key; all 8 sops files re-keyed to it with the offline key; the genesis (v1, v2,
+    current) restored. The backup was taken after the VM's age-key rotation (C8), so only the offline key could
+    open it.
+  - **Restore:** the two Postgres instances, roles, 10 dumps with the offline key, roles again: 36 s.
+  - **Deploy:** every stack from `v0.1.0-rc.1` in 331 s (image pulls included), after the owner logged the host into
+    GHCR. The hostnames pointed at the host and Caddy used `local_certs` (rehearsal only: no public DNS or ACME).
+  - **Check:** all 12 services healthy. agent-service and endorser-service only start if their restored Askar
+    stores open with the recovered keys. Counts equal to the backup; edge probes 200/202.
+  - **Through the restored data:** the API created a connection invitation (the tenant's wallet in `agent_root`),
+    a wallet plus its mediator invitation (the restored mediator), and listed connections and the catalogue.
+  - **About 8 minutes of machine time**, plus host setup (about 10 min) and the owner's GHCR login.
+  - Scripted as `infra/scripts/dr-rebuild.sh` (`prep|restore|deploy|check`; `REHEARSAL=1` for hosts without DNS).
+    It now also deploys monitoring, which the rehearsal did not run.
+  - Afterwards the DR copy (live keys) was stopped, the distro unregistered (its GHCR login and copied
+    backups with it), and the pull key removed from staging.
+- **Found:**
+  - **`pg-roles.sh all` failed on a fresh instance** (`relation "DidcommConnection" does not exist`): it granted
+    `monitoring_ro` and `platform_ro` on tables that only exist after the services' first start. That is the order
+    `production-bringup.md` uses, so a new production VM would have stopped there too. The table grants are now
+    conditional (`to_regclass … \gexec`), and the runbooks run `pg-roles.sh all` again after the restore or first deploy.
+  - The pull copied two stray files from staging's `/opt/12id/backups` into `daily/` as if they were backups
+    (`agent.sops.env.pre-unset-20260928`, `mediator-endorser-predrop-20260928.dump.age`). Owner: move them out of
+    the backup root or delete them.
+  - A DR host needs the GHCR read token; it is now listed as an input in `disaster-recovery.md`.
