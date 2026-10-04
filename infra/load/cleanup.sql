@@ -11,11 +11,13 @@ begin;
 
 select id, name from tenants where id = :'tenant' and name like 'load-%';
 
+-- Every wallet of the load tenant, including ones outside the run files (exchanges.ts holders, probes):
+-- the tenant is synthetic.
 update wallets w set revoked_at = now() - interval '31 days'
   from tenants t
  where :'phase' = 'A'
    and t.id = w.tenant_id and t.id = :'tenant' and t.name like 'load-%'
-   and w.revoked_at is not null and w.mediation_removed_at is null;
+   and w.mediation_removed_at is null;
 
 delete from wallets w using tenants t
  where :'phase' = 'B'
