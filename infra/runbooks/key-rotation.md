@@ -197,7 +197,11 @@ environment's offline key, so the old VM key can be destroyed once the files are
    `for f in infra/env/$ENV/secrets/*.sops.env; do sops updatekeys -y "$f"; done`.
 4. `sudo mv /opt/12id/secrets/age.key.new /opt/12id/secrets/age.key`; then `deploy.sh` any stack (it
    decrypts with the new key) and run a backup (`backup-postgres.sh` derives the VM recipient from the key).
-5. Older backups and the git history stay readable with the offline key; destroy the old VM key.
+5. Older backups and the git history stay readable with the offline key, **but check that first:** decrypt one file
+   of every backup still kept with the offline key alone. Backups older than the offline recipient (staging: before
+   2026-09-29) open only with the old VM key; re-encrypt them to the current recipients
+   (`age -d -i old | age -R recipients`, then rewrite `SHA256SUMS` as `backup-postgres.sh` does) before you destroy it.
+   Then destroy the old VM key (`shred -u`).
 
 Rehearsed on staging 2026-10-04: new VM recipient `age13wc3…`, all eight files re-keyed and decrypting with it, the old key refused; a deploy and a backup on the new key (the new backup does not open with the old key). The old key is `/opt/12id/secrets/age.key.prev-w4` until the owner destroys it.
 

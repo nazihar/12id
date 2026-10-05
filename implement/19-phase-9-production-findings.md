@@ -555,3 +555,21 @@ Each step followed `runbooks/key-rotation.md`, after a fresh backup, with the sm
   - `https://docs.12id.com` serves the landing page, the four guides, the Redoc API reference and `openapi.json` (all 200).
   - The certificate is `CN=docs.12id.com` (valid until 2027-01-03), and every cross-link between the guides resolves to a site page.
   - From now on, any push to `master` that changes a guide republishes the site.
+
+### Staging housekeeping after the age-key rotation (2026-10-05)
+- **Before shredding the retired VM age key (`age.key.prev-w4`)**, every backup on the VM was tested with the staging
+  offline key alone.
+  - The 9 backups from 2026-09-29 09:33 onward opened.
+  - **The 3 older ones (09-27, 09-28, 09-29 02:37) did not.** They predate W2 adding the offline recipient, so only
+    the retired key opened them; shredding it would have made them unreadable.
+- **Fix:** those 3 backups (36 files) were re-encrypted on the VM to today's recipients (the current VM key + the
+  offline key), exactly as `backup-postgres.sh` encrypts. Each file was checked against the original's plaintext
+  before the swap, and the SHA256SUMS were rewritten. Downloaded to the dev PC: checksums verified, **all 36 files open
+  with the offline key alone**.
+- Then the retired key was shredded, and two stray files were removed from the backup root
+  (`agent.sops.env.pre-unset-20260928`, `mediator-endorser-predrop-20260928.dump.age`; the latter was VM-key-only
+  too). The backup root now holds dated backups only.
+- **Lesson for the runbook:** before retiring a VM age key, check that the offline key opens every backup still kept,
+  including those older than the offline recipient.
+- **Owner:** `minisign.key.prev-w4` (keep offline or delete), and the staging offline key still on the dev PC
+  (`E:\12id-credo\offline-keys`).
