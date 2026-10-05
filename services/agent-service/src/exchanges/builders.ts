@@ -15,6 +15,9 @@ export class ExchangeInputError extends Error {
   }
 }
 
+/** The largest integer AnonCreds encodes as an integer (signed 32-bit); predicates need integers. */
+export const MAX_PREDICATE_INTEGER = 2_147_483_647
+
 export interface OfferAttribute {
   name: string
   value: string
@@ -37,6 +40,12 @@ export function buildOfferAttributes(
     throw new ExchangeInputError(`${EXPIRY_ATTRIBUTE} must be epoch seconds as an integer string`)
   }
   if (Number(expiresAt) <= nowSeconds) throw new ExchangeInputError(`${EXPIRY_ATTRIBUTE} is not in the future`)
+  // AnonCreds encodes a value as an integer only within the signed 32-bit range and hashes anything larger,
+  // so a later expiry would be issued but fail the mandatory `expiresAt >= now` predicate in every proof
+  // (Phase 9 W7: found while writing the customer's credential-model guide).
+  if (Number(expiresAt) > MAX_PREDICATE_INTEGER) {
+    throw new ExchangeInputError(`${EXPIRY_ATTRIBUTE} must be at most ${MAX_PREDICATE_INTEGER} (2038-01-19T03:14:07Z): predicates work on 32-bit integers`)
+  }
 
   return schemaAttributes.map((name) => ({ name, value: String(values[name]) }))
 }

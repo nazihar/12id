@@ -1,6 +1,6 @@
 # SSI Platform — System Architecture and Implementation Plan
 
-**Status:** Design handover document — **revised after Phase 0 (Android pass), Phase 1 (staging infrastructure), Phase 2 (agent services on staging), Phase 3 (platform API on staging), Phase 4 (console) and Phase 5 (Android holder SDK); Phase 6 (biometric gate) on staging with the mock provider; Phase 9 (production) planned 2026-09-28**
+**Status:** Design handover document — **revised after Phase 0 (Android pass), Phase 1 (staging infrastructure), Phase 2 (agent services on staging), Phase 3 (platform API on staging), Phase 4 (console) and Phase 5 (Android holder SDK); Phase 6 (biometric gate) on staging with the mock provider; Phase 7 (pre-production review fixes) done on staging; Phase 9 (production) in progress: W1–W4 done on staging (the Android SDK released 2026-10-01, Phase 8 hardening run 2026-10-04), W5 production bring-up and W7 customer documents next**
 **Audience:** Implementation engineer / coding agent
 **Stack decision:** Credo-TS 0.7 + DIDComm v1 + AnonCreds + Hyperledger Indy
 **Evidence:** every Phase 0 claim below is backed by a run or a source read recorded in [`3-phase-0-findings.md`](3-phase-0-findings.md). The pre-Phase-0 version of this document is kept at [`init.pre-phase0.md`](init.pre-phase0.md).
@@ -56,14 +56,14 @@ Phase 0 ran the stack end to end on Android. Content now falls into these tiers,
 **Not yet tested.** Stated from documentation or reasoning only. Includes:
 - invited-member acceptance through real SMTP on staging;
 - **everything about the Swift/iOS holder**;
-- **the SDK on Android 7–13 and on any x86_64 device** (the wrappers' x86_64 libraries do not load, §9; only arm64 on Android 14 has run);
-- multi-tenant throughput: inbound messages are processed one at a time across all tenants by default;
-- mediator replica failover under load, and duplicate webhooks across replicas;
+- ~~the SDK on Android 7–13 and on any x86_64 device~~: *tested in Phase 9 W3 (x86_64 emulators API 24, 26, 28, 36; arm64 on the phone)*;
+- ~~multi-tenant throughput~~: *measured in W4 (A4): 119 exchanges/min with 30 concurrent holders; the mediator, not the agent, is the limit*;
+- ~~mediator replica failover under load~~: *tested in W4 (B2)*. Duplicate webhooks across replicas are still not measured directly (no duplicate message was delivered);
 - restrictive corporate Wi-Fi;
-- production (non-von-network) ledgers and the TAA;
+- ~~production (non-von-network) ledgers~~: *rehearsed in W2 (`indy-node-container`, our own genesis); no TAA on our own network (owner decision)*. The production ledger itself comes with W5;
 - a real FCM push (the smoke simulates it with a broadcast on the same code path).
 
-**Reviewed 2026-09-16; H2 + H3 fixed 2026-09-22.** [`17-phase-7.md`](17-phase-7.md) audited every component above for security gaps and optimisation opportunities: 3 High (data retention/deletion, shared internal token + network reaching the endorser, Postgres superuser everywhere), 18 Medium, 12 Low. Its §10 is the **Phase 7** fix set (renumbered when the biometric gate became Phase 6). **H2 + H3 are done and on staging (2026-09-22)** ([`infra/runbooks/postgres-roles.md`](../infra/runbooks/postgres-roles.md)); the rest is not started.
+**Reviewed 2026-09-16; H2 + H3 fixed 2026-09-22.** [`17-phase-7.md`](17-phase-7.md) audited every component above for security gaps and optimisation opportunities: 3 High (data retention/deletion, shared internal token + network reaching the endorser, Postgres superuser everywhere), 18 Medium, 12 Low. Its §10 is the **Phase 7** fix set (renumbered when the biometric gate became Phase 6). **H2 + H3 are done and on staging (2026-09-22)** ([`infra/runbooks/postgres-roles.md`](../infra/runbooks/postgres-roles.md)). *Update 2026-10-05: every High and Medium is done on staging. H1, K1 and the Low batch were done in Phase 7 (2026-09-22 to 2026-09-28); M11, M13 and M17 in Phase 9 W2–W3; L9 was verified by the Phase 8 load test (W4). Open: M15 (needs W5's production keys), L16 (staging only; production runs its own ledger), L8 (owner) and L12 (the next Credo release).*
 
 **Confirmed (Phase 6, run, 2026-09-21).** The optional biometric gate (§2.8, §4.9, §12.17), evidence in [`16-phase-6-biometric-findings.md`](16-phase-6-biometric-findings.md), with the `mock` provider:
 - **Gated issuance** held at `request-received` until a pass (both event orders).
@@ -79,6 +79,15 @@ Phase 0 ran the stack end to end on Android. Content now falls into these tiers,
 - the Kotlin holder's handling of the `issuance-abandoned` problem report.
 
 **Production planned 2026-09-28 (Phase 9).** [`18-phase-9-production.md`](18-phase-9-production.md) records the production decisions: our own Indy network (§12.1), one VM on `*.12id.com`, file secrets, pulled off-site backups, and prebuilt GHCR images (§12.18). **Confirmed while planning (source read):** von-network is built from fixed test seeds. Its Trustee seed `000000000000000000000000Trustee1` is public, and the client ports have to be public for phones, so anyone can write to the staging ledger as Trustee (`17-phase-7.md` L16). von-network is staging-only.
+
+**Confirmed (Phase 9, staging, run, 2026-09-29 to 2026-10-04).** Evidence in [`19-phase-9-production-findings.md`](19-phase-9-production-findings.md):
+- **Release bundle (W2):** staging runs image-only compose files with file secrets. `docker inspect` shows 0 of 32 secret values (88 exposures before). Images are digest-pinned from GHCR, built by tag-driven CI since `v0.1.0-rc.1` (2026-10-04).
+- **Our own Indy network (W2):** genesis ceremony, four `indy-node-container` validators, a trustee-signed endorser bootstrap and the write probe, rehearsed as a scratch project on staging; 1-of-4 and 2-of-4 failover behave as Indy promises.
+- **Backups (W2, W4):** pulled off-site read-only, and restored with the offline key alone. Every database restores with counts equal to live, and **the whole VM was rebuilt from a pulled backup and the offline key in about 8 minutes** (`infra/scripts/dr-rebuild.sh`).
+- **Android SDK (W3):** rebuilt UniFFI wrappers load on x86_64 and arm64 from **API 24 (Android 7.0)** to 37 (16 KB pages). The SDK carries the Let's Encrypt roots that Android 7.0 lacks (fork change F8). It is published as `com.12id:holder-sdk-android` + `com.12id:holder-sdk-native` on `https://maven.12id.com`, and the sample builds from there alone.
+- **Load (W4):** two mediator replicas carry about 600 open wallets polling every 10 s. Each replica's CPU tops out near 40 polls/s on Credo's per-message work (profiled), so the 10k-wallet target needs about 30 mediator cores (owner decision pending). The agent's concurrency switch gives no gain at this scale.
+- **Failover (W4):** a crashed mediator replica is back in 7–12 s with no message lost in clean runs, and Caddy retries the other replica. Validator loss raises the ledger alerts, and the alert mails arrive.
+- **Key rotation (W4):** every key class was rotated live on staging with the smokes passing (`infra/runbooks/key-rotation.md`). This includes the console's auth secret without losing 2FA enrollments, a new endorser DID, a new genesis signing key and a new VM age key.
 
 Phase 0 found that the architecture holds. It also found that **three configuration switches, two holder fork changes and one mediator setting** must all be right, and each fails silently when wrong (§2.7.1, §2.7.4, §2.3). Treat those as load-bearing.
 
@@ -740,6 +749,14 @@ Published to GitHub Packages as `org.hyperledger:aries-framework-kotlin`, with U
 
 **Phase 5 layout and pins** (`services/VERSIONS.md`): `12id/sdk-android/` — `ariesframework` (fork, `com.12id:aries-framework-kotlin:2.0.0-12id.1`), `sdk` (`com.12id:holder-sdk-android:0.1.0`, package `com.onetwoid.sdk`), `sample`. Gradle 8.14.5, AGP 8.13.2, Kotlin 2.2.21, compileSdk 36, minSdk 24, JDK 17; the SDK depends on the fork with `implementation`, so no Aries type reaches a customer's classpath.
 
+> **Phase 9 W3 update (2026-10-01): both problems below are solved.** The SDK ships as two artifacts on a public static Maven repository, `https://maven.12id.com` (GitHub Pages, no token):
+> - `com.12id:holder-sdk-android:0.1.0`: the SDK with the fork's sources merged in and `java-multibase` vendored;
+> - `com.12id:holder-sdk-native:0.2.1-12id.1`: the three UniFFI wrappers rebuilt from upstream `aries-uniffi-wrappers` 0.2.1 with cargo-ndk and NDK r27c at API 24, for arm64-v8a, armeabi-v7a and x86_64, with static libc++ and 16 KB alignment, and the upstream Kotlin bindings reused.
+>
+> A customer declares one dependency and one repository. `mirror-uniffi.ps1`, `third_party/m2` and JitPack are retired.
+>
+> x86_64 loads on API 24, 26, 28, 36 and 37, and **minSdk 24 is verified**: Android 7.0 needed the Let's Encrypt roots, which the SDK now carries (fork change F8). Evidence: `19-phase-9-production-findings.md` W3.
+
 **x86_64 does not work (Phase 5, confirmed on API 24, 26, 28 and 36 emulators).** `libaskar_uniffi.so` for x86_64 references `__extenddftf2` (a compiler-rt builtin) that no Android libc exports; the wrappers were linked without the builtins. arm64-v8a works (Android 14). Until the wrappers are rebuilt: arm64 devices only, no emulators, and **minSdk 24 is unverified**.
 
 **Binary size (confirmed).** The default build packages native libraries for seven ABIs (arm64-v8a, armeabi, armeabi-v7a, mips, mips64, x86, x86_64):
@@ -977,7 +994,7 @@ Planned in detail as Phase 9 workstream W4 ([`18-phase-9-production.md`](18-phas
 - [x] Disaster recovery: what happens if we lose the Endorser key, a wallet database, the mediator queue (`infra/runbooks/disaster-recovery.md`; whole-VM rehearsal from the offline key passed 2026-10-04; the gating drill against production follows W5)
 - [ ] Document the wallet-recovery and no-revocation stories for customers
 
-### Phase 9 — Production — **planned 2026-09-28**
+### Phase 9 — Production — **in progress** (planned 2026-09-28; W1–W4 done on staging by 2026-10-04)
 
 Plan: [`18-phase-9-production.md`](18-phase-9-production.md); evidence (when started): `19-phase-9-production-findings.md`. Decisions: §12.1, §12.18.
 
@@ -989,11 +1006,11 @@ Plan: [`18-phase-9-production.md`](18-phase-9-production.md); evidence (when sta
   - A backup pulled off-site was restored with the offline key only.
   - The ceremony, the validators, the trustee-signed endorser bootstrap and the write probe were rehearsed on staging.
   - von-network had lost consensus since 2026-09-28 (2 of 4 validators hung) and was restarted.
-- [ ] W3: Android SDK release (5b): rebuilt wrappers, configurable minisign trust anchor (M15), `maven.12id.com`, CI publishing to GHCR
+- [x] W3: Android SDK release (5b): rebuilt wrappers, `maven.12id.com`, CI publishing to GHCR. **Done 2026-10-01**: `com.12id:holder-sdk-native:0.2.1-12id.1` and `com.12id:holder-sdk-android:0.1.0` (+ biometric add-ons) on `https://maven.12id.com`; emulator matrix API 24/26/28/36 and the phone smoke 7/7; minSdk 24 verified (fork F8 carries the Let's Encrypt roots). Tag-driven CI; its image workflow first ran with `v0.1.0-rc.1` on 2026-10-04. **Still open:** the configurable minisign trust anchor (M15, needs W5's production keys) and the M10 phone check
 - [ ] W4: Phase 8 Hardening (load, failover, key rotation, DR drill). **Ran on staging 2026-10-04**: all four parts done; open are the mediator capacity decision for the target wallet count, the delete-before-send window, and the DR drill against production after W5
 - [ ] W5: production bring-up on `*.12id.com` from one release `vX.Y.Z`, pinned by digest
 - [ ] W6: iOS (blocked on a Mac, an Apple developer account and an iPhone)
-- [ ] W7: customer-facing documents (§5.3, no revocation, wallet recovery, §5.2)
+- [ ] W7: customer-facing documents (§5.3, no revocation, wallet recovery, §5.2). **Written 2026-10-05** (`services/platform-api/docs/credential-model.md` new, `data-protection.md` revised); published at `docs.12id.com` (GitHub Pages) once the owner's one-time setup is done (`18-phase-9-production.md` W7). Found: expiry capped at 2038-01-19 by 32-bit predicates; offers past it are now refused
 - [ ] Go-live gate: see the plan
 
 ---
@@ -1263,7 +1280,7 @@ Planned in [`18-phase-9-production.md`](18-phase-9-production.md). Decided by th
 | Domain | `12id.com` subdomains: `api.`, `agent.`, `mediator.`, `genesis.`, `vdr.`, `maven.`, `console.` (the apex is the marketing site). The mediator and agent hostnames, the genesis URL, the namespace, the endorser DID and the minisign keys are frozen before the first real wallet |
 | Secrets (Phase 7 M11) | Root-only files on disk (`/opt/12id/run-secrets`); services read `*_FILE`; unattended restart after a reboot |
 | Backups (Phase 7 M13) | A backup machine at another site pulls nightly over SSH, read-only to `/opt/12id/backups`, keeping 30 daily + 12 monthly; a second age recipient with its key offline |
-| Images (Phase 7 M17) | Prebuilt by CI only, on GHCR. `sha-<short>` on each merge to main, `X.Y.Z` on a release tag. One platform version for every server image; the SDKs have their own semver. Production pulls `X.Y.Z@sha256:…`; rollback = previous digest |
+| Images (Phase 7 M17) | Prebuilt by CI only, on GHCR (`ghcr.io/nazihar/12id-*`). *Changed 2026-09-30 (owner): tag-driven, not merge-driven: `vX.Y.Z-rc.N` builds once (`sha-<short>` + `X.Y.Z-rc.N`) for staging, and `vX.Y.Z` on the same commit retags those digests. The first runs were `v0.1.0-rc.1` (2026-10-04) and `-rc.2`.* Originally: `sha-<short>` on each merge to main, `X.Y.Z` on a release tag. One platform version for every server image; the SDKs have their own semver. Production pulls `X.Y.Z@sha256:…`; rollback = previous digest |
 | Self-hosting (§12.15) | Production deploys from the same release bundle (image-only compose + env template + `release.env`) a self-hosting customer gets. `init` command and guide in a later packaging phase |
 | SDK trust anchor | Configurable minisign keys in the SDK config; the default is 12id's production keys (primary + backup), compiled in |
 | Go-live gate | H1, Android SDK release (5b), Phase 8 load + DR, iOS (blocked on hardware) |

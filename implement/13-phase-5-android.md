@@ -1,5 +1,11 @@
 # Phase 5 — Android Holder SDK (plan)
 
+> **Phase 9 update (2026-10-01):** Phase 5b (`17-phase-7.md` Appendix A) shipped as Phase 9 W3.
+> - The SDK is released on `https://maven.12id.com` as `com.12id:holder-sdk-android:0.1.0` + `com.12id:holder-sdk-native:0.2.1-12id.1` (rebuilt wrappers, x86_64 working, minSdk 24 verified).
+> - The fork's sources are merged into the SDK and no longer published separately; JitPack and the wrapper mirror are retired.
+> - Tag-driven CI publishes both.
+> - Still with W5: M15, verifying the genesis signature on the device with the production minisign keys.
+
 ## Context
 Phases 0–4 are done and on staging (`12id/implement/1…12`):
 - ledger, patched mediator `-p2`, agent-service, platform-api with wallet tokens and per-wallet mediator invitations, `wallet.sync_requested` wake path, console.

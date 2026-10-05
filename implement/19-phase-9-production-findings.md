@@ -180,7 +180,7 @@ published (von-network holds 9702–9708), clients on `12id-ledger`. Removed aft
   delete after a few days of stable staging.
 - `/opt/12id/build-src/w2-20260929`: the copied source the images were built from.
 
-## W3 — Android SDK release and CI (started 2026-09-30)
+## W3 — Android SDK release and CI (2026-09-30 to 2026-10-01; done except M15 and the M10 phone check)
 
 ### Summary
 | Item | Built | Verified |
@@ -188,7 +188,7 @@ published (von-network holds 9702–9708), clients on `12id-ledger`. Removed aft
 | Decisions | Two artifacts (SDK + fork merged; native), GitHub Pages Maven repository `maven.12id.com`, CI on tags (owner, 2026-09-30; `18-…` W3) | — |
 | 5b.1 native | `sdk-android/native/`: `build.sh` (upstream tag `0.2.1`, cargo-ndk 4.1.2, NDK r27c, Rust 1.77.2, API 24, 3 ABIs), upstream bindings reused, `com.12id:holder-sdk-native:0.2.1-12id.1` | **`smoke:sdk-android` PASSED on the phone (7/7) and on x86_64 emulators API 26, 28, 36 (steps 1–3)**; native instrumentation test on API 24, 36, 37 (16 KB pages) and the phone |
 | 5b.2 SDK artifact | Fork sources + vendored `java-multibase` compiled into `:sdk`; `third_party/m2`, `mirror-uniffi.ps1` and JitPack retired; `-PpublishRepo` | fork JVM tests 4/4, SDK 44/44, `apiCheck` clean; the published POM names only `com.12id:holder-sdk-native` (no `org.hyperledger`, no JitPack) |
-| 5b.3 CI | `.github/workflows/ci-{services,console,sdk-android}.yml`, `release-{images,native,sdk-android}.yml`, `sdk-android/ci/maven-repo.sh`; `release.sh tag` takes `X.Y.Z-rc.N` and a source version | written, **not run yet**: needs the push and the owner's one-time GitHub setup (`18-…` W3) |
+| 5b.3 CI | `.github/workflows/ci-{services,console,sdk-android}.yml`, `release-{images,native,sdk-android}.yml`, `sdk-android/ci/maven-repo.sh`; `release.sh tag` takes `X.Y.Z-rc.N` and a source version | **run:** `native-v0.2.1-12id.1` and `sdk-android-v0.1.0` released 2026-10-01; `release-images` first ran with `v0.1.0-rc.1` on 2026-10-04 (one disk-space fix) |
 | M15 | — | not started (needs W5's production minisign keys for the default) |
 
 ### Native build (5b.1)
@@ -498,3 +498,32 @@ Each step followed `runbooks/key-rotation.md`, after a fresh backup, with the sm
     (`agent.sops.env.pre-unset-20260928`, `mediator-endorser-predrop-20260928.dump.age`). Owner: move them out of
     the backup root or delete them.
   - A DR host needs the GHCR read token; it is now listed as an input in `disaster-recovery.md`.
+
+## W7 — Customer-facing documents (2026-10-05)
+- **New `services/platform-api/docs/credential-model.md`:** what a credential is, validity (`expiresAt` and its
+  automatic predicate), no revocation and what to do instead, wallet recovery ("accept the loss, issue again" as a
+  one-step flow), attribute-encoding recipes (dates as `YYYYMMDD`, amounts in the smallest unit, yes/no as 1/0),
+  schema immutability and a checklist before the first schema.
+- **`data-protection.md` revised:**
+  - backups as they are since W2 (two keys, one offline; off-site; 30 daily + 12 monthly, so erased data leaves the
+    monthly copies within 12 months);
+  - where the data is hosted (the country is left for the owner);
+  - sub-processors;
+  - a security-measures overview.
+- **Found while writing: the 2038 limit.** Credo encodes an attribute as an integer only within the signed 32-bit
+  range (`encodeCredentialValue`) and hashes anything larger. The offer builder accepted any 1–12-digit `expiresAt`,
+  so a credential valid past **2038-01-19 03:14:07 UTC** would be issued and then fail the mandatory
+  `expiresAt >= now` predicate in every proof. Offers past `2147483647` are now refused with a clear message
+  (agent-service `builders.ts`; tests 9/9, agent-service 61/61); the OpenAPI description and `api.md` say so. The
+  same limit applies to any attribute used in a predicate (documented).
+  - **Owner decision:** keep epoch seconds (validity capped at 2038), or change the expiry unit before the first
+    customer (an API contract change).
+- **Publishing (owner decision 2026-10-05): `docs.12id.com` on GitHub Pages**, same pattern as `maven.12id.com`.
+  - `docs/site/` holds the landing page, the Pages config and an API reference page (Redoc 2.5.4, SRI-pinned, rendering
+    `openapi.json`).
+  - `docs/site/build.sh` assembles the guides, rewrites repo paths into site links, and refuses any internal path. It
+    caught the SDK guide naming an internal smoke script, which was reworded.
+  - `.github/workflows/docs.yml` publishes to `nazihar/12id-docs` on every docs change, and skips with a notice until
+    the owner's setup exists (`18-…` W7).
+- `openapi.json` was checked against the code (regenerated, no drift) before the one description change; the
+  console's typed client was regenerated with it.

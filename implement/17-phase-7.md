@@ -12,9 +12,15 @@
 - **Fixed since: H1 (and L5), on staging 2026-09-28** (§2 H1 status; customer document `services/platform-api/docs/data-protection.md`).
 - **Added 2026-09-28:** L16 (the staging ledger's trustee seed is public), found while planning Phase 9 ([`18-phase-9-production.md`](18-phase-9-production.md)). Phase 9 also closes the owner-held M11, M13 and M17.
 - **Fixed since: the Low batch, on staging 2026-09-28** (L1, L4, L6, L7, L13, L14, L15, I1, I2; §10 row 14), and **L10** and **L11** the same day by owner decision.
-- Still open:
-  - L2, L16 and M15, with Phase 9;
-  - L9, with the Phase 8 load test;
+- **Closed by Phase 9 (`19-phase-9-production-findings.md`):**
+  - M11 file secrets, M13 off-site backups with an offline recipient, and M17 digest pins (W2, 2026-09-29);
+  - M17's CI, tag-driven (W3; first image release `v0.1.0-rc.1`, 2026-10-04);
+  - L2 for production, which gets no public Grafana or ledger browser (W2);
+  - L9, verified by the Phase 8 load test, plus M1's concurrency switch measured and kept off (W4, 2026-10-04);
+  - M18 completed by the `Did.alternative_dids` index the load test found missing (W4).
+- Still open (2026-10-05):
+  - M15, with W5's production minisign keys (an SDK release);
+  - L16, on staging only (production runs its own ledger);
   - L8, the owner's rotation;
   - L12, with the next Credo release.
 
@@ -905,7 +911,7 @@ Two cheap adjacent wins while in here: `GET /v1/ledger` returns static, env-deri
 | 4 | ✅ **Done 2026-09-22.** M2 + M6 + M8 + M9: fair-share dispatcher concurrency, replay-safe consumer (deterministic event id), live URL, secret overlap with multi-`v1` verify | dispatcher + consumer + signer unit tests. **Passed:** 66/66, `smoke:platform-credo`, `smoke:biometric-credo` 18/18 |
 | 5 | ✅ **Done 2026-09-22.** M7: advisory-locked outbox insert | concurrent-insert test. **Passed:** `outbox-order.test.ts` (real Postgres), smokes above |
 | 6 | ✅ **Done 2026-09-22.** M1: DIDComm body cap on agent **and mediator** (per-IP only after reading logs) | staging probe 413 on both. **Passed:** 413 on both, WebSocket 1009, `smoke:platform-credo` |
-| 7 | ⏸ **Kept open (owner, 2026-09-23)**, with the production host. M11: file-based secrets (mediator: `docker inspect` only) | `docker inspect` clean |
+| 7 | ✅ **Done 2026-09-29 (Phase 9 W2).** M11: file-based secrets (mediator: `docker inspect` only); kept open by the owner 2026-09-23 until the production host | `docker inspect` clean. **Passed:** 0 of 32 secret values in 35 containers (88 exposures before) |
 | 8 | ✅ **Done 2026-09-22.** M4 + M10 + M18: configurable per-principal rate limits; wallet / mediation / queue sweep (OOB-based "never connected", 30 d grace for revoked); mediator index service. ✅ **M18 done 2026-09-22** (drizzle-storage patch `-p4` + 14 indexes) | 429 probe; staging sweep run; `EXPLAIN` before/after on 10 k synthetic rows. **M18 passed:** 12 ms → 0.09 ms on 10 k wallets; 0 `to_jsonb` forms on staging. **M4/M10 passed:** invitation 429 probe; first sweep `connected: 4, revoked: 0` |
 | 9 | ✅ **Done 2026-09-22.** M3: endorser daily ceiling (`ENDORSER_DAILY_CEILING`) | policy unit test. **Passed:** 32/32, count query checked on Postgres |
 | 10 | ✅ **Done 2026-09-22.** M12: nonce CSP | Playwright CSP spec. **Passed:** `e2e:staging` 3/3 with the CSP guard, 0 violations |
@@ -923,11 +929,11 @@ Two cheap adjacent wins while in here: `GET /v1/ledger` returns static, env-deri
 
 **Order revised 2026-09-22** after the re-validation: K1 added; M5 and the webhook bundle moved up; M7 and M16 given their own rows.
 
-**Kept open by the owner:** M13 off-site backups and a second age recipient (2026-09-22, later); M17 tag policy, digest pins and CI (2026-09-22, publishing phase, with 5b.3); M11 file-based secrets (2026-09-23, with the production host).
+**Kept open by the owner, then done in Phase 9:** M13 off-site backups and a second age recipient (2026-09-22; done W2 2026-09-29); M17 tag policy, digest pins and CI (2026-09-22; pins W2, CI W3); M11 file-based secrets (2026-09-23; done W2 2026-09-29).
 
 **Owner decisions (not code):** M16 confirm alert e-mail delivery; L2 whether Grafana and the ledger browser exist in production at all; L8 rotate the `.staging` credentials; §12.1 ledger topology, a clean production host, TAA (bucket C).
 
-**Defer to their phases:** M15 with 5b.1 (the wrapper rebuild changes the size budget); L9, M1's concurrency switch and M2's numbers with the Phase 8 load tests; L10 and L11 done 2026-09-28 by owner decision; L3 in Phase 4 C9 (2026-09-24).
+**Defer to their phases:** M15 with 5b.1, then with W5's production keys (the wrapper rebuild is done, W3); L9, M1's concurrency switch and M2's numbers with the Phase 8 load tests (done 2026-10-04, W4: L9 verified, concurrency off, M2 defaults unchanged); L10 and L11 done 2026-09-28 by owner decision; L3 in Phase 4 C9 (2026-09-24).
 
 **Explicitly not doing:** sharing the mediator's Valkey with the other services, or adding Redis anywhere (§8). Build M4's rate limiter in-process behind a small store interface so it can move to Redis the day platform-api runs a second replica.
 

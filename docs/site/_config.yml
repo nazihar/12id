@@ -1,0 +1,17 @@
+# docs.12id.com: GitHub Pages builds this (Jekyll) from the markdown docs/site/build.sh assembles
+# (Phase 9 W7). Relative .md links become .html links (jekyll-relative-links, on by default on Pages).
+title: 12iD documentation
+description: Issue and verify verifiable credentials with 12iD
+theme: jekyll-theme-primer
+plugins:
+  - jekyll-relative-links
+  - jekyll-optional-front-matter
+  - jekyll-titles-from-headings
+relative_links:
+  enabled: true
+  collections: false
+titles_from_headings:
+  enabled: true
+  strip_title: false
+exclude:
+  - build.sh

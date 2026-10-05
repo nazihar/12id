@@ -1,6 +1,6 @@
 # 12id Platform API — integration guide
 
-Base URL (staging): `https://api.12id.naziharitsolution.com`. Machine-readable spec: `GET /openapi.json` (also committed as `openapi.json`).
+Base URL: `https://api.12id.com` (production, from go-live); `https://api.12id.naziharitsolution.com` (staging). Machine-readable spec: `GET /openapi.json` (also committed as `openapi.json`).
 
 ## Credentials
 
@@ -57,9 +57,13 @@ Responses that carry a secret are never stored for replays:
 
 ## Attribute rules
 
+The full guide, with encoding recipes for dates, amounts and yes/no values, validity periods and wallet recovery: [`credential-model.md`](credential-model.md).
+
+
 - Values are strings. No nested objects, arrays, numbers or dates — encode dates as ISO strings or epoch seconds.
 - Predicates (`>=`, `>`, `<=`, `<`) work only on attributes whose values are integers.
-- Every schema must contain `expiresAt` (epoch seconds). **Credentials cannot be revoked in v1**; every proof request automatically checks `expiresAt >= now`, so expiry is how a credential stops being accepted. `expiresAt` can therefore never be disclosed.
+- Predicates compare whole numbers from `-2147483648` to `2147483647` only; any other value is hashed and can be disclosed but not compared.
+- Every schema must contain `expiresAt` (epoch seconds, at most `2147483647`, i.e. 2038-01-19; later values are refused because the expiry predicate could never be checked). **Credentials cannot be revoked in v1**; every proof request automatically checks `expiresAt >= now`, so expiry is how a credential stops being accepted. `expiresAt` can therefore never be disclosed.
 - A schema cannot change. Adding a field means a new version; deprecate the old one to stop new offers while templates referencing the schema by name keep accepting both.
 - Size limits on an offer: at most 125 attributes, names up to 100 characters, each value up to 4 KB, and 64 KB for all names and values together (400 otherwise). Credentials are meant for claims, not documents; store a document elsewhere and put its hash or reference in an attribute.
 ## Webhooks

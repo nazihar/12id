@@ -244,5 +244,5 @@ account, and the platform reads the result from there.
 
 `sdk-android/sample/` is a complete example: `SampleApp` (initialise + token provider),
 `CustomerBackend` (stand-in for your backend), `SyncWorker` (push path), Compose screens for
-connecting (paste or scan a QR), offers, credentials and proof requests. Its debug build also has the
-adb-driven hooks used by `infra/smoke/sdk-android.ts`.
+connecting (paste or scan a QR), offers, credentials and proof requests. Its debug build also has
+adb-driven test hooks, which 12iD uses for its end-to-end tests; they are not part of the SDK.

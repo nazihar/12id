@@ -1,5 +1,12 @@
 # Phase 5 (Android) — Findings
 
+> **Phase 9 W3 update (2026-10-01):** the open items below are closed.
+> - Finding 9: the wrappers were rebuilt with compiler-rt's builtins (`sdk-android/native/`, `com.12id:holder-sdk-native:0.2.1-12id.1`), and x86_64 loads on API 24–37.
+> - minSdk 24 is verified on an API 24 emulator, after fork change F8 added the Let's Encrypt roots Android 7.0 lacks.
+> - §12.16: public distribution is `https://maven.12id.com` with `com.12id:holder-sdk-android:0.1.0`.
+>
+> Evidence: `19-phase-9-production-findings.md` W3.
+
 **Plan:** [13-phase-5-android.md](13-phase-5-android.md). **Status: gate passed. `smoke:sdk-android` PASSED on the phone against staging (2026-09-15 09:49–09:52Z), steps 1–7 with signed-webhook evidence; the minified release build onboards on the phone. Open: the minSdk 24 claim cannot be tested (x86_64 wrappers do not load on any Android version; no old arm64 device); public distribution (§12.16).**
 
 Code: `12id/sdk-android/` (fork `ariesframework`, `sdk`, `sample`; `FORK.md`, `docs/integration.md`), `infra/smoke/sdk-android.ts`, `infra/smoke/sdk-sample-backend.ts`, `services/VERSIONS.md`.

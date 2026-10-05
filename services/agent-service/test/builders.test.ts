@@ -30,6 +30,11 @@ describe('buildOfferAttributes', () => {
     assert.throws(() => buildOfferAttributes(SCHEMA, { ...values, expiresAt: '2030-01-01' }, NOW), /epoch seconds/)
     assert.throws(() => buildOfferAttributes(SCHEMA, { ...values, expiresAt: String(NOW - 1) }, NOW), /not in the future/)
   })
+
+  it('refuses an expiry past the 32-bit limit, which every proof would fail', () => {
+    assert.throws(() => buildOfferAttributes(SCHEMA, { ...values, expiresAt: '2147483648' }, NOW), /at most 2147483647/)
+    assert.equal(buildOfferAttributes(SCHEMA, { ...values, expiresAt: '2147483647' }, NOW).at(-1)?.value, '2147483647')
+  })
 })
 
 describe('buildProofRequest', () => {

@@ -1,7 +1,8 @@
 # Data protection at 12iD
 
 **For:** the organisations that issue and verify credentials with 12iD, and their privacy and legal teams.
-**Describes:** what personal data 12iD holds, for how long, and how it is erased. Every statement here describes how the platform behaves today (Phase 7 H1).
+**Describes:** what personal data 12iD holds, where, for how long, how it is erased, and how it is protected. Every statement here describes how the platform behaves today (revised 2026-10-05).
+**Related:** how credentials expire, why they cannot be revoked, and what happens when a user loses their phone: [`credential-model.md`](credential-model.md).
 
 ## Roles
 
@@ -61,6 +62,37 @@ To complete the user's request, also delete your own copies (the data you receiv
 - It does not change the ledger. The ledger never held personal data.
 - It does not reach into the user's phone. The wallet is the user's.
 
+## Where the data is hosted
+
+The platform runs on a dedicated server operated by 12iD itself, with no cloud platform in between. The
+backup machine is at a second site.
+
+> **Owner, before publishing:** state the country (or countries) of the production server and the backup
+> machine. Your customers' data-processing agreements need it.
+
+**Sub-processors:**
+- For the optional biometric gate, face checks run in **your own** AWS account, under your agreement with AWS. 12iD does not use its own vendor account for your users' faces.
+- The SDK's files are downloaded from `maven.12id.com`, a static file host (GitHub Pages) that holds only software, never data.
+- Mail from the console (invitations, sign-in codes) goes through 12iD's mail provider.
+
+## Security measures
+
+What protects the data described above, in short:
+- **In transit:** TLS on every public address (HTTP Strict Transport Security). Messages between the wallet and your organisation are also encrypted end to end (DIDComm), so the mediator cannot read them.
+- **At rest:** each organisation's agent storage is encrypted with a key the database never sees. Biometric reference images are encrypted with a key specific to your organisation. Backups are encrypted to two keys, one of them offline.
+- **Separation:**
+  - Each organisation's data is isolated in every query and in its own encrypted storage profile.
+  - Each internal service uses its own database account, limited to its own data.
+  - The key that endorses ledger writes lives in a separate internal service that the internet-facing services cannot reach.
+- **Secrets:** stored as files readable only by the services that need them, never in configuration that operators or tools can list. Every key class has a rotation procedure, and each has been rehearsed.
+- **Access:**
+  - Console accounts are by invitation only, with two-factor authentication for everyone (operators: authenticator app only). Sessions end 24 hours after sign-in (operators: 12 hours).
+  - API keys and wallet tokens are stored only as hashes.
+  - Your webhooks are signed (HMAC-SHA256).
+  - Every change made in the console, and every operator reveal of masked data, is in an audit log.
+- **Abuse limits:** request rates per API key, per wallet and per network address; size limits on every message; a daily ceiling on ledger writes per organisation.
+- **Resilience:** monitoring with alerts by mail. The services restart on their own after a failure. Restores from backup, and a rebuild of the whole platform from the off-site copy with the offline key alone, are rehearsed.
+
 ## Access by 12iD staff
 
 - 12iD operators administer the platform across organisations. In the operator console, **attribute values, disclosed values, holder labels and webhook bodies are masked.**
@@ -80,7 +112,10 @@ If you use the optional biometric gate, face images are **special-category data*
 
 ## Backups
 
-The platform's databases are backed up nightly, encrypted. Erased data leaves the backups as the backups rotate out (7 days today).
+- The platform's databases are backed up **every night**, encrypted before they are written, to two keys: the server's own key and an **offline key** that 12iD keeps away from any server.
+- A backup machine at **another site** collects the copies. The production server can neither reach nor change that machine.
+- It keeps **one copy per day for 30 days and one per month for 12 months.**
+- **Erased data leaves the backups as the copies age out:** within 30 days from the daily copies, and within 12 months from the monthly copies. A backup copy is never read except to restore the platform.
 
 If 12iD ever has to restore a database from a backup:
 - records past their retention period are scrubbed again by the next retention pass;

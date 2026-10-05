@@ -1,0 +1,57 @@
+# Customer documentation (Phase 9 W7): docs.12id.com, a GitHub Pages site in the public repo nazihar/12id-docs,
+# the same pattern as maven.12id.com. A push to master that changes a published guide rebuilds it.
+# Needs the Actions secret DOCS_REPO_TOKEN: a fine-grained PAT with Contents read/write on nazihar/12id-docs only.
+name: docs
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - docs/site/**
+      - services/platform-api/docs/**
+      - services/platform-api/openapi.json
+      - sdk-android/docs/**
+      - .github/workflows/docs.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      # Until the owner has created nazihar/12id-docs and the secret, the job only reports that.
+      DOCS_READY: ${{ secrets.DOCS_REPO_TOKEN != '' }}
+    steps:
+      - name: Setup check
+        if: env.DOCS_READY != 'true'
+        run: echo "::notice::DOCS_REPO_TOKEN is not set; skipping docs.12id.com (18-phase-9-production.md W7 owner setup)"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - if: env.DOCS_READY == 'true'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: nazihar/12id-docs
+          token: ${{ secrets.DOCS_REPO_TOKEN }}
+          path: site
+      - name: Assemble the site
+        if: env.DOCS_READY == 'true'
+        run: |
+          # Start from an empty tree (keep .git), so a removed guide disappears from the site too.
+          find site -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          bash docs/site/build.sh site
+      - name: Publish
+        if: env.DOCS_READY == 'true'
+        run: |
+          cd site
+          git add -A
+          if git diff --cached --quiet; then echo "no change"; exit 0; fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit --quiet -m "docs from ${GITHUB_SHA::7}"
+          git push --quiet origin HEAD
+          git log --oneline -1

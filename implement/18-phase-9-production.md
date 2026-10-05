@@ -16,8 +16,7 @@
   - Built: the native artifact (5b.1), the merged SDK artifact (5b.2) and the workflows (5b.3). **`smoke:sdk-android` passed with the rebuilt libraries on the phone (7/7) and on x86_64 emulators API 26/28/36.** Evidence in `19-…` W3.
   - **minSdk 24 kept (owner, 2026-10-01: the first customer requires it).** Android 7.0 lacks the Let's Encrypt roots; the SDK now carries them as a fallback (fork change F8) and passes the smoke on API 24.
   - **Released 2026-10-01:** `com.12id:holder-sdk-native:0.2.1-12id.1` (tag `native-v0.2.1-12id.1`, CI emulator matrix API 24/26/28/36 green) and `com.12id:holder-sdk-android:0.1.0` + biometric add-ons (tag `sdk-android-v0.1.0`) on `https://maven.12id.com`. The sample builds from there alone, and `smoke:sdk-android` passed 7/7 on the phone with that build.
-  - **Carried over:** M15 (minisign on device) needs W5's production keys, so it lands with W5; it ships as an SDK release. The M10 phone check (re-onboarding after a `never_connected` revocation) is still owed. The image workflow (`release-images.yml`) has not run yet: its first run is W5 step 0.
-- Next: W5, starting with step 0 (the first image release through CI), then M15. W4 can start on staging now.
+  - **Carried over:** M15 (minisign on device) needs W5's production keys, so it lands with W5; it ships as an SDK release. The M10 phone check (re-onboarding after a `never_connected` revocation) is still owed. The image workflow (`release-images.yml`) first ran with `v0.1.0-rc.1` on 2026-10-04: one disk-space fix, then green (W5 step 0).
 - **W4 ran on staging on 2026-10-04** (`19-…` W4). It deployed `v0.1.0-rc.1`, the first image release through CI, which is also W5 step 0's rc.
   - **A, load:**
     - Found and fixed a missing mediator index (`Did.alternative_dids`): 88 ms per poll became 0.17 ms.
@@ -35,13 +34,21 @@
   - **Owner decisions:**
     1. **Mediator capacity for the target wallet count:** more replicas and hosts, a longer poll interval, and/or a cheaper mediator per message.
     2. **The delete-before-send window:** accept it, or a `-p7` patch.
+- **W5 step 0, the first platform release:** `v0.1.0-rc.1` (2026-10-04) and `-rc.2` built by CI; `-rc.3` adds the W7 expiry guard. Then `v0.1.0` on the rc staging passed.
+- **W7 written 2026-10-05** (`19-…` W7): `credential-model.md` (new) and a revised `data-protection.md`, published at `docs.12id.com` once the owner's one-time setup is done. Found: credential expiry is capped at 2038-01-19 by 32-bit predicates (offers past it are now refused; owner decision whether to keep that unit).
+- **Next:**
+  - **W5**, production bring-up. It needs from the owner the production VM (sized from W4 decision 1), DNS for `12id.com`, an SMTP account, the production offline age key, trustee custody, and the backup machine.
+  - **M15** with W5's minisign keys.
+  - The DR drill against production.
+  - W6 (iOS) when the hardware arrives.
+- **Done as of 2026-10-05:** W0–W4 on staging and W7 written. **Left before go-live:** W5, M15, the production DR drill, W6, publishing W7, the two W4 decisions and the expiry-unit decision.
 
 ## Context
 Phases 0–6 are built and verified on the staging VM `id-dev` (`*.12id.naziharitsolution.com`, [`4-init-post-phase-0.md`](4-init-post-phase-0.md) §10):
 - ledger (von-network), patched mediator, agent-service + endorser-service, platform-api, console, biometric-service;
 - the Android holder SDK (`com.12id:holder-sdk-android`, `com.onetwoid.sdk.OneTwoId`).
 
-Phase 7, the pre-production review ([`17-phase-7.md`](17-phase-7.md)), is almost done:
+Phase 7, the pre-production review ([`17-phase-7.md`](17-phase-7.md)), was almost done when this plan was written (it is done now, see the status above):
 - H2, H3, K1 and every Medium are done on staging, except M11, M13 and M17.
 - **H1 (deletion and retention) and the Low batch are still open.**
 - The owner kept M11 (file secrets), M13 (off-site backups) and M17 (tags and CI) open for "the production host". This phase closes them.
@@ -188,7 +195,7 @@ W2, W3 and W5 can partly run in parallel. W6 waits on hardware.
    - Rehearse locally (Docker Desktop), then as a scratch Compose project on staging.
 6. **Runbooks:** new `infra/runbooks/ledger-ceremony.md` and `production-bringup.md`; `genesis-rotation.md` gains "move a validator to its own host".
 
-### W3 — Android SDK release and CI (Phase 5b, `17-phase-7.md` Appendix A) — ~6–8 d ✅ 2026-10-01 (except M15, which waits for W5's keys, the M10 phone check, and the image workflow's first run, which is W5 step 0)
+### W3 — Android SDK release and CI (Phase 5b, `17-phase-7.md` Appendix A) — ~6–8 d ✅ 2026-10-01 (except M15, which waits for W5's keys, and the M10 phone check; the image workflow first ran 2026-10-04)
 
 **Decided (owner, 2026-09-30).** The aim is to keep things simple for the customer and for us, with as little configuration outside the repo as possible.
 
@@ -248,7 +255,8 @@ GHCR needs no secret: the workflow's `GITHUB_TOKEN` pushes to `ghcr.io/nazihar` 
   - the workflows are `.github/workflows/ci-{services,console,sdk-android}.yml` and `release-{images,native,sdk-android}.yml`.
 - Phone checks still owed: ~~`smoke:sdk-android` (M14, the M1 mediator cap)~~ **passed 2026-09-30** (`19-phase-9-production-findings.md` W2), and re-onboarding after a `never_connected` revocation (M10).
 
-### W4 — Phase 8 Hardening (production-shaped staging; the DR drill against production) — ~5–6 d
+### W4 — Phase 8 Hardening (production-shaped staging; the DR drill against production) — ~5–6 d ✅ on staging 2026-10-04 (the DR drill against production follows W5)
+> **Status 2026-10-04:** load, failover, rotation and DR all ran on staging. Results and the two owner decisions are in the status at the top and `19-…` W4.
 - **Mediator load test** with the real profile:
   - N wallets running `PickUpV1` every 10 s, plus one webhook per queued message;
   - scripted Credo holders, ramped from 1k to 10k;
@@ -315,7 +323,23 @@ GHCR needs no secret: the workflow's `GITHUB_TOKEN` pushes to `ghcr.io/nazihar` 
   - minisign with the same configurable anchor.
 - Parity suite in CI (needs a macOS runner).
 
-### W7 — Customer-facing documents — ~2 d (after H1)
+### W7 — Customer-facing documents — ~2 d (after H1) — written 2026-10-05; publishing waits for the owner's setup
+> **Status 2026-10-05:**
+> - **Written:**
+>   - `services/platform-api/docs/credential-model.md` (new): validity and expiry, no revocation, wallet recovery, attribute-encoding recipes and a schema checklist.
+>   - `data-protection.md` revised: off-site backups and their effect on erasure, hosting, sub-processors and a security-measures overview.
+>   - `api.md` and the SDK guide linked to it and cleaned of internal paths.
+> - **Found while writing:** an `expiresAt` after 2038-01-19 was accepted, but AnonCreds hashes integers outside 32 bits, so every proof of such a credential would fail. Offers now refuse it (agent-service `builders.ts`, tests).
+>   - **Owner:** this caps credential validity at 2038. A different expiry unit would lift the cap but changes the API contract; decide before the first customer.
+> - **Published (owner decision): `docs.12id.com`**, a GitHub Pages site in the public repo `nazihar/12id-docs`, assembled by `docs/site/build.sh` and published by `.github/workflows/docs.yml` on every docs change. Pages: the guides, the API reference (Redoc, pinned with SRI) and `openapi.json`. The workflow skips until the setup below exists.
+> - **Owner's one-time setup** (as for `maven.12id.com`, W3):
+>   1. create the public repo `nazihar/12id-docs` and turn on Pages from `master`;
+>   2. DNS `docs.12id.com` CNAME `nazihar.github.io`, then the custom domain and "Enforce HTTPS" in Pages;
+>   3. Actions secret `DOCS_REPO_TOKEN` in `nazihar/12id`: a fine-grained PAT, Contents read/write on `nazihar/12id-docs` only;
+>   4. run the `docs` workflow once by hand.
+> - **Owner, before publishing:** the hosting country in `data-protection.md` ("Where the data is hosted").
+
+The plan as written:
 - The §5.3 data-protection posture:
   - what deletion and retention actually do;
   - the ledger holds no PII;

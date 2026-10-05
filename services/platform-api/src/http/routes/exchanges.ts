@@ -149,7 +149,7 @@ export const exchangeRoutes = (deps: ExchangeDeps): FastifyPluginAsyncZod => asy
       schema: {
         tags: ['credentials'],
         summary: 'Offer a credential',
-        description: 'Asynchronous. Returns the exchange immediately in state `offer-sent`; `credential-issued` means the holder received it, `done` that it acknowledged. Attribute values are strings; `expiresAt` is epoch seconds as a string and must be in the future. At most 125 attributes, names up to 100 characters, values up to 4 KB, and 64 KB in all. `credentialDefinitionId` accepts the catalogue id or the ledger id.',
+        description: 'Asynchronous. Returns the exchange immediately in state `offer-sent`; `credential-issued` means the holder received it, `done` that it acknowledged. Attribute values are strings; `expiresAt` is epoch seconds as a string, in the future and at most 2147483647 (2038-01-19; predicates compare 32-bit integers). At most 125 attributes, names up to 100 characters, values up to 4 KB, and 64 KB in all. `credentialDefinitionId` accepts the catalogue id or the ledger id.',
         body: z.object({ connectionId: recordId, credentialDefinitionId: z.string().min(1).max(300), attributes: credentialValuesSchema, externalId, biometric: biometricInput }),
         response: { 202: credentialView, 400: errorBody, 404: errorBody, 409: errorBody, 422: errorBody },
       },
