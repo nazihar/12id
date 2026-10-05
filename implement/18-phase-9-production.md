@@ -34,7 +34,7 @@
   - **Owner decisions:**
     1. **Mediator capacity for the target wallet count:** more replicas and hosts, a longer poll interval, and/or a cheaper mediator per message.
     2. **The delete-before-send window:** accept it, or a `-p7` patch.
-- **W5 step 0, the first platform release:** `v0.1.0-rc.1` (2026-10-04) and `-rc.2` built by CI; `-rc.3` adds the W7 expiry guard. Then `v0.1.0` on the rc staging passed.
+- **W5 step 0 done 2026-10-05: `v0.1.0` is released.** `-rc.1` (2026-10-04) and `-rc.2` were built by CI; `-rc.3` (commit `4dd3680`, + the W7 expiry guard) passed on staging: every service healthy, `docker inspect` 0, 22/22 targets, `smoke:platform-credo`, `smoke:biometric-credo` 18/18 and `e2e:staging` 3/3. `v0.1.0` on the same commit added `0.1.0` to the same nine digests (checked against `release-0.1.0.env`, no rebuild). Production (W5 step 4) deploys `release-0.1.0.env` from the GitHub release.
 - **W7 written 2026-10-05** (`19-…` W7): `credential-model.md` (new) and a revised `data-protection.md`, published at `docs.12id.com` once the owner's one-time setup is done. Found: credential expiry is capped at 2038-01-19 by 32-bit predicates (offers past it are now refused; owner decision whether to keep that unit).
 - **Next:**
   - **W5**, production bring-up. It needs from the owner the production VM (sized from W4 decision 1), DNS for `12id.com`, an SMTP account, the production offline age key, trustee custody, and the backup machine.

@@ -527,3 +527,25 @@ Each step followed `runbooks/key-rotation.md`, after a fresh backup, with the sm
     the owner's setup exists (`18-…` W7).
 - `openapi.json` was checked against the code (regenerated, no drift) before the one description change; the
   console's typed client was regenerated with it.
+
+### W4 cleanup (2026-10-05)
+- **Load tenant `load-w4`:**
+  - its 4,060 wallets were revoked through the public API (`cleanup.ts`, which now waits out the edge's 429s) and aged
+    past the 30-day grace (`cleanup.sql` phase A);
+  - **platform-api's hourly sweep then removed every one of their mediations through the mediator's admin route**
+    (mediations 4,157 → 97): review M10's sweep, exercised at scale;
+  - the rows were deleted (phase B), its API key was revoked, and its webhook endpoint removed.
+- **Staging:** the generator's rate-limit exemption is removed and `load-sampler.sh` is stopped.
+- **Dev PC:** the DR distro and its pull key are gone.
+
+## W5 step 0 — the first platform release (2026-10-04/05)
+- `v0.1.0-rc.1` (2026-10-04): the first `release-images.yml` run failed on runner disk space; the workflow frees disk
+  first now, and the re-run passed. Staging ran it for all of W4.
+- `v0.1.0-rc.2` (2026-10-05, the W4 fixes): built by CI (about 35 min); not deployed, superseded by rc.3.
+- `v0.1.0-rc.3` (commit `4dd3680`, + the W7 2038 expiry guard): built in 5 min (build cache). On staging every service is
+  healthy on the rc.3 digests, all migration and provision jobs exited 0, `check-inspect-clean.sh` 0 of 32, 22/22 targets,
+  `smoke:platform-credo` PASSED, `smoke:biometric-credo` 18/18, `e2e:staging` 3/3. (A first smoke run failed only
+  because the owner's `-R 3200` tunnel had dropped.)
+- **`v0.1.0` (2026-10-05):** tagged on `4dd3680`; CI added `0.1.0` to the rc's digests. `release-0.1.0.env` from the GitHub
+  release carries exactly the nine digests staging tested, and production deploys it.
+- Asset downloads need `Accept: application/octet-stream` only; a JSON `Accept` returns the asset's metadata instead.
