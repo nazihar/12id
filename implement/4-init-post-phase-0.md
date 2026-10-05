@@ -1010,7 +1010,7 @@ Plan: [`18-phase-9-production.md`](18-phase-9-production.md); evidence (when sta
 - [ ] W4: Phase 8 Hardening (load, failover, key rotation, DR drill). **Ran on staging 2026-10-04**: all four parts done; open are the mediator capacity decision for the target wallet count, the delete-before-send window, and the DR drill against production after W5
 - [ ] W5: production bring-up on `*.12id.com` from one release `vX.Y.Z`, pinned by digest
 - [ ] W6: iOS (blocked on a Mac, an Apple developer account and an iPhone)
-- [ ] W7: customer-facing documents (§5.3, no revocation, wallet recovery, §5.2). **Written 2026-10-05** (`services/platform-api/docs/credential-model.md` new, `data-protection.md` revised); published at `docs.12id.com` (GitHub Pages) once the owner's one-time setup is done (`18-phase-9-production.md` W7). Found: expiry capped at 2038-01-19 by 32-bit predicates; offers past it are now refused
+- [x] W7: customer-facing documents (§5.3, no revocation, wallet recovery, §5.2). **Written and published 2026-10-05 at https://docs.12id.com** (`services/platform-api/docs/credential-model.md` new, `data-protection.md` revised); published at `docs.12id.com` (GitHub Pages) once the owner's one-time setup is done (`18-phase-9-production.md` W7). Found: expiry capped at 2038-01-19 by 32-bit predicates; offers past it are now refused
 - [ ] Go-live gate: see the plan
 
 ---

@@ -549,3 +549,9 @@ Each step followed `runbooks/key-rotation.md`, after a fresh backup, with the sm
 - **`v0.1.0` (2026-10-05):** tagged on `4dd3680`; CI added `0.1.0` to the rc's digests. `release-0.1.0.env` from the GitHub
   release carries exactly the nine digests staging tested, and production deploys it.
 - Asset downloads need `Accept: application/octet-stream` only; a JSON `Accept` returns the asset's metadata instead.
+- **Published 2026-10-05:**
+  - The owner created `nazihar/12id-docs`, Pages and the `docs.12id.com` CNAME, and added `DOCS_REPO_TOKEN`.
+  - The `docs` workflow (run 37283213115, dispatched by hand) assembled and pushed the site.
+  - `https://docs.12id.com` serves the landing page, the four guides, the Redoc API reference and `openapi.json` (all 200).
+  - The certificate is `CN=docs.12id.com` (valid until 2027-01-03), and every cross-link between the guides resolves to a site page.
+  - From now on, any push to `master` that changes a guide republishes the site.
