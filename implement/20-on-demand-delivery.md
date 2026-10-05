@@ -1,7 +1,7 @@
 # On-demand message delivery (Android SDK 0.2.0)
 
 **Status (2026-10-05):** built, unit-tested, and **both phone smokes passed** (`smoke:sdk-android` all steps, `smoke:sdk-biometric-android` 12/12).
-- **Not tagged yet:** `sdk-android-v0.2.0` waits for the owner (commit, push, tag; publishing a version to maven.12id.com cannot be undone).
+- **Released 2026-10-05:** commit `0bd0b89`, tag `sdk-android-v0.2.0`. CI published `com.12id:holder-sdk-android:0.2.0` and both biometric add-ons to maven.12id.com about 11.5 min after the tag (`latest` = `release` = 0.2.0; 0.1.0 still served). docs.12id.com serves the 0.2.0 guide.
 - The code and the API dump are done. SDK 66/66 and fork 10/10 unit tests pass, `apiCheck` is clean, and the sample builds against 0.2.0 from `build/m2`.
 - The smokes are updated and type-check.
 
