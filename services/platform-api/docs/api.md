@@ -88,7 +88,9 @@ Answer 2xx within 10 s. Failures are retried with exponential backoff (5 s doubl
 
 ### `wallet.sync_requested`
 
-Sent when the mediator is holding messages for one of your wallets (`data.walletId`, `data.externalId`). Send a silent push to that installation with your own FCM/APNs setup; the app calls the SDK's `sync()`. At most one per wallet every 30 s. It may also arrive while the app is open, or right after first launch — treat it as "sync now", not as "a credential arrived".
+Sent when the mediator is holding messages for one of your wallets (`data.walletId`, `data.externalId`). Send a silent push to that installation with your own FCM/APNs setup; the app calls the SDK's `sync()`. At most one per wallet every 30 s; the SDK checks again for 32 s after each `sync()`, so a message queued inside those 30 s is still collected. It may also arrive while the app is open, even for a message the app has already collected: treat it as "sync now", not as "a credential arrived".
+
+The wallet does not poll on a timer. A message you send because the app asked for something (sign-in, an action) arrives within a second or two when the app calls the SDK's `expectMessages()` as it asks; a message you send on your own arrives with this push, or when the app next comes to the foreground. The Android guide has the full recipe ("Issue at sign-in, prove before an action"): your backend creates the wallet and an invitation at sign-in, stores the connection id from `connection.state_changed: completed` against the user, offers the credential on that connection, and later sends proof requests on the same connection.
 
 ## Biometric checks
 

@@ -214,6 +214,8 @@ The tested image is built on **Credo 0.6.0** (`@credo-ts/didcomm@0.6.0`, `@openw
 
 **Critical property.** The mediator sees only encrypted envelopes. It cannot read credentials, proofs, or connection contents. It *does* see metadata: which wallet, how often, message sizes — and with `PickUpV1`, a poll from every open wallet every 10 seconds.
 
+*On-demand delivery (2026-10-05, [`20-on-demand-delivery.md`](20-on-demand-delivery.md)): the Android SDK 0.2.0 no longer polls every 10 s; the mediator sees a wallet when the app opens, after a push, and while it waits for a reply it expects.*
+
 ### 2.4 Issuer agent
 
 **Purpose.** Holds the organisation's DID and signing keys. Publishes schemas and credential definitions. Runs the issue-credential protocol with holders.
@@ -276,6 +278,8 @@ Both depend on `aries-uniffi-wrappers`, which provides Askar, AnonCreds, and Ind
 - **Not implemented:** RFC 0035 Report Problem, RFC 0056 Service Decorator, any push-notification protocol (no device-token registration)
 
 **Relevant `AgentConfig` fields (Kotlin):** `genesisPath` (a plain filesystem path — runtime fetch needs no framework change), `mediatorConnectionsInvite`, `mediatorPickupStrategy` (framework default `PickUpV1`; **the sample app overrides it to `Implicit` — do not copy that**), `mediatorPollingInterval` (seconds, default 10), `useLegacyDidSovPrefix` (default `true`), `autoAcceptCredential`, `autoAcceptProof`. **Phase 5 pins:** `PickUpV1`, both auto-accepts `Never` (the SDK stamps `Always` per record when the user accepts an offer), `label` fixed at onboarding (the framework keys the wallet's storage by it), `mediatorConnectionsInvite` = the persisted onboarding invitation on every launch (a different URL makes the framework delete its mediation record).
+
+*On-demand delivery (2026-10-05, [`20-on-demand-delivery.md`](20-on-demand-delivery.md)): the SDK now sets `mediatorPollingInterval = 0` (fork F9) and decides itself when to poll.*
 
 **This list defines the protocol ceiling for the entire platform.** Configure the issuer, verifier and mediator to stay inside it.
 
@@ -342,6 +346,7 @@ With `QueueAndLiveModeDelivery` the mediator checks for a *live-mode* session (a
 - Pin `PickUpV1` in the SDK. The sample app's `Implicit` default must not ship.
 - Live delivery latency is bounded by `mediatorPollingInterval` (default 10 s) — observed immediate in practice while the socket was open, but do not promise sub-second delivery.
 - Every open wallet polls the mediator on that interval. That is the load profile to test (§10 Phase 8).
+  *On-demand delivery (2026-10-05, [`20-on-demand-delivery.md`](20-on-demand-delivery.md)): the Android SDK no longer polls while idle; load follows exchanges, not open apps.*
 - The pre-Phase-0 guidance ("implicit → `DirectDelivery` **or** `QueueAndLiveModeDelivery`") was wrong in both directions.
 
 ### 2.7.4 Required holder fork changes
@@ -355,6 +360,8 @@ With `QueueAndLiveModeDelivery` the mediator checks for a *live-mode* session (a
    File: `ariesframework/src/main/java/org/hyperledger/ariesframework/connection/models/didauth/DidDoc.kt`
 
 **Phase 5 added four more (all small, `sdk-android/FORK.md`):** F3 restartable pickup (`startPickup()`/`stopPickup()`, so the SDK pauses polling in the background), F4 `AgentEvents.PickupEvent(messageCount)` after every batch (so `sync()` knows when the queue is drained), F5 logback out of the library (the SDK ships an slf4j binding that forwards framework logs to the host app instead), F6 consumer R8 rules. No further source change was needed for the SDK.
+
+*On-demand delivery (2026-10-05, [`20-on-demand-delivery.md`](20-on-demand-delivery.md)): F9 added: `mediatorPollingInterval <= 0` starts no pickup timer; the SDK sets 0 and polls on demand (F3 is no longer called by the SDK).*
 
 **Swift (not yet tested):** check both of the same points, plus pickup strategy support and `did:sov` prefix handling, before assuming parity.
 
@@ -386,7 +393,7 @@ The device only captures. The result comes from AWS server-side, so a modified a
 
 | From | To | Protocol | Transport | Direction | Notes |
 |---|---|---|---|---|---|
-| Holder SDK | Mediator | DIDComm v1: RFC 0211 coordination, **RFC 0212 batch pickup** | WSS for the handshake (invitation lists it first); **HTTPS with return-route for the polls** (observed in Phase 5) | Outbound from device | Poll every 10 s while the app is in the foreground; `sync()` on push |
+| Holder SDK | Mediator | DIDComm v1: RFC 0211 coordination, **RFC 0212 batch pickup** | WSS for the handshake (invitation lists it first); **HTTPS with return-route for the polls** (observed in Phase 5) | Outbound from device | Poll every 10 s while the app is in the foreground; `sync()` on push. *On-demand delivery (2026-10-05): windows after connect / accept / `expectMessages`, a drain on foreground, `sync()` + 32 s tail; no idle polling* |
 | Mediator | Holder SDK | DIDComm v1: batch response + queued messages | WSS | Over the holder's socket | Only in response to pickup; the holder has no inbound endpoint |
 | Holder SDK | Issuer/Verifier agent | DIDComm v1 (connections/1.0 request, credential request, presentation, acks) | HTTPS | **Outbound from device, direct** | Agent endpoints must be reachable from mobile networks |
 | Issuer/Verifier agent | Mediator | DIDComm v1 `routing/1.0/forward` | Holder's advertised mediator endpoint (WSS when ws is listed first) | Outbound | Credo opens a socket, sends, and closes it immediately when no response is expected — normal |
@@ -443,6 +450,7 @@ Private: Postgres instances, Redis, admin UI (behind auth + IP allowlist). The m
 4. SDK fetches its single-use mediator invitation from `GET /v1/wallet/mediator-invitation` and **persists it**; every later launch passes the same URL (the framework deletes its mediation record when the URL changes).
 5. SDK completes the DIDComm connection to the mediator (`connections/1.0`) and requests mediation; the grant comes back on the return route. **If this times out and the wallet has no organisation connections yet, the SDK fetches one new invitation and retries once** (trap 31, confirmed: a wiped wallet with a spent invitation was ready 26 s after launch). With connections present it reports `MediatorUnavailable` instead, because re-mediating would break their routing keys.
 6. SDK polls with `PickUpV1` every 10 s while the app is in the foreground (`ProcessLifecycleOwner`) and stops in the background; `sync()` polls on demand until a batch comes back empty.
+   *On-demand delivery (2026-10-05, [`20-on-demand-delivery.md`](20-on-demand-delivery.md)): no timer any more. The SDK drains once when the app comes to the foreground and polls in short windows after `connect`, `acceptOffer` and `expectMessages()` (1 s × 5, then 2 s, until the expected event; max 30 s, 120 s for `expectMessages`). Opt-in `idlePollInterval` for apps without push.*
 7. Nothing push-related is registered with the platform: the mediator connection created from the per-wallet invitation already identifies the wallet (§4.8).
 
 From this point, every pairwise DID the wallet creates advertises the mediator's endpoint and routing key (observed: `serviceEndpoint: ws://<mediator>`, one routing key).
@@ -502,6 +510,7 @@ If revocation is added later, the original flow applies (registry entries batche
 4. Platform API reads the connection's `out_of_band_id` (read-only role on the mediator database), finds the wallet, and emits at most one signed `wallet.sync_requested` webhook per wallet per 30 s (**confirmed**). *Since Phase 7 M2 (2026-09-22), webhooks are delivered from a fair-share pool, so a slow endpoint at another tenant no longer delays this wake-up.*
 5. The customer backend pushes its app with its own FCM/APNs; the app's push handler enqueues WorkManager expedited work that calls the SDK's `sync()` (sample: `SyncWorker`).
 6. `sync()` opens the wallet if the push started the process (using the last `initialize` configuration, polling left off in the background), then runs `PickUpV1` batch pickups until one comes back empty (fork change F4) or a timeout. (**Confirmed in Phase 5 with the process dead:** wake webhook 0.2 s after the offer, the offer collected 5 s after the simulated push, `done` 11 s after the offer. Phase 0/3 had confirmed the reopen path: collected 1.7 s after reopen.)
+   *On-demand delivery (2026-10-05, [`20-on-demand-delivery.md`](20-on-demand-delivery.md)): `sync()` drains through the SDK's `PickupRunner`, then checks three more times over 32 s (the sync tail), because the platform sends at most one `wallet.sync_requested` per wallet per 30 s; push workers call `awaitDelivery()`.*
 
 > Design note: the SDK exposes `sync()` for the host app to call from its own notification handler, rather than claiming a notification category. Customers already have push infrastructure. Two Android limits apply to *any* push: a **force-stopped** app (Settings → Force stop, OEM clean-up tools) is in the stopped state and receives nothing until the user opens it, and **MIUI** additionally needs the user's "Autostart" permission (app-op 10008) to start a killed app. Both are documented for customers in `sdk-android/docs/integration.md`.
 
@@ -583,6 +592,7 @@ Write this up once as a customer-facing document — every enterprise customer's
 - **Open mediation is confirmed** (§2.3) — access control is ours to build before production.
 - **The mediator webhook is unauthenticated** (source read). Network-restrict the receiving endpoint or front it with a proxy that adds authentication; never treat its payload as trusted input.
 - **Mediator metadata** leaks traffic patterns per connection, including a poll every 10 seconds from each open wallet. Document this for customers.
+  *On-demand delivery (2026-10-05, [`20-on-demand-delivery.md`](20-on-demand-delivery.md)): no more idle polls. The mediator sees the app when it opens, after a push and while it waits for an expected reply; `data-protection.md` says so.*
 - **Genesis file integrity** matters — a malicious genesis file points a wallet at a fake ledger. Serve it over HTTPS with pinning, or sign it. *Phase 5: the Android SDK verifies the sha256 from `/v1/ledger` over TLS; the minisign signature is published but not yet verified on device (no BLAKE2b in the SDK's dependencies).*
 - **No revocation in v1** means a leaked or wrongly issued credential cannot be invalidated before its expiry attribute passes (§4.7).
 - **Biometric data is special-category personal data** (GDPR Art. 9, BIPA; planned, Phase 6):
@@ -1011,6 +1021,7 @@ Plan: [`18-phase-9-production.md`](18-phase-9-production.md); evidence (when sta
 - [ ] W5: production bring-up on `*.12id.com` from one release `vX.Y.Z`, pinned by digest
 - [ ] W6: iOS (blocked on a Mac, an Apple developer account and an iPhone)
 - [x] W7: customer-facing documents (§5.3, no revocation, wallet recovery, §5.2). **Written and published 2026-10-05 at https://docs.12id.com** (`services/platform-api/docs/credential-model.md` new, `data-protection.md` revised); published at `docs.12id.com` (GitHub Pages) once the owner's one-time setup is done (`18-phase-9-production.md` W7). Found: expiry capped at 2038-01-19 by 32-bit predicates; offers past it are now refused
+- [x] On-demand delivery (2026-10-05, [`20-on-demand-delivery.md`](20-on-demand-delivery.md)): Android SDK 0.2.0 polls the mediator only when a reply is expected (windows after `connect` / `acceptOffer` / `expectMessages`), once on foreground, and on `sync()` plus a 32 s tail; no idle timer (fork F9). No platform change. Unit tests green; `smoke:sdk-android` (all steps, 0 pickups while idle) and `smoke:sdk-biometric-android` 12/12 passed on the phone; the tag `sdk-android-v0.2.0` is the owner's
 - [ ] Go-live gate: see the plan
 
 ---

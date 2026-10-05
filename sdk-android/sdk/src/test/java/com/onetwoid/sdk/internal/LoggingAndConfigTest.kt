@@ -9,6 +9,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.slf4j.impl.StaticLoggerBinder
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 /** The log floor and the https-only base URL (review M14). */
 class LoggingAndConfigTest {
@@ -71,5 +73,16 @@ class LoggingAndConfigTest {
         }
         val release = runCatching { checkApiBaseUrl("http://api.12id.com", debuggable = false) }.exceptionOrNull()
         assertTrue(release!!.message!!.contains("debuggable"))
+    }
+
+    @Test
+    fun `idle polling is off by default and at least 10 s when set`() {
+        checkIdlePollInterval(null)
+        checkIdlePollInterval(10.seconds)
+        checkIdlePollInterval(60.seconds)
+        for (interval in listOf(9.seconds, 1.seconds, Duration.ZERO)) {
+            val error = runCatching { checkIdlePollInterval(interval) }.exceptionOrNull()
+            assertTrue("expected a refusal for $interval, got $error", error is OneTwoIdException.InvalidConfiguration)
+        }
     }
 }

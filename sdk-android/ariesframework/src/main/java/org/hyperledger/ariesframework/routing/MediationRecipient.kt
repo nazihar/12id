@@ -193,11 +193,14 @@ class MediationRecipient(private val agent: Agent, private val dispatcher: Dispa
 
     @OptIn(DelicateCoroutinesApi::class)
     private suspend fun initiateMessagePickup(mediator: MediationRecord) {
+        // 12id fork change (F9): an interval of 0 or less leaves polling to the caller (the SDK polls on
+        // demand through pickupMessages()), so no timer starts after mediation.
+        val period = pollingPeriodMillis(agent.agentConfig.mediatorPollingInterval) ?: return
         val mediatorConnection = agent.connectionRepository.getById(mediator.connectionId)
         // 12id fork change (F3): never run two timers; startPickup() may call this again.
         synchronized(this) {
             pickupTimer?.cancel()
-            pickupTimer = timer(period = agent.agentConfig.mediatorPollingInterval * 1000) {
+            pickupTimer = timer(period = period) {
                 GlobalScope.launch {
                     pickupMessages(mediatorConnection)
                 }
@@ -336,3 +339,6 @@ class MediationRecipient(private val agent: Agent, private val dispatcher: Dispa
         }
     }
 }
+
+/** 12id fork change (F9): the pickup timer's period, or null when the timer is disabled (interval <= 0). */
+internal fun pollingPeriodMillis(intervalSeconds: Long): Long? = if (intervalSeconds <= 0) null else intervalSeconds * 1000

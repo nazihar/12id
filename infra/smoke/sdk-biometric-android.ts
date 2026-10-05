@@ -129,8 +129,11 @@ try {
   const connectionId = connected.event.data.id as string
   check('2 connected', true, connectionId.slice(0, 8))
 
-  const offer = (label: string) =>
-    api.must<{ id: string; threadId: string }>('POST', '/v1/credentials/offer', { connectionId, credentialDefinitionId: catalogue.credentialDefinitionLedgerId, attributes: offerAttributes(label), externalId: `${runId}-${label}`, biometric: { referenceImage } })
+  // On-demand delivery: the app expects the message as its backend starts the exchange (EXPECT).
+  const offer = async (label: string) => {
+    await action('EXPECT')
+    return api.must<{ id: string; threadId: string }>('POST', '/v1/credentials/offer',{ connectionId, credentialDefinitionId: catalogue.credentialDefinitionLedgerId, attributes: offerAttributes(label), externalId: `${runId}-${label}`, biometric: { referenceImage } })
+  }
   const pendingOffer = (label: string) =>
     waitFor(`offer ${label} on the phone`, async () => (await action('DUMP')).offers?.find((o) => o.attributes.name?.includes(label)), 120_000)
 
@@ -169,6 +172,7 @@ try {
       groups: [{ key: 'employee', attributes: ['name'], credentials: [{ schemaName: 'smoke-sdk-biometric' }] }],
       biometricPolicy: { mode: 'required' },
     })
+    await action('EXPECT')
     const created = await api.must<{ id: string }>('POST', '/v1/proofs/request', { connectionId, templateId: template.id, externalId: `${runId}-proof`, biometric: { referenceImage } })
     const request = await waitFor('proof request on the phone', async () => (await action('DUMP')).proofRequests?.[0], 120_000)
     check('5 the request carries its requirement', request.biometric?.status === 'Pending')

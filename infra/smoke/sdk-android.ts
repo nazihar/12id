@@ -9,10 +9,14 @@
  * (webhook receiver + /sdk/wallet). Build and install the app first:
  *   cd sdk-android && ./gradlew :sample:assembleDebug && adb install -r sample/build/outputs/apk/debug/sample-arm64-v8a-debug.apk
  *
- * Steps (plan T): 1 fresh install → Ready; 2 connect; 3 offer → pending (not auto-accepted) → accept
- * → done, second offer declined; 4 offline offer → wake webhook → simulated push in the background →
- * sync collects → accept → done; 5 template proof → respond → verified, second request declined;
- * 6 restart keeps the mediator connection and credentials; 7 wiped wallet + spent invitation recovers.
+ * Steps (plan T; on-demand delivery, implement/20-on-demand-delivery.md): 1 fresh install → Ready;
+ * 2 connect (the connect window); 3 EXPECT + offer → pending (not auto-accepted) → accept → done, a
+ * second offer pushed while the app is open → declined; 3b the open, idle app sends no pickups for 60 s;
+ * 3c an offer sent while the app is in the background without a push is collected when it opens;
+ * 4 offline offer → wake webhook → simulated push in the background → sync collects; a second offer
+ * inside the 30 s wake-up debounce gets no wake-up and is collected by the sync tail → both done;
+ * 5 EXPECT + template proof → respond → verified, second request declined; 6 restart keeps the
+ * mediator connection and credentials; 7 wiped wallet + spent invitation recovers.
  *
  * Env: PLATFORM_API, PLATFORM_API_KEY, PLATFORM_TENANT_ID (console setup over SSH, K1), WEBHOOK_URL, RECEIVER_PORT, CRED_DEF_ID (optional).
  */
@@ -72,6 +76,20 @@ async function waitReady(timeoutMs: number): Promise<Dump> {
   }
   throw new Error('wallet not Ready in time')
 }
+
+/** Reads the app's state (a local read: DUMP never asks the mediator) until [done] holds. */
+async function waitForDump(label: string, done: (d: Dump) => boolean, timeoutMs: number): Promise<Dump> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const dump = await action('DUMP')
+    if (done(dump)) return dump
+    await sleep(1_000)
+  }
+  throw new Error(`timed out waiting for ${label}`)
+}
+
+/** The SDK logs one Info line per mediator pickup (on-demand delivery); counts them in the app log. */
+const pickupLines = () => adb('logcat', '-d', '-s', 'onetwoid-sdk').split('\n').filter((l) => l.includes('mediator pickup (')).length
 
 const launch = () => adb('shell', 'am', 'start', '-n', `${APP}/.MainActivity`)
 const forceStop = () => adb('shell', 'am', 'force-stop', APP)
@@ -153,27 +171,28 @@ try {
   console.log(`  [${now()}] connected ${connectionId.slice(0, 8)}`)
 
   // --- 3: offer is pending, then accepted; a second offer declined -------------------------------
-  console.log('\n=== 3 OFFER: pending → accept; second offer declined ===')
+  // On-demand delivery: the open app does not poll while idle. The first offer is app-initiated (the app
+  // calls expectMessages() as it asks its backend); the second is organisation-initiated while the app is
+  // open, so it arrives with the push.
+  console.log('\n=== 3 OFFER: expected → pending → accept; pushed while open → declined ===')
+  await action('EXPECT')
+  const liveSentAt = Date.now()
   const live = await api.must<{ id: string }>('POST', '/v1/credentials/offer', { connectionId, credentialDefinitionId: credDefId, attributes: offerAttributes('live'), externalId })
-  await waitState('credential.state_changed', live.id, ['offer-sent'], 60_000, 'live offer')
-  let pending: Dump | undefined
-  for (let i = 0; i < 30 && !pending?.offers?.length; i++) {
-    await sleep(2_000)
-    pending = await action('DUMP')
-  }
-  if (!pending?.offers?.length) throw new Error('the offer never appeared in pendingOffers')
-  console.log(`  [${now()}] offer pending in the app (${pending.offers.length}); not auto-accepted`)
+  const pending = await waitForDump('the expected offer', (d) => !!d.offers?.length, 60_000)
+  const offerLatency = ((Date.now() - liveSentAt) / 1000).toFixed(1)
+  console.log(`  [${now()}] offer pending in the app ${offerLatency} s after the API call (${pending.offers?.length}); not auto-accepted`)
   await action('ACCEPT_OFFERS')
   const liveResult = await waitState('credential.state_changed', live.id, ['done', 'abandoned'], 120_000, 'live credential')
+  // Out of the wake-up debounce, so the second offer gets a wake-up of its own.
+  await sleep(32_000)
+  const eventsBefore3 = receiver.events.length
   const declined = await api.must<{ id: string }>('POST', '/v1/credentials/offer', { connectionId, credentialDefinitionId: credDefId, attributes: offerAttributes('declined'), externalId })
-  await waitState('credential.state_changed', declined.id, ['offer-sent'], 60_000, 'declined offer')
-  for (let i = 0; i < 30; i++) {
-    await sleep(2_000)
-    if ((await action('DUMP')).offers?.length) break
-  }
+  await receiver.waitFor('wallet.sync_requested (app open)', (e) => e.type === 'wallet.sync_requested' && e.event.data.walletId === walletId && receiver.events.indexOf(e) >= eventsBefore3, 30_000)
+  await action('SIMULATE_PUSH')
+  await waitForDump('the pushed offer', (d) => !!d.offers?.length, 60_000)
   await action('DECLINE_OFFERS')
   const declinedResult = await waitState('credential.state_changed', declined.id, ['abandoned', 'declined', 'done'], 120_000, 'declined offer')
-  results.offer = `accepted → ${liveResult.state}; declined → ${declinedResult.state}`
+  results.offer = `expected offer in ${offerLatency} s, accepted → ${liveResult.state}; pushed offer declined → ${declinedResult.state}`
   if (lastStep <= 3) {
     const badSignatures3 = receiver.events.filter((e) => !e.signatureValid).length
     console.log('\n=== smoke:sdk-android results (steps 1-3) ===')
@@ -182,8 +201,34 @@ try {
     throw new Error('__done__')
   }
 
-  // --- 4: offline offer, wake webhook, simulated push in the background ------------------------
-  console.log('\n=== 4 OFFLINE: process killed in the background, offer, wake webhook, simulated push, sync ===')
+  // --- 3b: an open, idle app does not poll ------------------------------------------------------
+  console.log('\n=== 3b IDLE: the open app sends no pickups ===')
+  // Let the accept window and the push's sync tail (32 s) finish first.
+  await sleep(35_000)
+  if (!isForeground()) throw new Error('3b needs the app in the foreground')
+  const pickupsBefore = pickupLines()
+  await sleep(60_000)
+  const idlePickups = pickupLines() - pickupsBefore
+  if (idlePickups !== 0) throw new Error(`the idle app sent ${idlePickups} pickup(s) in 60 s`)
+  results.idle = '0 pickups in 60 s with the app open'
+
+  // --- 3c: a missed push is collected when the app comes to the foreground ----------------------
+  console.log('\n=== 3c FOREGROUND DRAIN: offer while in the background, no push, then open ===')
+  adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
+  await sleep(32_000)
+  const missed = await api.must<{ id: string }>('POST', '/v1/credentials/offer', { connectionId, credentialDefinitionId: credDefId, attributes: offerAttributes('missed-push'), externalId })
+  await waitState('credential.state_changed', missed.id, ['offer-sent'], 60_000, 'missed-push offer')
+  await sleep(10_000)
+  if ((await action('DUMP')).offers?.length) throw new Error('the backgrounded app collected an offer without a push or a foreground')
+  const openedAt = Date.now()
+  launch()
+  await waitForDump('the offer, drained on foreground', (d) => !!d.offers?.length, 30_000)
+  const drainLatency = ((Date.now() - openedAt) / 1000).toFixed(1)
+  await action('DECLINE_OFFERS')
+  results.foregroundDrain = `offer collected ${drainLatency} s after the app opened`
+
+  // --- 4: offline offers, one wake webhook, simulated push in the background, sync + tail ----------
+  console.log('\n=== 4 OFFLINE: process killed; offer → wake → push → sync; second offer inside the debounce → tail ===')
   await killInBackground()
   console.log(`  [${now()}] app process killed (not force-stopped); waiting 32 s for the wake-up debounce window`)
   await sleep(32_000)
@@ -195,42 +240,44 @@ try {
   // The broadcast starts the process in the background; SyncWorker opens the wallet and syncs.
   const syncDump = await action('SIMULATE_PUSH', [], 90_000)
   if (isForeground()) throw new Error('the app came to the foreground during the push path')
-  let collected: Dump | undefined
-  for (let i = 0; i < 45 && !collected?.offers?.length; i++) {
-    await sleep(2_000)
-    collected = await action('DUMP')
-  }
-  if (!collected?.offers?.length) throw new Error('the offline offer was not collected by sync()')
+  await waitForDump('the offline offer, collected by sync()', (d) => (d.offers?.length ?? 0) >= 1, 90_000)
   console.log(`  [${now()}] offline offer collected in the background (state ${syncDump.state})`)
+  // Inside the platform's 30 s debounce: no wake-up of its own; the SDK's sync tail must collect it.
+  const offline2 = await api.must<{ id: string }>('POST', '/v1/credentials/offer', { connectionId, credentialDefinitionId: credDefId, attributes: offerAttributes('offline-2'), externalId })
+  const offline2SentAt = Date.now()
+  await waitForDump('the second offer, collected by the sync tail', (d) => (d.offers?.length ?? 0) >= 2, 45_000)
+  const tailLatency = ((Date.now() - offline2SentAt) / 1000).toFixed(1)
+  const wakes4 = receiver.events.slice(eventsBefore).filter((e) => e.type === 'wallet.sync_requested' && e.event.data.walletId === walletId).length
+  if (isForeground()) throw new Error('the app came to the foreground during the sync tail')
+  console.log(`  [${now()}] second offer collected by the tail ${tailLatency} s after it was sent (wake-ups: ${wakes4})`)
   await action('ACCEPT_OFFERS')
   const offlineResult = await waitState('credential.state_changed', offline.id, ['done', 'abandoned'], 120_000, 'offline credential')
-  results.offline = `${offlineResult.state}, wake webhook at ${wake.receivedAt}`
+  const offline2Result = await waitState('credential.state_changed', offline2.id, ['done', 'abandoned'], 120_000, 'second offline credential')
+  results.offline = `${offlineResult.state} + ${offline2Result.state}; wake webhook at ${wake.receivedAt}; second offer by the tail in ${tailLatency} s with ${wakes4} wake-up(s)`
 
   // --- 5: proof from a template; a second request declined -------------------------------------
   console.log('\n=== 5 PROOF (template with the automatic expiresAt predicate) ===')
-  // The push path left the app running in the background with polling paused (by design); the user
-  // opens the app to answer a proof request, which resumes polling.
+  // The user opens the app (a foreground drain) and starts an action the backend guards with a proof
+  // request: the app calls expectMessages() as it asks.
   launch()
   await waitReady(60_000)
   const template = await setup.must<{ id: string }>('POST', '/v1/proof-templates', { name: 'smoke-sdk-android', groups: [{ key: 'employee', attributes: ['name', 'department'], credentials: [{ credentialDefinitionId: credDefId }] }] })
+  await sleep(3_000)
+  await action('EXPECT')
+  const proofSentAt = Date.now()
   const proof = await api.must<{ id: string }>('POST', '/v1/proofs/request', { connectionId, templateId: template.id, externalId })
-  await waitState('proof.state_changed', proof.id, ['request-sent'], 60_000, 'proof request')
-  for (let i = 0; i < 30; i++) {
-    await sleep(2_000)
-    if ((await action('DUMP')).proofRequests?.length) break
-  }
+  await waitForDump('the expected proof request', (d) => !!d.proofRequests?.length, 60_000)
+  const requestLatency = ((Date.now() - proofSentAt) / 1000).toFixed(1)
   await action('RESPOND_PROOFS')
   const proofResult = await waitState('proof.state_changed', proof.id, ['done', 'abandoned'], 120_000, 'proof')
+  const proofDone = ((Date.now() - proofSentAt) / 1000).toFixed(1)
   const proofView = await api.must<{ verified: boolean | null; disclosed: Record<string, Record<string, string>> | null }>('GET', `/v1/proofs/${proof.id}`)
+  await action('EXPECT')
   const proof2 = await api.must<{ id: string }>('POST', '/v1/proofs/request', { connectionId, templateId: template.id, externalId })
-  await waitState('proof.state_changed', proof2.id, ['request-sent'], 60_000, 'second proof request')
-  for (let i = 0; i < 30; i++) {
-    await sleep(2_000)
-    if ((await action('DUMP')).proofRequests?.length) break
-  }
+  await waitForDump('the second proof request', (d) => !!d.proofRequests?.length, 60_000)
   await action('DECLINE_PROOFS')
   const proof2Result = await waitState('proof.state_changed', proof2.id, ['abandoned', 'declined', 'done'], 120_000, 'declined proof')
-  results.proof = `${proofResult.state} verified=${proofView.verified} ${JSON.stringify(proofView.disclosed ?? {})}; declined → ${proof2Result.state}`
+  results.proof = `${proofResult.state} verified=${proofView.verified} ${JSON.stringify(proofView.disclosed ?? {})}; in the app after ${requestLatency} s, done after ${proofDone} s (incl. the smoke's DUMP round trips); declined → ${proof2Result.state}`
 
   // --- 6: restart keeps the mediator connection and the credentials ----------------------------
   console.log('\n=== 6 RESTART ===')
@@ -264,7 +311,7 @@ try {
   for (const [k, v] of Object.entries(results)) console.log(`${k.padEnd(16)}: ${v}`)
   console.log(`${'signatures'.padEnd(16)}: ${badSignatures === 0 ? 'all valid' : `${badSignatures} INVALID`}`)
   console.log(`${'externalId'.padEnd(16)}: ${externalId}`)
-  passed = liveResult.state === 'done' && offlineResult.state === 'done' && proofResult.state === 'done' && proofView.verified === true && sameMediation && recovered.state === 'Ready' && reFetched && badSignatures === 0
+  passed = liveResult.state === 'done' && offlineResult.state === 'done' && offline2Result.state === 'done' && wakes4 === 1 && proofResult.state === 'done' && proofView.verified === true && sameMediation && recovered.state === 'Ready' && reFetched && badSignatures === 0
 } catch (error) {
   if (!(error instanceof Error && error.message === '__done__')) {
     console.error('SMOKE FAILED:', error)

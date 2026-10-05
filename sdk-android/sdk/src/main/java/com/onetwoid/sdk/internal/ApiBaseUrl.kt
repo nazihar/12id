@@ -2,6 +2,8 @@ package com.onetwoid.sdk.internal
 
 import com.onetwoid.sdk.OneTwoIdException
 import java.net.URI
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * The platform base URL must be https (review M14): the wallet token is a bearer credential on every
@@ -15,4 +17,13 @@ internal fun checkApiBaseUrl(apiBaseUrl: String, debuggable: Boolean) {
     val detail = if (scheme == "http") "apiBaseUrl '$apiBaseUrl' is not https; http is accepted only in a debuggable build"
     else "apiBaseUrl '$apiBaseUrl' must be an https URL"
     throw OneTwoIdException.InvalidConfiguration(detail)
+}
+
+/** The shortest opt-in idle poll: a shorter one would bring back the load on-demand delivery removed. */
+internal val MIN_IDLE_POLL_INTERVAL = 10.seconds
+
+internal fun checkIdlePollInterval(interval: Duration?) {
+    if (interval != null && interval < MIN_IDLE_POLL_INTERVAL) {
+        throw OneTwoIdException.InvalidConfiguration("idlePollInterval $interval is below the minimum of $MIN_IDLE_POLL_INTERVAL")
+    }
 }

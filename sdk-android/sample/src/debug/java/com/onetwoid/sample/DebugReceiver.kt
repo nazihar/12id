@@ -10,10 +10,11 @@ import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Debug-only entry points for `smoke:sdk-android`, driven with
- * `adb shell am broadcast -a com.onetwoid.sample.<ACTION> [--es url <invitation>]`.
+ * `adb shell am broadcast -a com.onetwoid.sample.<ACTION> [--es url <invitation>] [--ei seconds <n>]`.
  * Every action logs one `dump {json}` line the smoke reads from logcat.
  */
 class DebugReceiver : BroadcastReceiver() {
@@ -24,6 +25,8 @@ class DebugReceiver : BroadcastReceiver() {
             try {
                 when (intent.action?.substringAfterLast('.')) {
                     "SIMULATE_PUSH" -> SyncWorker.enqueue(context)
+                    // What an app does when it asks its backend to start an exchange (on-demand delivery).
+                    "EXPECT" -> OneTwoId.expectMessages(intent.getIntExtra("seconds", 30).seconds)
                     "CONNECT" -> OneTwoId.connect(requireNotNull(intent.getStringExtra("url")) { "missing --es url" })
                     "ACCEPT_OFFERS" -> OneTwoId.pendingOffers().forEach { OneTwoId.acceptOffer(it.id) }
                     "DECLINE_OFFERS" -> OneTwoId.pendingOffers().forEach { OneTwoId.declineOffer(it.id) }

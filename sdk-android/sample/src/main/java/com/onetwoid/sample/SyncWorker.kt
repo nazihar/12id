@@ -19,7 +19,7 @@ import com.onetwoid.sdk.OneTwoId
  *     }
  *
  * Expedited work runs right away even in the background; the SDK opens the wallet itself if the
- * process was started by the push.
+ * process was started by the push. It returns after the SDK's follow-up checks (`awaitDelivery`).
  */
 class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
@@ -28,6 +28,9 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         return try {
             val result = OneTwoId.sync()
             Log.i(SampleApp.TAG, "sync offers=${result.offersReceived} proofRequests=${result.proofRequestsReceived} stored=${result.credentialsStored} drained=${result.drained}")
+            // The SDK checks the mediator again over the next ~32 s (a message queued right after this
+            // push gets no push of its own); keep the work, and so the process, alive for that.
+            OneTwoId.awaitDelivery()
             Result.success()
         } catch (e: Exception) {
             Log.e(SampleApp.TAG, "sync failed: ${e.message}", e)

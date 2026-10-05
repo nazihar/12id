@@ -135,6 +135,7 @@ data class OneTwoIdConfig(val apiBaseUrl: String, val walletTokenProvider: suspe
   - v2 credential events from the fork (`CredentialEventV2`) are ignored.
 - **Lifecycle:**
   - `ProcessLifecycleOwner`: foreground → `startPickup()` (F3); background → `stopPickup()`.
+  - *On-demand delivery (2026-10-05, [`20-on-demand-delivery.md`](20-on-demand-delivery.md)): replaced. No timer (fork F9, `mediatorPollingInterval = 0`); foreground → one drain; windows after `connect` / `acceptOffer` / `expectMessages`; `sync()` + a 32 s tail.*
   - Public calls are serialized behind init (a mutex), and every agent call runs on `Dispatchers.IO`.
 - **`sync()`:**
   - Works from a cold process started by a push: runs `initialize` if needed (config supplied at `Application.onCreate`).

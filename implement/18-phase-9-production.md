@@ -317,6 +317,7 @@ GHCR needs no secret: the workflow's `GITHUB_TOKEN` pushes to `ghcr.io/nazihar` 
 
 ### W6 — iOS (blocked on a Mac, an Apple developer account and an iPhone) — ~3–4 weeks once unblocked
 - Swift pass: the §2.7.4 fork changes, `PickUpV1`, the `did:sov` prefix, and the Phase 0 checklist.
+- **Delivery model** (on-demand delivery, 2026-10-05, [`20-on-demand-delivery.md`](20-on-demand-delivery.md)): mirror Android 0.2.0. No polling timer; windows after `connect` / `acceptOffer` / `expectMessages`; one drain on foreground; `sync()` plus a 32 s tail. iOS throttles silent background pushes, so the drain on foreground carries more of the delivery there.
 - SDK mirroring `com.onetwoid.sdk.OneTwoId`:
   - the AWS biometric add-on;
   - SPM distribution from a self-hosted git or static URL;

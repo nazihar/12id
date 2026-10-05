@@ -11,10 +11,13 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import com.onetwoid.sdk.internal.BiometricMapping
 import com.onetwoid.sdk.internal.checkApiBaseUrl
 import com.onetwoid.sdk.internal.CaptureModuleDto
+import com.onetwoid.sdk.internal.checkIdlePollInterval
+import com.onetwoid.sdk.internal.DeliveryScheduler
 import com.onetwoid.sdk.internal.GenesisCache
 import com.onetwoid.sdk.internal.KeystoreKeyWrapper
 import com.onetwoid.sdk.internal.Mappers
 import com.onetwoid.sdk.internal.MediatorInvitationPolicy
+import com.onetwoid.sdk.internal.PickupRunner
 import com.onetwoid.sdk.internal.PlatformClient
 import com.onetwoid.sdk.internal.PlatformRefusal
 import com.onetwoid.sdk.internal.SdkLog
@@ -24,7 +27,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -33,13 +35,10 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.filterIsInstance
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import org.hyperledger.ariesframework.agent.Agent
 import org.hyperledger.ariesframework.agent.AgentConfig
 import org.hyperledger.ariesframework.agent.AgentEvents
@@ -70,6 +69,10 @@ import org.hyperledger.ariesframework.proofs.models.ProofRequest as IndyProofReq
 public object OneTwoId {
     private const val WALLET_ID = "onetwoid"
     private const val STATE_DIRECTORY = "onetwoid"
+
+    /** How long the wallet polls for an expected reply (on-demand delivery). */
+    private val WINDOW = 30.seconds
+    private val MAX_WINDOW = 120.seconds
 
     private val initMutex = Mutex()
     private val _state = MutableStateFlow<WalletState>(WalletState.Uninitialized)
@@ -115,6 +118,7 @@ public object OneTwoId {
         SdkLog.minLevel = config.minLogLevel
         // The wallet token travels on this URL; cleartext is only blocked by Android itself from API 28.
         checkApiBaseUrl(config.apiBaseUrl, (appContext.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0)
+        checkIdlePollInterval(config.idlePollInterval)
         initMutex.withLock {
             if (session != null) return
             _state.value = WalletState.Initializing
@@ -140,7 +144,10 @@ public object OneTwoId {
         }
     }
 
-    /** Accepts an organisation's connection invitation (the `?oob=` / `?c_i=` URL or its QR payload). */
+    /**
+     * Accepts an organisation's connection invitation (the `?oob=` / `?c_i=` URL or its QR payload).
+     * The wallet then polls briefly for the organisation's answer ([WalletEvent.ConnectionCompleted]).
+     */
     public suspend fun connect(invitationUrl: String): Connection = withSession { s ->
         try {
             s.agent.oob.parseInvitationShortUrl(invitationUrl)
@@ -152,7 +159,12 @@ public object OneTwoId {
             // Pass the label explicitly: an absent one is sent as no label at all.
             ReceiveOutOfBandInvitationConfig(label = s.label, autoAcceptConnection = true),
         )
-        record?.let(Mappers::connection) ?: throw OneTwoIdException.InvalidInvitation()
+        if (record == null) throw OneTwoIdException.InvalidInvitation()
+        // The organisation's connection response comes back through the mediator.
+        if (record.state != ConnectionState.Complete) {
+            s.delivery.open(WINDOW) { it is WalletEvent.ConnectionCompleted && it.connectionId == record.id }
+        }
+        Mappers.connection(record)
     }
 
     /** Connections with organisations (the mediator connection is not listed). */
@@ -181,7 +193,10 @@ public object OneTwoId {
         BiometricMapping.guard(id, requirementsByThread(s, listOf(record.threadId))[record.threadId])
         // The per-record Always makes the framework store and acknowledge the credential when it arrives.
         s.agent.credentials.acceptOffer(AcceptOfferOptions(credentialRecordId = id, autoAcceptCredential = AutoAcceptCredential.Always))
-        Unit
+        // The issued credential comes back through the mediator.
+        s.delivery.open(WINDOW) {
+            (it is WalletEvent.CredentialStored && it.offerId == id) || (it is WalletEvent.ExchangeFailed && it.exchangeId == id)
+        }
     }
 
     public suspend fun declineOffer(id: String): Unit = withSession { s ->
@@ -281,9 +296,30 @@ public object OneTwoId {
     }
 
     /**
+     * Tells the wallet a message is on its way, so it polls the mediator until the first offer or proof
+     * request arrives, or for at most [timeout] (capped at 120 s). Call it when your app asks your
+     * backend to start an exchange, e.g. right after sign-in (your backend then offers a credential) or
+     * before an action your backend guards with a proof request. Returns at once.
+     *
+     * Without it, a message the organisation sends while the app is open arrives with your push
+     * ([sync]) or the next time the app comes to the foreground: the wallet does not poll while idle
+     * unless [OneTwoIdConfig.idlePollInterval] is set.
+     */
+    public fun expectMessages(timeout: Duration = 30.seconds) {
+        val s = session ?: throw OneTwoIdException.NotInitialized()
+        s.delivery.open(timeout.coerceIn(1.seconds, MAX_WINDOW)) {
+            it is WalletEvent.OfferReceived || it is WalletEvent.ProofRequested || it is WalletEvent.ExchangeFailed
+        }
+    }
+
+    /**
      * Collects messages queued at the mediator now. Call it from your push handler when your backend
      * receives `wallet.sync_requested`. Opens the wallet first if this process has not done so, using the
      * configuration of the last [initialize] call.
+     *
+     * Returns when the queue is empty. The wallet then checks the mediator three more times in the next
+     * 32 s, because the platform sends at most one `wallet.sync_requested` per wallet every 30 s; keep your
+     * worker alive for that with [awaitDelivery].
      */
     public suspend fun sync(timeout: Duration = 20.seconds): SyncResult {
         val s = session ?: lastInit?.let { (context, config) ->
@@ -294,25 +330,24 @@ public object OneTwoId {
         val offersBefore = s.offersReceived.get()
         val requestsBefore = s.proofRequestsReceived.get()
         val storedBefore = s.credentialsStored.get()
-        val drained = withContext(Dispatchers.IO) {
-            withTimeoutOrNull(timeout) {
-                while (true) {
-                    // Subscribe before asking, or a fast batch reply is missed (the bus has no replay).
-                    val nextBatch = async(start = CoroutineStart.UNDISPATCHED) {
-                        s.agent.eventBus.events.filterIsInstance<AgentEvents.PickupEvent>().first()
-                    }
-                    s.agent.mediationRecipient.pickupMessages()
-                    if (nextBatch.await().messageCount == 0) break
-                }
-                true
-            } ?: false
-        }
+        val drained = withContext(Dispatchers.IO) { s.pickups.drain("sync", timeout) }
+        s.delivery.tail()
         return SyncResult(
             offersReceived = s.offersReceived.get() - offersBefore,
             proofRequestsReceived = s.proofRequestsReceived.get() - requestsBefore,
             credentialsStored = s.credentialsStored.get() - storedBefore,
             drained = drained,
         )
+    }
+
+    /**
+     * Suspends until the wallet's follow-up polls have finished: the checks after [sync] (at most about
+     * 32 s) and any open [connect] / [acceptOffer] / [expectMessages] window. Call it at the end of the
+     * worker your push starts, after [sync], so Android keeps the process running for them. Returns at
+     * once when nothing is running or the wallet is not open.
+     */
+    public suspend fun awaitDelivery() {
+        session?.delivery?.awaitIdle()
     }
 
     /**
@@ -430,6 +465,8 @@ public object OneTwoId {
         mediatorConnectionsInvite = invitation,
         // 4-init §2.7.3: the only strategy that delivers both live and queued messages.
         mediatorPickupStrategy = MediatorPickupStrategy.PickUpV1,
+        // No framework timer (fork change F9): the SDK polls on demand through DeliveryScheduler.
+        mediatorPollingInterval = 0,
         label = label,
         autoAcceptCredential = AutoAcceptCredential.Never,
         autoAcceptProof = AutoAcceptProof.Never,
@@ -441,25 +478,22 @@ public object OneTwoId {
 
     private suspend fun attachLifecycle(s: Session) {
         val observer = object : DefaultLifecycleObserver {
+            // Also delivered at addObserver when the app is already in the foreground: the first drain.
             override fun onStart(owner: LifecycleOwner) {
-                s.log(LogLevel.Debug, "app in foreground: polling the mediator")
-                s.scope.launch {
-                    runCatching { s.agent.mediationRecipient.startPickup() }
-                        .onFailure { s.log(LogLevel.Warn, "could not resume mediator polling", it) }
-                }
+                s.log(LogLevel.Debug, "app in foreground: collecting queued messages")
+                s.delivery.onForeground()
             }
 
             override fun onStop(owner: LifecycleOwner) {
-                s.log(LogLevel.Debug, "app in background: mediator polling paused")
-                s.agent.mediationRecipient.stopPickup()
+                s.log(LogLevel.Debug, "app in background")
+                s.delivery.onBackground()
             }
         }
         withContext(Dispatchers.Main) {
             val lifecycle = ProcessLifecycleOwner.get().lifecycle
-            // Opened in the background (push wake): do not keep polling; sync() collects instead.
+            // Opened in the background (push wake): nothing polls; sync() collects.
             if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
-                s.log(LogLevel.Debug, "opened in the background (${lifecycle.currentState}): mediator polling paused")
-                s.agent.mediationRecipient.stopPickup()
+                s.log(LogLevel.Debug, "opened in the background (${lifecycle.currentState})")
             }
             lifecycle.addObserver(observer)
         }
@@ -510,7 +544,10 @@ public object OneTwoId {
             }
             else -> null
         }
-        mapped?.let(::emit)
+        mapped?.let {
+            s.delivery.signal(it)
+            emit(it)
+        }
     }
 
     private fun emit(event: WalletEvent) {
@@ -597,6 +634,8 @@ public object OneTwoId {
         val offersReceived = AtomicInteger()
         val proofRequestsReceived = AtomicInteger()
         val credentialsStored = AtomicInteger()
+        val pickups = PickupRunner(send = { agent.mediationRecipient.pickupMessages() }, events = agent.eventBus.events)
+        val delivery = DeliveryScheduler(scope, pickups, config.idlePollInterval)
 
         @Volatile var lifecycleObserver: DefaultLifecycleObserver? = null
 
