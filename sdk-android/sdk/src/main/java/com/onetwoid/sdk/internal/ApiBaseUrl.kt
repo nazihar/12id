@@ -19,6 +19,25 @@ internal fun checkApiBaseUrl(apiBaseUrl: String, debuggable: Boolean) {
     throw OneTwoIdException.InvalidConfiguration(detail)
 }
 
+/**
+ * 12id's production genesis signing keys (primary and backup), the default trust anchor (review M15).
+ * Empty until production's ledger ceremony generates them (Phase 9 W5); until then every app names
+ * its environment's key in `OneTwoIdConfig.genesisPublicKeys`.
+ */
+internal val PRODUCTION_GENESIS_PUBLIC_KEYS: List<String> = emptyList()
+
+/** Without a valid key the genesis file cannot be authenticated, so the wallet does not start. */
+internal fun checkGenesisPublicKeys(keys: List<String>) {
+    if (keys.isEmpty()) {
+        throw OneTwoIdException.InvalidConfiguration("genesisPublicKeys is empty: name the minisign public key of your 12id environment's genesis file")
+    }
+    for (key in keys) {
+        if (MinisignPublicKey.parse(key) == null) {
+            throw OneTwoIdException.InvalidConfiguration("genesisPublicKeys: not a minisign public key: $key")
+        }
+    }
+}
+
 /** The shortest opt-in idle poll: a shorter one would bring back the load on-demand delivery removed. */
 internal val MIN_IDLE_POLL_INTERVAL = 10.seconds
 

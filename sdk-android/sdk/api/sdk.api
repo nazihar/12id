@@ -202,8 +202,11 @@ public final class com/onetwoid/sdk/OneTwoIdConfig {
 	public fun <init> (Ljava/lang/String;Lkotlin/jvm/functions/Function1;Ljava/lang/String;Lcom/onetwoid/sdk/LogSink;Lcom/onetwoid/sdk/LogLevel;)V
 	public synthetic fun <init> (Ljava/lang/String;Lkotlin/jvm/functions/Function1;Ljava/lang/String;Lcom/onetwoid/sdk/LogSink;Lcom/onetwoid/sdk/LogLevel;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public synthetic fun <init> (Ljava/lang/String;Lkotlin/jvm/functions/Function1;Ljava/lang/String;Lcom/onetwoid/sdk/LogSink;Lcom/onetwoid/sdk/LogLevel;Lkotlin/time/Duration;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ljava/lang/String;Lkotlin/jvm/functions/Function1;Ljava/lang/String;Lcom/onetwoid/sdk/LogSink;Lcom/onetwoid/sdk/LogLevel;Lkotlin/time/Duration;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ljava/lang/String;Lkotlin/jvm/functions/Function1;Ljava/lang/String;Lcom/onetwoid/sdk/LogSink;Lcom/onetwoid/sdk/LogLevel;Lkotlin/time/Duration;Ljava/util/List;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public synthetic fun <init> (Ljava/lang/String;Lkotlin/jvm/functions/Function1;Ljava/lang/String;Lcom/onetwoid/sdk/LogSink;Lcom/onetwoid/sdk/LogLevel;Lkotlin/time/Duration;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun getApiBaseUrl ()Ljava/lang/String;
+	public final fun getGenesisPublicKeys ()Ljava/util/List;
 	public final fun getIdlePollInterval-FghU774 ()Lkotlin/time/Duration;
 	public final fun getLabel ()Ljava/lang/String;
 	public final fun getLogSink ()Lcom/onetwoid/sdk/LogSink;

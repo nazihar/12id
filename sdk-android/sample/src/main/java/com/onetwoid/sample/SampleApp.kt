@@ -51,6 +51,9 @@ class SampleApp : Application() {
                 LogLevel.Error -> Log.e(SDK_TAG, message, error)
             }
         },
+        idlePollInterval = null,
+        // This sample talks to staging, whose genesis file is signed with staging's key.
+        genesisPublicKeys = listOf(BuildConfig.GENESIS_PUBLIC_KEY),
     )
 
     companion object {

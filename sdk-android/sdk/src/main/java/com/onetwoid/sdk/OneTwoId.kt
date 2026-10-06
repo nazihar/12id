@@ -10,6 +10,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.onetwoid.sdk.internal.BiometricMapping
 import com.onetwoid.sdk.internal.checkApiBaseUrl
+import com.onetwoid.sdk.internal.checkGenesisPublicKeys
 import com.onetwoid.sdk.internal.CaptureModuleDto
 import com.onetwoid.sdk.internal.checkIdlePollInterval
 import com.onetwoid.sdk.internal.DeliveryScheduler
@@ -119,6 +120,7 @@ public object OneTwoId {
         // The wallet token travels on this URL; cleartext is only blocked by Android itself from API 28.
         checkApiBaseUrl(config.apiBaseUrl, (appContext.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0)
         checkIdlePollInterval(config.idlePollInterval)
+        checkGenesisPublicKeys(config.genesisPublicKeys)
         initMutex.withLock {
             if (session != null) return
             _state.value = WalletState.Initializing
@@ -401,7 +403,7 @@ public object OneTwoId {
             }
         }
 
-        val genesis = GenesisCache(File(store.directory, "genesis"), platform).resolve(state.genesisSha256)
+        val genesis = GenesisCache(File(store.directory, "genesis"), platform, config.genesisPublicKeys).resolve(state.genesisSha256)
         if (genesis.sha256 != state.genesisSha256) {
             state = store.update { it.copy(genesisSha256 = genesis.sha256) }
         }

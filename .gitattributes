@@ -1,0 +1,2 @@
+# Signed test fixtures: the signature covers the exact bytes, so no line-ending conversion.
+sdk-android/sdk/src/test/resources/genesis/* -text

@@ -611,10 +611,123 @@ Fixed in `5153935`: Fastify 5.12.5 plus lockfile updates. `v0.2.0-rc.1` was buil
 | `e2e:staging` | **3/3** |
 | `smoke:sdk-android` (phone, sample on SDK 0.2.1) | **PASSED, all steps**: expected offer in 3.0 s, 0 pickups in 60 s idle, foreground drain 2.5 s, tail 29.2 s with 1 wake-up, proof verified. Credentials carry `expiresOn: 20261105` |
 
-The phone's USB link dropped repeatedly. The first phone run stopped at step 3b on "waiting for device"; the rerun passed, and its slower proof time (22.8 s) is the adb waits.
+The phone's USB link dropped repeatedly. The first phone run stopped at step 3b on "waiting for device"; the rerun passed. Its slower proof time (22.8 s) was first read as adb waits; it was the smoke's frozen receiver (see "After v0.2.0" below).
 
 **Trap:** a smoke tunnel that dropped on the PC side (sleep) stays half-open on the VM and holds port 3200, so the next `-R 3200` fails. The owner killed the stale `sshd` session.
 
 **Released:**
 - `v0.2.0`, tagged on `5153935`, the same commit as rc.2. CI adds `0.2.0` to the rc.2 digests without rebuilding.
 - `sdk-android-v0.2.1`.
+
+## After v0.2.0: token bursts, M15, and production sizing (2026-10-06)
+
+Nothing in this section is committed or released. SDK `master` is 0.3.0 in the working tree.
+
+### The repeated wallet-token requests: the smoke's own receiver, not the SDK
+**Symptom:** during `smoke:sdk-android` the stand-in customer backend issued tokens in bursts (four within 64 ms), 15 in one run.
+
+**Cause:** `infra/smoke/sdk-android.ts` ran adb with `execFileSync`. One `adb logcat -d` takes 1–4 s on the phone, and the smoke calls it back to back, so the Node process that also serves the stand-in backend and the webhook receiver was frozen most of the time.
+- The app's token request (the sample's OkHttp client, 10 s timeout) timed out; the SDK logged `biometric requirements unavailable` and asked again on the next call, one request at a time (13 timeouts, 10–15 s apart, never concurrent).
+- When the event loop came free, the queued requests were answered together. Webhooks arrived in the same bursts, and the platform retried them (duplicates in the log).
+- platform-api saw only the `POST /v1/wallets` calls in those windows and **no 401**. The SDK's single-fetch guard (`PlatformClient.walletToken`) works.
+
+**Fix (smoke only):** adb is asynchronous in `sdk-android.ts` and `sdk-biometric-android.ts`.
+
+| `smoke:sdk-android` on the phone | before | after |
+|---|---|---|
+| Token requests in the run | 15 | **3** (one per app process start) |
+| App-side token timeouts | 13 | 0 |
+| Duplicate webhooks | several | 0 |
+| Proof request in the app | 22.8 s | **2.9 s** |
+| Second offer by the sync tail | 29.2 s | 10.8 s |
+
+The 22.8 s proof time recorded above for the `v0.2.0` run was this freeze, not the USB link.
+
+**Two more harness races, fixed on the way:**
+- **Screen wake.** The phone's screen slept and woke inside step 3b's idle minute; the app came back to the foreground and drained once (by design), and the step counted it. The smoke now keeps the screen on for the run (`svc power stayon`, restored afterwards) and names the pickup kinds when 3b fails.
+- **MIUI autostart.** `pm clear` resets app-op 10008 some time later, not at once. One run lost that race and MIUI refused to start the killed app for the simulated push (`MIUIOP(10008): ignore`, `rejectTime`). `allowAutostart()` now runs after the clear and again before step 4, and fails loudly if the op cannot be set.
+
+`sdk-biometric-android.ts` is converted and type-checks; it was not run on the phone.
+
+### M15: the SDK checks the genesis file's minisign signature (SDK 0.3.0, not released)
+**What changed:**
+- `internal/Minisign.kt`: minisign verification (the prehashed `ED` format and the legacy `Ed`), a pure-Kotlin BLAKE2b-512 (RFC 7693), and Ed25519 through Askar, which the SDK already ships. No new dependency.
+- `GenesisCache`: downloads the `.minisig` next to the genesis file and accepts the file only when one of the app's trusted keys signed it. The signature is stored beside the cached file and **checked on every start**, so a file cached by an older SDK is downloaded again. The sha256, the signature URL and the key in `/v1/ledger` stay hints.
+- `OneTwoIdConfig.genesisPublicKeys: List<String>` (a third constructor, so 0.1.0–0.2.1 callers still link; the API dump differs by additions only). `initialize` refuses an empty or malformed list with `InvalidConfiguration`.
+- The default is `PRODUCTION_GENESIS_PUBLIC_KEYS` in `internal/ApiBaseUrl.kt`, **empty until W5 generates production's keys**. Until then every app must name its environment's key. The sample passes staging's (`GENESIS_PUBLIC_KEY`, overridable with `-PgenesisPublicKey=`).
+- `sdkVersion=0.3.0`.
+
+**Verified:**
+- `:sdk:testDebugUnitTest` and `testReleaseUnitTest` 84/84, `apiCheck` clean. New: `MinisignTest` (11) and `GenesisCacheTest` (11).
+  - BLAKE2b against the RFC vectors and against Node's `blake2b512` on both sides of each block boundary.
+  - **Staging's real genesis v2 and its published signature verify with staging's key**; a changed file, a changed trusted comment, an untrusted key, an impostor with the trusted key's id, and malformed signature files are refused.
+  - A genesis signed by the platform's own (untrusted) key is refused and nothing is cached; no signature URL is refused; a legacy cache without a signature is fetched again; offline with a cached file signed by an untrusted key fails.
+- **Phone (Xiaomi, Android 14), sample on 0.3.0 with staging's key: `smoke:sdk-android` PASSED, all steps.** The app's `no_backup/onetwoid/genesis/` holds the `.txn` and its `.minisig`.
+- **Phone, the same build with another key (staging's key id, a different Ed25519 key):** `state=Failed LedgerUnavailable: the genesis signature is not from a trusted key`. Reinstalling the staging-key build: `wallet ready`.
+- The first onboarding of that phone run failed once with `NetworkUnavailable` (one `GET /v1/ledger`, then nothing for 10 s, no stack trace in logcat, which is how Android logs an `UnknownHostException`). A relaunch 95 s later onboarded in 7 s. Read as a DNS failure on the phone's network; seen once.
+
+**Left for the release (with W5):**
+1. Put production's primary and backup public keys in `PRODUCTION_GENESIS_PUBLIC_KEYS`.
+2. Add `genesisPublicKeys` to `sdk-android/docs/integration.md` (it still says "verified by checksum"). That file publishes to docs.12id.com on push, so it changes with the release, not before.
+3. Tag `sdk-android-v0.3.0`.
+Any SDK release cut from `master` before step 1 works only for apps that pass `genesisPublicKeys`.
+
+### Production sizing: measured costs, and a defect that outweighs them
+**Method.** `load/exchanges.ts` gained `--pickup v1 --poll <ms>` (holders ask the mediator with PickUpV1 batches every 1.5–2 s, like the SDK inside an exchange window), `--idle` (a polling-only baseline) and phase timestamps; it revokes its wallets at the end. CPU per container comes from the cgroup counters (`cpu.stat`) sampled every 5 s on the VM. Holders ran on the dev PC through the real edge, without a rate-limit exemption.
+
+**Run 1 (5 holders, 4 min): 393 issuances, 1.64/s, 0 errors, offer → done p50 3.0 s, p95 3.2 s** (W4 A4 with 5 s polling: 15.4 s).
+
+| Component | Quiet | At 1.64 issuances/s | CPU per issuance |
+|---|---|---|---|
+| agent-service (one process, serial) | 0.02 core | 0.51 | **298 ms** |
+| agent Postgres (every service's database except the mediator's) | 0.02 | 0.22 | 116 ms |
+| mediator, two replicas | 0.01 | 0.24 | 138 ms |
+| mediator Postgres | 0.02 | 0.05 | 20 ms |
+| platform-api | 0.02 | 0.09 | 38 ms |
+| Caddy | 0.00 | 0.03 | 16 ms |
+| **Total per issuance** | | | **about 0.63 core-seconds** |
+| Monitoring stack | 0.16 | 0.16 | none |
+| Four von-network validators | 0.82 | 0.75 | none |
+
+- **Mediator:** about 33 ms of CPU per empty pickup at 4 pickups/s (W4: 22 ms at 20/s) and about 30 ms more per delivered message. A real SDK issuance is roughly 6 pickups and 2 messages, so about 0.26 core-seconds: one replica carries about 3.8 issuances/s, and replicas add up.
+- **agent-service is the ceiling:** one serial process at 0.30 core-seconds per issuance tops out near **3.3 issuances/s (about 200 a minute)**, and more cores do not raise it.
+- **Memory:** every 12id container together peaked at about 1.8 GB under load (agent Postgres 389 MiB, mediator Postgres 294, agent-service 271, each mediator 180), monitoring about 1.0 GB, the validators about 0.5 GB.
+- **Storage:** the Askar store is 67 MB for about 9,800 records (about 7 KB a record, so roughly 30 KB per stored exchange with its three messages).
+- Not measured: proofs, biometric checks, and rates above 1.6/s.
+
+**The defect: an exchange gets slower as a tenant's history grows.**
+- Run 2 (7 holders) started like run 1, then **stepped up within a minute at the same rate**: agent-service 0.5 → 0.95 core, its Postgres 0.2 → 0.7. Run 3, ten minutes later: **28 issuances a minute** instead of 98, no errors. A fourth run with 3 holders: offer → done p50 8 s.
+- `agent_root` during run 3: `ix_items_tags_name_enc` took 431,560 scans and **454 million index rows for 94 issuances**, three times the index's whole previous history.
+- The query is Askar's record scan with four or five encrypted tag conditions, each `i.id IN (SELECT item_id FROM items_tags WHERE name = $n AND value = $v AND SUBSTR(value, 1, 12) = $s AND plaintext = 0)`: Credo looking up a stored DIDComm message. In the smoke tenant's profile (3,489 message records) three of those tags hold one value on every record and two more hold three values; only one tag is unique.
+- `EXPLAIN (ANALYZE, BUFFERS)` of that five-tag lookup on staging (read-only):
+
+  | Plan | Time | Buffers | Shape |
+  |---|---|---|---|
+  | Generic (what a pooled connection's prepared statement settles on) | **5,421 ms** | 3.1 million | nested-loop semi-joins that rescan a 1,600–1,750-row tag range for each of 3,489 rows: quadratic in the tenant's stored messages |
+  | Custom (planned for the values) | 43 ms | 52 thousand | still starts from a tag that matches all 3,489 rows: linear |
+
+- The step in run 2 fits the pooled connections' cached plans changing (`items_tags` was auto-analysed during that run); the trigger itself was not captured.
+- **Why it matters:** message records live as long as the exchange, and `RETENTION_DAYS` defaults to 90. A tenant reaches the smoke tenant's 1,160 exchanges at 13 a day. No VM size fixes a quadratic lookup.
+- **Options, not yet tried:**
+  1. `plan_cache_mode = force_custom_plan` for the agent's database role: the 5.4 s lookup becomes 43 ms here, for about 3–6 ms of planning per query. A setting, no code. It removes the quadratic plan and leaves the linear growth.
+  2. Delete an exchange's stored DIDComm messages when it reaches `done` or `abandoned` (the platform already mirrors the state). This bounds the table by exchanges in flight, which is the real fix, and needs a check that nothing reads those messages later (the erase path already deletes them).
+  3. Both.
+
+**Also found by these runs:**
+- **The edge's per-IP limits throttle the SDK's own polling.** `mediator_per_ip` is 300 a minute. Five holders polling every 1.5 s plus their follow-up pickups sent about 400 a minute and Caddy answered 170 a minute with 429 (`caddy_rate_limit_declined_requests_total`). The comment above the limit assumes one WebSocket per device; the SDK polls over https, every 1–2 s inside a window. A handful of phones behind one NAT, or one mobile carrier's shared address, reach it. `agent_per_ip` (300) is the same kind of limit.
+- **One offer in about 770 was never collected** (run 2; the exchange stayed `offer-sent`, the holder timed out after 180 s). Cause not established. In the same run Caddy marked mediator replica 2 unhealthy twice for 30 s (its log is silent 10:40:29–10:40:59 and 10:43:31–10:44:01 with 0 restarts) and counted a few 502s; neither moment matches the lost offer's timestamp (10:42:38).
+- **Webhook lag:** the `done` webhook arrived 3.5 s (p50) after the holder saw `done`.
+
+**What this means for the production VM:**
+
+| Peak load | VM |
+|---|---|
+| Up to about 1 issuance a second (3,600 an hour) | 4 vCPU, 8 GB |
+| Up to the agent's ceiling, about 3 a second (10,000 an hour) | 8 vCPU, 16 GB |
+| More than that | not a VM size: agent-service has to process in parallel or be split first |
+
+Both rows include the ledger validators on the same VM (about 0.8 core idle on staging) and the monitoring stack, and assume the lookup defect is fixed. Disk: about 30 KB per retained exchange in the agent store, on top of images, backups and the ledger (staging uses 52 GB of 97).
+
+**State left on staging by these runs:**
+- The smoke tenant gained about 770 exchanges (22 load wallets, revoked), so its message lookups are slower than this morning. `smoke:platform-credo` still passed its functional checks in 43 s afterwards.
+- The last short run had no webhook receiver, which left 56 deliveries queued for retry (backoff up to an hour, 12 attempts). A smoke run in that state reported `deliveries pending : 56` and 9 `BAD SIGNATURE` (events signed before its own secret rotation). A receiver then ran for 20 minutes and absorbed 77 events; the next `smoke:platform-credo` **PASSED** (42 s, all signatures valid, 0 pending).

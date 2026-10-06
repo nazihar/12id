@@ -2,6 +2,7 @@ package com.onetwoid.sdk.internal
 
 import com.onetwoid.sdk.LogLevel
 import com.onetwoid.sdk.LogSink
+import com.onetwoid.sdk.OneTwoIdConfig
 import com.onetwoid.sdk.OneTwoIdException
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -84,5 +85,25 @@ class LoggingAndConfigTest {
             val error = runCatching { checkIdlePollInterval(interval) }.exceptionOrNull()
             assertTrue("expected a refusal for $interval, got $error", error is OneTwoIdException.InvalidConfiguration)
         }
+    }
+
+    @Test
+    fun `the genesis keys must be minisign public keys, and at least one`() {
+        val key = "RWQcw6JLDHFMuOVVvjNl887FZ2kqxSzBxotXAiQmvIYZCqb+10Dvu/s9"
+        checkGenesisPublicKeys(listOf(key))
+        checkGenesisPublicKeys(listOf(key, TestMinisign().publicKey))
+        for (keys in listOf(emptyList(), listOf("not a key"), listOf(key, ""))) {
+            val error = runCatching { checkGenesisPublicKeys(keys) }.exceptionOrNull()
+            assertTrue("expected a refusal for $keys, got $error", error is OneTwoIdException.InvalidConfiguration)
+        }
+    }
+
+    @Test
+    fun `the genesis keys default to the built-in ones and are copied when set`() {
+        assertEquals(PRODUCTION_GENESIS_PUBLIC_KEYS, OneTwoIdConfig("https://api.12id.com", { "t" }).genesisPublicKeys)
+        val keys = mutableListOf("RWQcw6JLDHFMuOVVvjNl887FZ2kqxSzBxotXAiQmvIYZCqb+10Dvu/s9")
+        val config = OneTwoIdConfig("https://api.12id.com", { "t" }, idlePollInterval = null, genesisPublicKeys = keys)
+        keys.clear()
+        assertEquals(1, config.genesisPublicKeys.size)
     }
 }

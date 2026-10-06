@@ -1,5 +1,6 @@
 package com.onetwoid.sdk
 
+import com.onetwoid.sdk.internal.PRODUCTION_GENESIS_PUBLIC_KEYS
 import kotlin.time.Duration
 
 /**
@@ -23,6 +24,11 @@ import kotlin.time.Duration
  *   app comes to the foreground, and on [OneTwoId.sync] from your push handler. Set it (at least 10 s)
  *   only if your app has no push and should still show messages organisations send while it stays open;
  *   it then also polls at that interval while the app is in the foreground.
+ * @property genesisPublicKeys the minisign public keys the ledger's genesis file must be signed with
+ *   (one valid signature is enough): the base64 line of a minisign `.pub` file each. The wallet refuses
+ *   a genesis file that none of them signed, so a compromised platform cannot point it at another
+ *   ledger. The default is 12id's production keys; set it only for another 12id environment or for a
+ *   platform you host yourself.
  */
 public class OneTwoIdConfig(
     public val apiBaseUrl: String,
@@ -32,6 +38,9 @@ public class OneTwoIdConfig(
     public val minLogLevel: LogLevel = LogLevel.Info,
 ) {
     public var idlePollInterval: Duration? = null
+        private set
+
+    public var genesisPublicKeys: List<String> = PRODUCTION_GENESIS_PUBLIC_KEYS
         private set
 
     // A second constructor, not a sixth parameter with a default: that would replace the 0.1.0
@@ -45,6 +54,19 @@ public class OneTwoIdConfig(
         idlePollInterval: Duration?,
     ) : this(apiBaseUrl, walletTokenProvider, label, logSink, minLogLevel) {
         this.idlePollInterval = idlePollInterval
+    }
+
+    public constructor(
+        apiBaseUrl: String,
+        walletTokenProvider: suspend () -> String,
+        label: String = "12id wallet",
+        logSink: LogSink? = null,
+        minLogLevel: LogLevel = LogLevel.Info,
+        idlePollInterval: Duration?,
+        genesisPublicKeys: List<String>,
+    ) : this(apiBaseUrl, walletTokenProvider, label, logSink, minLogLevel) {
+        this.idlePollInterval = idlePollInterval
+        this.genesisPublicKeys = genesisPublicKeys.toList()
     }
 }
 
