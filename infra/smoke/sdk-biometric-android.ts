@@ -16,7 +16,8 @@
  * Env: PLATFORM_API, PLATFORM_API_KEY, PLATFORM_TENANT_ID (console setup over SSH, K1), WEBHOOK_URL, RECEIVER_PORT, PROVIDER, REFERENCE_IMAGE (a JPEG
  * path; required for aws, optional for mock), CRED_DEF_ID (optional, schema smoke-sdk-biometric).
  */
-import { execFileSync } from 'node:child_process'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import { readFileSync } from 'node:fs'
 
 import { consoleClient, env, now, offerAttributes, platformClient, publishCatalogue, sleep, startReceiver } from './platform-common.ts'
@@ -37,7 +38,12 @@ const referenceImage = process.env.REFERENCE_IMAGE
 if (provider === 'aws' && !process.env.REFERENCE_IMAGE) throw new Error('PROVIDER=aws needs REFERENCE_IMAGE (a JPEG of the person who will do the check)')
 
 const serial = process.env.ADB_SERIAL ? ['-s', process.env.ADB_SERIAL] : []
-const adb = (...args: string[]) => execFileSync('adb', [...serial, ...args], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).trim()
+// Asynchronous on purpose: this process also serves the webhook receiver and the stand-in customer
+// backend, and one `adb logcat -d` takes seconds on a real phone. A synchronous adb froze both, so the
+// app's token request timed out and the queued requests were answered later in one burst.
+const execFileAsync = promisify(execFile)
+const adb = async (...args: string[]) =>
+  (await execFileAsync('adb', [...serial, ...args], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })).stdout.trim()
 
 type Biometric = { status: string; attemptsRemaining: number; provider: string } | null
 interface Dump {
@@ -48,15 +54,15 @@ interface Dump {
   proofRequests?: { id: string; name: string; biometric: Biometric }[]
 }
 
-const logLines = (tag = 'onetwoid-sample') => adb('logcat', '-d', '-s', tag).split('\n').map((l) => l.trim())
-const dumpLines = () => logLines().filter((l) => l.includes(' dump {'))
+const logLines = async (tag = 'onetwoid-sample') => (await adb('logcat', '-d', '-s', tag)).split('\n').map((l) => l.trim())
+const dumpLines = async () => (await logLines()).filter((l) => l.includes(' dump {'))
 
 async function action(name: string, extras: string[] = [], timeoutMs = 30_000): Promise<Dump> {
-  const before = dumpLines().length
-  adb('shell', 'am', 'broadcast', '-a', `${APP}.${name}`, '-p', APP, ...extras)
+  const before = (await dumpLines()).length
+  await adb('shell', 'am', 'broadcast', '-a', `${APP}.${name}`, '-p', APP, ...extras)
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
-    const lines = dumpLines()
+    const lines = await dumpLines()
     if (lines.length > before) {
       const line = lines[lines.length - 1]
       return JSON.parse(line.slice(line.indexOf('dump {') + 5)) as Dump
@@ -78,13 +84,13 @@ async function waitFor<T>(label: string, probe: () => Promise<T | undefined>, ti
 
 /** The sample logs `biometric outcome <exchangeId> <Passed|Failed|Locked> …` after each verifyFace. */
 async function faceCheck(exchangeId: string, preset: 'same' | 'other', prompt: string, timeoutMs = 180_000) {
-  adb('shell', 'am', 'start', '-n', `${APP}/.MainActivity`)
+  await adb('shell', 'am', 'start', '-n', `${APP}/.MainActivity`)
   await sleep(1_500)
-  const before = logLines().filter((l) => l.includes(`biometric outcome ${exchangeId}`)).length
+  const before = (await logLines()).filter((l) => l.includes(`biometric outcome ${exchangeId}`)).length
   if (provider === 'aws') console.log(`\n  >>> ON THE PHONE: ${prompt}\n`)
-  adb('shell', 'am', 'broadcast', '-a', `${APP}.VERIFY_FACES`, '-p', APP, ...(provider === 'mock' ? ['--es', 'preset', preset] : []))
+  await adb('shell', 'am', 'broadcast', '-a', `${APP}.VERIFY_FACES`, '-p', APP, ...(provider === 'mock' ? ['--es', 'preset', preset] : []))
   return waitFor(`face check ${exchangeId}`, async () => {
-    const lines = logLines().filter((l) => l.includes(`biometric outcome ${exchangeId}`))
+    const lines = (await logLines()).filter((l) => l.includes(`biometric outcome ${exchangeId}`))
     return lines.length > before ? lines[lines.length - 1].slice(lines[lines.length - 1].indexOf('biometric outcome')) : undefined
   }, timeoutMs)
 }
@@ -104,8 +110,8 @@ const waitState = (type: string, id: string, state: string, timeoutMs = 120_000)
 
 try {
   await receiver.listening
-  console.log(`device: ${adb('shell', 'getprop', 'ro.product.model')}, Android ${adb('shell', 'getprop', 'ro.build.version.release')}; provider ${provider}`)
-  adb('logcat', '-c')
+  console.log(`device: ${await adb('shell', 'getprop', 'ro.product.model')}, Android ${await adb('shell', 'getprop', 'ro.build.version.release')}; provider ${provider}`)
+  await adb('logcat', '-c')
   const endpoint = await setup.must<{ secret?: string }>('PUT', '/v1/webhook', { url: webhookUrl })
   secret = endpoint.secret ?? (await setup.must<{ secret: string }>('POST', '/v1/webhook/rotate-secret')).secret
   // CRED_DEF_ID reuses a published definition of schema smoke-sdk-biometric (publishing can outlast the
@@ -114,11 +120,11 @@ try {
   await setup.must('PUT', `/v1/credential-definitions/${encodeURIComponent(catalogue.credentialDefinitionLedgerId)}/biometric-policy`, { mode: 'required', maxAttempts: 3 })
 
   // 1: fresh install
-  adb('shell', 'am', 'force-stop', APP)
-  adb('shell', 'pm', 'clear', APP)
+  await adb('shell', 'am', 'force-stop', APP)
+  await adb('shell', 'pm', 'clear', APP)
   await sleep(3_000)
-  adb('shell', 'pm', 'grant', APP, 'android.permission.CAMERA')
-  adb('shell', 'am', 'start', '-n', `${APP}/.MainActivity`)
+  await adb('shell', 'pm', 'grant', APP, 'android.permission.CAMERA')
+  await adb('shell', 'am', 'start', '-n', `${APP}/.MainActivity`)
   await waitFor('wallet Ready', async () => ((await action('DUMP')).state === 'Ready' ? true : undefined), 120_000)
   check('1 wallet Ready', true, `token requests ${tokenRequests.count}`)
 

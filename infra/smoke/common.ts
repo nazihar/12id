@@ -93,6 +93,8 @@ function v1DidComm(options: {
   outbound: Array<'http' | 'ws'>
   mediatorInvitationUrl?: string
   pickupStrategy?: DidCommMediatorPickupStrategy
+  /** How often the holder asks the mediator for messages (Credo's default: 5 s). */
+  pollingIntervalMs?: number
   /** Auto-accept credential and proof steps (default true). T3 turns it off to control timing. */
   autoAccept?: boolean
 }) {
@@ -107,7 +109,7 @@ function v1DidComm(options: {
     useDidSovPrefixWhereAllowed: true,
     connections: { autoAcceptConnections: true },
     mediationRecipient: options.mediatorInvitationUrl
-      ? { mediatorInvitationUrl: options.mediatorInvitationUrl, mediatorPickupStrategy: options.pickupStrategy }
+      ? { mediatorInvitationUrl: options.mediatorInvitationUrl, mediatorPickupStrategy: options.pickupStrategy, mediatorPollingInterval: options.pollingIntervalMs }
       : undefined,
     credentials: {
       autoAcceptCredentials: autoAccept ? DidCommAutoAcceptCredential.Always : DidCommAutoAcceptCredential.Never,
@@ -195,14 +197,18 @@ export async function createEndorserAgent() {
 export type EndorserAgent = Awaited<ReturnType<typeof createEndorserAgent>>
 
 /** A Credo holder behind the staging mediator (HTTP outbound + PickUpV2: findings W8). */
-export async function createHolderAgent(name: string, options: { autoAccept?: boolean; mediatorInvitationUrl?: string } = {}) {
+export async function createHolderAgent(
+  name: string,
+  options: { autoAccept?: boolean; mediatorInvitationUrl?: string; pickupStrategy?: DidCommMediatorPickupStrategy; pollingIntervalMs?: number } = {},
+) {
   // Phase 3: the platform mints a per-wallet invitation; earlier smokes read the startup one from a file.
   const mediatorInvitationUrl = options.mediatorInvitationUrl ?? readFileSync(env('MEDIATOR_INVITATION_FILE'), 'utf8').trim()
   return createMemoryAgent(name, {
     didcomm: v1DidComm({
       outbound: ['http'],
       mediatorInvitationUrl,
-      pickupStrategy: DidCommMediatorPickupStrategy.PickUpV2,
+      pickupStrategy: options.pickupStrategy ?? DidCommMediatorPickupStrategy.PickUpV2,
+      pollingIntervalMs: options.pollingIntervalMs,
       autoAccept: options.autoAccept,
     }),
   })

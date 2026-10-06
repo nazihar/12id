@@ -20,7 +20,8 @@
  *
  * Env: PLATFORM_API, PLATFORM_API_KEY, PLATFORM_TENANT_ID (console setup over SSH, K1), WEBHOOK_URL, RECEIVER_PORT, CRED_DEF_ID (optional).
  */
-import { execFileSync } from 'node:child_process'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import { writeFileSync } from 'node:fs'
 
 import { consoleClient, env, now, offerAttributes, platformClient, publishCatalogue, sleep, startReceiver } from './platform-common.ts'
@@ -35,7 +36,12 @@ const externalId = `sdk-${Date.now()}`
 // ADB_SERIAL picks the device (e.g. emulator-5554 for the min-SDK check); STEPS=3 stops after step 3.
 const serial = process.env.ADB_SERIAL ? ['-s', process.env.ADB_SERIAL] : []
 const lastStep = Number(process.env.STEPS ?? 7)
-const adb = (...args: string[]) => execFileSync('adb', [...serial, ...args], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).trim()
+// Asynchronous on purpose: this process also serves the webhook receiver and the stand-in customer
+// backend, and one `adb logcat -d` takes seconds on a real phone. A synchronous adb froze both, so the
+// app's token request timed out and the queued requests were answered later in one burst.
+const execFileAsync = promisify(execFile)
+const adb = async (...args: string[]) =>
+  (await execFileAsync('adb', [...serial, ...args], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })).stdout.trim()
 
 interface Dump {
   state: string
@@ -46,15 +52,15 @@ interface Dump {
   proofRequests?: { id: string; name: string }[]
 }
 
-const dumpLines = () => adb('logcat', '-d', '-s', 'onetwoid-sample').split('\n').map((l) => l.trim()).filter((l) => l.includes(' dump {'))
+const dumpLines = async () => (await adb('logcat', '-d', '-s', 'onetwoid-sample')).split('\n').map((l) => l.trim()).filter((l) => l.includes(' dump {'))
 
 /** Broadcasts a debug action and returns the app's next `dump {json}` line (the log buffer is kept for diagnosis). */
 async function action(name: string, extras: string[] = [], timeoutMs = 30_000): Promise<Dump> {
-  const before = dumpLines().length
-  adb('shell', 'am', 'broadcast', '-a', `${APP}.${name}`, '-p', APP, ...extras)
+  const before = (await dumpLines()).length
+  await adb('shell', 'am', 'broadcast', '-a', `${APP}.${name}`, '-p', APP, ...extras)
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
-    const lines = dumpLines()
+    const lines = await dumpLines()
     if (lines.length > before) {
       const line = lines[lines.length - 1]
       const dump = JSON.parse(line.slice(line.indexOf('dump {') + 5)) as Dump
@@ -89,7 +95,7 @@ async function waitForDump(label: string, done: (d: Dump) => boolean, timeoutMs:
 }
 
 /** The SDK logs one Info line per mediator pickup (on-demand delivery); counts them in the app log. */
-const pickupLines = () => adb('logcat', '-d', '-s', 'onetwoid-sdk').split('\n').filter((l) => l.includes('mediator pickup (')).length
+const pickupLines = async () => (await adb('logcat', '-d', '-s', 'onetwoid-sdk')).split('\n').filter((l) => l.includes('mediator pickup ('))
 
 const launch = () => adb('shell', 'am', 'start', '-n', `${APP}/.MainActivity`)
 const forceStop = () => adb('shell', 'am', 'force-stop', APP)
@@ -99,17 +105,33 @@ const forceStop = () => adb('shell', 'am', 'force-stop', APP)
  * the push path can only be simulated on a process that was evicted or swiped away.
  */
 const killInBackground = async () => {
-  adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
+  await adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
   await sleep(1_500)
-  adb('shell', 'am', 'kill', APP)
+  await adb('shell', 'am', 'kill', APP)
   await sleep(1_500)
   // pidof exits 1 when no process matches, which is the outcome wanted here.
-  const pid = adb('shell', `pidof ${APP} || true`)
+  const pid = await adb('shell', `pidof ${APP} || true`)
   if (pid) throw new Error(`process still alive after am kill (pid ${pid})`)
 }
-const isForeground = () => /ResumedActivity.*com\.onetwoid\.sample/.test(adb('shell', 'dumpsys', 'activity', 'activities'))
+/**
+ * MIUI refuses to start a killed app for a broadcast (or an FCM message) unless the user grants
+ * "Autostart"; MIUI app-op 10008 is that switch. `pm clear` resets it some time later, not at once, so
+ * it is set after the clear and again before the step that needs it. Other Android builds do not know
+ * the op and ignore it.
+ */
+const allowAutostart = async () => {
+  for (let i = 0; i < 5; i++) {
+    await adb('shell', `cmd appops set ${APP} 10008 allow 2>/dev/null || true`)
+    await sleep(1_000)
+    const op = await adb('shell', `cmd appops get ${APP} 10008 2>/dev/null || true`)
+    if (!op || op.includes('allow')) return
+  }
+  throw new Error('MIUI autostart (app-op 10008) cannot be allowed for the sample')
+}
+const isForeground = async () => /ResumedActivity.*com\.onetwoid\.sample/.test(await adb('shell', 'dumpsys', 'activity', 'activities'))
 
 let passed = false
+let stayOnBefore = ''
 let secret = ''
 const wallets = new Map<string, string>()
 const tokenRequests = { count: 0 }
@@ -124,32 +146,29 @@ const waitState = async (type: string, id: string, states: string[], timeoutMs: 
 
 try {
   await receiver.listening
-  console.log(`device: ${adb('shell', 'getprop', 'ro.product.model')}, Android ${adb('shell', 'getprop', 'ro.build.version.release')}`)
+  console.log(`device: ${await adb('shell', 'getprop', 'ro.product.model')}, Android ${await adb('shell', 'getprop', 'ro.build.version.release')}`)
   // Best effort: some API 26 emulator images refuse ("failed to clear the 'main' log"); dumps are counted, not cleared.
   try {
-    adb('logcat', '-c')
+    await adb('logcat', '-c')
   } catch {
     console.log('  (logcat -c refused by the device; continuing)')
   }
+  // The screen must stay on: when it sleeps and wakes, the app returns to the foreground and drains
+  // once, which 3b would count as a pickup from an idle app. Restored in the finally block.
+  stayOnBefore = await adb('shell', 'settings', 'get', 'global', 'stay_on_while_plugged_in').catch(() => '')
+  await adb('shell', 'svc', 'power', 'stayon', 'true').catch(() => console.log('  (cannot keep the screen on; continuing)'))
+  await adb('shell', 'input', 'keyevent', 'KEYCODE_WAKEUP')
   const endpoint = await setup.must<{ secret?: string }>('PUT', '/v1/webhook', { url: webhookUrl })
   secret = endpoint.secret ?? (await setup.must<{ secret: string }>('POST', '/v1/webhook/rotate-secret')).secret
   const credDefId = process.env.CRED_DEF_ID ?? (await publishCatalogue(setup, 'smoke-badge')).credentialDefinitionLedgerId
 
   // --- 1: fresh install onboards with nothing compiled in ------------------------------------
   console.log('\n=== 1 ONBOARDING (fresh install) ===')
-  forceStop()
-  adb('shell', 'pm', 'clear', APP)
-  // MIUI refuses to start a killed app for a broadcast (or an FCM message) unless the user grants
-  // "Autostart"; MIUI app-op 10008 is that switch, and `pm clear` resets it a moment later (so set it
-  // after a pause and read it back). Other Android builds do not know the op and ignore it.
+  await forceStop()
+  await adb('shell', 'pm', 'clear', APP)
   await sleep(3_000)
-  for (let i = 0; i < 5; i++) {
-    adb('shell', `cmd appops set ${APP} 10008 allow 2>/dev/null || true`)
-    await sleep(1_000)
-    const op = adb('shell', `cmd appops get ${APP} 10008 2>/dev/null || true`)
-    if (!op || op.includes('allow')) break
-  }
-  launch()
+  await allowAutostart()
+  await launch()
   console.log(`  [${now()}] app launched`)
   await waitReady(120_000)
   const walletId = [...wallets.values()][0]
@@ -205,23 +224,27 @@ try {
   console.log('\n=== 3b IDLE: the open app sends no pickups ===')
   // Let the accept window and the push's sync tail (32 s) finish first.
   await sleep(35_000)
-  if (!isForeground()) throw new Error('3b needs the app in the foreground')
-  const pickupsBefore = pickupLines()
+  if (!(await isForeground())) throw new Error('3b needs the app in the foreground')
+  const pickupsBefore = (await pickupLines()).length
   await sleep(60_000)
-  const idlePickups = pickupLines() - pickupsBefore
-  if (idlePickups !== 0) throw new Error(`the idle app sent ${idlePickups} pickup(s) in 60 s`)
+  const idlePickups = (await pickupLines()).slice(pickupsBefore)
+  if (idlePickups.length !== 0) {
+    // A "(foreground)" pickup means the screen slept and woke: the device left the state this step tests.
+    const reasons = idlePickups.map((l) => l.match(/mediator pickup \(([^)]*)\)/)?.[1] ?? '?').join(', ')
+    throw new Error(`the idle app sent ${idlePickups.length} pickup(s) in 60 s (${reasons})`)
+  }
   results.idle = '0 pickups in 60 s with the app open'
 
   // --- 3c: a missed push is collected when the app comes to the foreground ----------------------
   console.log('\n=== 3c FOREGROUND DRAIN: offer while in the background, no push, then open ===')
-  adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
+  await adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
   await sleep(32_000)
   const missed = await api.must<{ id: string }>('POST', '/v1/credentials/offer', { connectionId, credentialDefinitionId: credDefId, attributes: offerAttributes('missed-push'), externalId })
   await waitState('credential.state_changed', missed.id, ['offer-sent'], 60_000, 'missed-push offer')
   await sleep(10_000)
   if ((await action('DUMP')).offers?.length) throw new Error('the backgrounded app collected an offer without a push or a foreground')
   const openedAt = Date.now()
-  launch()
+  await launch()
   await waitForDump('the offer, drained on foreground', (d) => !!d.offers?.length, 30_000)
   const drainLatency = ((Date.now() - openedAt) / 1000).toFixed(1)
   await action('DECLINE_OFFERS')
@@ -229,6 +252,7 @@ try {
 
   // --- 4: offline offers, one wake webhook, simulated push in the background, sync + tail ----------
   console.log('\n=== 4 OFFLINE: process killed; offer → wake → push → sync; second offer inside the debounce → tail ===')
+  await allowAutostart()
   await killInBackground()
   console.log(`  [${now()}] app process killed (not force-stopped); waiting 32 s for the wake-up debounce window`)
   await sleep(32_000)
@@ -239,7 +263,7 @@ try {
   console.log(`  [${now()}] wallet.sync_requested received; simulating the customer's push (app not in foreground)`)
   // The broadcast starts the process in the background; SyncWorker opens the wallet and syncs.
   const syncDump = await action('SIMULATE_PUSH', [], 90_000)
-  if (isForeground()) throw new Error('the app came to the foreground during the push path')
+  if (await isForeground()) throw new Error('the app came to the foreground during the push path')
   await waitForDump('the offline offer, collected by sync()', (d) => (d.offers?.length ?? 0) >= 1, 90_000)
   console.log(`  [${now()}] offline offer collected in the background (state ${syncDump.state})`)
   // Inside the platform's 30 s debounce: no wake-up of its own; the SDK's sync tail must collect it.
@@ -248,7 +272,7 @@ try {
   await waitForDump('the second offer, collected by the sync tail', (d) => (d.offers?.length ?? 0) >= 2, 45_000)
   const tailLatency = ((Date.now() - offline2SentAt) / 1000).toFixed(1)
   const wakes4 = receiver.events.slice(eventsBefore).filter((e) => e.type === 'wallet.sync_requested' && e.event.data.walletId === walletId).length
-  if (isForeground()) throw new Error('the app came to the foreground during the sync tail')
+  if (await isForeground()) throw new Error('the app came to the foreground during the sync tail')
   console.log(`  [${now()}] second offer collected by the tail ${tailLatency} s after it was sent (wake-ups: ${wakes4})`)
   await action('ACCEPT_OFFERS')
   const offlineResult = await waitState('credential.state_changed', offline.id, ['done', 'abandoned'], 120_000, 'offline credential')
@@ -259,7 +283,7 @@ try {
   console.log('\n=== 5 PROOF (template with the automatic expiresOn predicate) ===')
   // The user opens the app (a foreground drain) and starts an action the backend guards with a proof
   // request: the app calls expectMessages() as it asks.
-  launch()
+  await launch()
   await waitReady(60_000)
   const template = await setup.must<{ id: string }>('POST', '/v1/proof-templates', { name: 'smoke-sdk-android', groups: [{ key: 'employee', attributes: ['name', 'department'], credentials: [{ credentialDefinitionId: credDefId }] }] })
   await sleep(3_000)
@@ -285,8 +309,8 @@ try {
   // a fresh invitation, as another token request at the backend. Neither may happen on a plain restart.
   const eventsBefore6 = receiver.events.length
   const tokensBefore = tokenRequests.count
-  forceStop()
-  launch()
+  await forceStop()
+  await launch()
   const restarted = await waitReady(120_000)
   await sleep(15_000)
   const reMediated = receiver.events.slice(eventsBefore6).some((e) => e.type === 'wallet.sync_requested' && e.event.data.walletId === walletId)
@@ -298,10 +322,10 @@ try {
   // Recovery = the SDK asks the platform for a new invitation, which needs the wallet token from the
   // backend: one more token request, then Ready.
   await action('WIPE_WALLET_KEEP_STATE')
-  forceStop()
+  await forceStop()
   const tokensBefore7 = tokenRequests.count
   const started7 = Date.now()
-  launch()
+  await launch()
   const recovered = await waitReady(180_000)
   const reFetched = tokenRequests.count > tokensBefore7
   results.spentInvitation = `${recovered.state} after ${((Date.now() - started7) / 1000).toFixed(0)} s; new invitation fetched=${reFetched}`
@@ -319,9 +343,10 @@ try {
   }
 } finally {
   receiver.close()
+  if (stayOnBefore === '0') await adb('shell', 'svc', 'power', 'stayon', 'false').catch(() => undefined)
   const logFile = process.env.APP_LOG_OUT ?? 'smoke/sdk-android.last.log'
   try {
-    writeFileSync(logFile, adb('logcat', '-d', '-s', 'onetwoid-sample', 'onetwoid-sdk', 'AndroidRuntime'))
+    writeFileSync(logFile, await adb('logcat', '-d', '-s', 'onetwoid-sample', 'onetwoid-sdk', 'AndroidRuntime'))
     console.log(`app log saved to ${logFile}`)
   } catch (error) {
     console.log(`app log not saved: ${error}`)
