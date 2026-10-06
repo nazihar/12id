@@ -34,7 +34,7 @@ dependencyResolutionManagement {
 
 // app/build.gradle.kts
 dependencies {
-    implementation("com.12id:holder-sdk-android:0.2.0")
+    implementation("com.12id:holder-sdk-android:0.2.1")
 }
 android {
     splits { abi { isEnable = true; reset(); include("arm64-v8a", "armeabi-v7a", "x86_64"); isUniversalApk = false } }  // or an App Bundle
@@ -265,8 +265,8 @@ requests need it; the camera screen comes from a **capture add-on** for the orga
 
 ```groovy
 dependencies {
-    implementation "com.12id:holder-sdk-android:0.2.0"
-    implementation "com.12id:holder-sdk-android-biometrics-aws:0.2.0"   // AWS Rekognition Face Liveness
+    implementation "com.12id:holder-sdk-android:0.2.1"
+    implementation "com.12id:holder-sdk-android-biometrics-aws:0.2.1"   // AWS Rekognition Face Liveness
 }
 
 android {

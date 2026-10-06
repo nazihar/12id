@@ -573,3 +573,48 @@ Each step followed `runbooks/key-rotation.md`, after a fresh backup, with the sm
   including those older than the offline recipient.
 - **Owner:** `minisign.key.prev-w4` (keep offline or delete), and the staging offline key still on the dev PC
   (`E:\12id-credo\offline-keys`).
+
+## v0.2.0: credential expiry as a date, and dependency security fixes (2026-10-06)
+
+**Owner decisions (2026-10-06):**
+- Expiry becomes a date.
+- The mediator delete-before-send window is accepted.
+- The hosting country is agreed per customer.
+
+**`1c43365`: `expiresOn` replaces `expiresAt`.**
+- The value is `YYYYMMDD` (UTC), accepted through the end of that day; every proof checks `expiresOn >= today`; any date up to 9999 works.
+- It is a clean break: `expiresAt` is retired, and staging's old schemas no longer accept offers.
+- The SDK reads `expiresOn` into the unchanged `expiresAtEpochSeconds` (0.2.1).
+
+**New advisories found by CI.** The first push failed CI's `npm audit --omit=dev --audit-level=high`, on advisories published overnight:
+- `proxy-addr`: critical, IP spoofing through Fastify's `trustProxy`;
+- `fastify` 5.12.4: a moderate denial of service through HTTP/2 trailers;
+- `fast-uri` and `valibot`: moderate;
+- `source-map-js` (console): high.
+
+Fixed in `5153935`: Fastify 5.12.5 plus lockfile updates. `v0.2.0-rc.1` was built before the fix and never deployed.
+
+**Traps:**
+- `npm audit fix --omit=dev` also prunes local dev dependencies. Run `npm install` afterwards.
+- With C: full, point npm at E: (`npm_config_cache`, `TMP`/`TEMP`).
+
+**Staging on `v0.2.0-rc.2`.** All seven stacks deployed from the rc.2 release file; rc.3's is kept as `release.env.prev-0.1.0-rc.3` for rollback.
+
+| Check | Result |
+|---|---|
+| Deploy | no step failed; every container with a health check is healthy |
+| Secrets in `docker inspect` | 0 of 32 |
+| Monitoring targets | 22/22 up |
+| Edge probes | as before |
+| `smoke:platform-credo` | **PASSED**. The new schema is `smoke-badge 1.274250` with `expiresOn`; offer, credential and proof verified |
+| `smoke:biometric-credo` | **18/18** |
+| `e2e:staging` | **3/3** |
+| `smoke:sdk-android` (phone, sample on SDK 0.2.1) | **PASSED, all steps**: expected offer in 3.0 s, 0 pickups in 60 s idle, foreground drain 2.5 s, tail 29.2 s with 1 wake-up, proof verified. Credentials carry `expiresOn: 20261105` |
+
+The phone's USB link dropped repeatedly. The first phone run stopped at step 3b on "waiting for device"; the rerun passed, and its slower proof time (22.8 s) is the adb waits.
+
+**Trap:** a smoke tunnel that dropped on the PC side (sleep) stays half-open on the VM and holds port 3200, so the next `-R 3200` fails. The owner killed the stale `sshd` session.
+
+**Released:**
+- `v0.2.0`, tagged on `5153935`, the same commit as rc.2. CI adds `0.2.0` to the rc.2 digests without rebuilding.
+- `sdk-android-v0.2.1`.
