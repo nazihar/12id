@@ -18,7 +18,7 @@
     "@hyperledger/indy-vdr-nodejs": "0.3.0",
     "@openwallet-foundation/askar-nodejs": "0.6.0",
     "drizzle-orm": "0.45.2",
-    "fastify": "5.12.4",
+    "fastify": "5.12.5",
     "pg": "8.23.0",
     "pino": "10.3.1",
     "reflect-metadata": "0.2.2",

@@ -12,7 +12,7 @@
     "@aws-sdk/client-rekognition": "3.1136.0",
     "@aws-sdk/client-sts": "3.1136.0",
     "drizzle-orm": "0.45.2",
-    "fastify": "5.12.4",
+    "fastify": "5.12.5",
     "fastify-type-provider-zod": "7.0.0",
     "pg": "8.23.0",
     "pino": "10.3.1",
