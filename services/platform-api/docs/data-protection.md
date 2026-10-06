@@ -35,7 +35,7 @@ Personal data of a finished exchange (state `done`, `abandoned` or `declined`) i
 
 **The default is 90 days.** Owners and admins can change it in the console (Data protection). Set **0** to keep the data until you erase it yourself. Exchanges that are still running are never touched.
 
-After erasure **the record stays**, with its id, state, dates, your external id and whether it was verified. Your lists, dashboards and audit history keep adding up; the record shows *Personal data erased* with the date. The validity date of an issued credential (its `expiresAt`) is kept too: it is not personal data, and it drives the "credentials expiring" figures.
+After erasure **the record stays**, with its id, state, dates, your external id and whether it was verified. Your lists, dashboards and audit history keep adding up; the record shows *Personal data erased* with the date. The validity date of an issued credential (its `expiresOn`) is kept too: it is not personal data, and it drives the "credentials expiring" figures.
 
 ## Erasing on request
 
@@ -58,7 +58,7 @@ To complete the user's request, also delete your own copies (the data you receiv
 
 ## What erasure does not do
 
-- **It does not invalidate an issued credential.** 12iD v1 does not support revocation. A credential stays usable by the user until its `expiresAt` passes, even after you erased your records of it. Choose expiry periods with this in mind. If you need to invalidate credentials early, talk to us: it requires new credential definitions.
+- **It does not invalidate an issued credential.** 12iD v1 does not support revocation. A credential stays usable by the user until its `expiresOn` date has passed, even after you erased your records of it. Choose expiry periods with this in mind. If you need to invalidate credentials early, talk to us: it requires new credential definitions.
 - It does not change the ledger. The ledger never held personal data.
 - It does not reach into the user's phone. The wallet is the user's.
 
@@ -67,8 +67,9 @@ To complete the user's request, also delete your own copies (the data you receiv
 The platform runs on a dedicated server operated by 12iD itself, with no cloud platform in between. The
 backup machine is at a second site.
 
-> **Owner, before publishing:** state the country (or countries) of the production server and the backup
-> machine. Your customers' data-processing agreements need it.
+**The hosting country depends on your agreement with 12iD.** The country of the production server and of
+the backup machine is agreed with each customer and stated in your data-processing agreement. If you
+host the platform yourself, the data stays on your own servers, wherever you run them.
 
 **Sub-processors:**
 - For the optional biometric gate, face checks run in **your own** AWS account, under your agreement with AWS. 12iD does not use its own vendor account for your users' faces.

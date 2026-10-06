@@ -26,7 +26,7 @@ export interface GettingStartedStep {
 
 export function gettingStartedSteps(state: GettingStartedState): GettingStartedStep[] {
   return [
-    { key: 'schema', label: 'Publish a schema', detail: 'The attribute list of your credential; expiresAt is added for you.', done: (state.schemas ?? 0) > 0, known: state.schemas !== null },
+    { key: 'schema', label: 'Publish a schema', detail: 'The attribute list of your credential; expiresOn (the expiry date) is added for you.', done: (state.schemas ?? 0) > 0, known: state.schemas !== null },
     { key: 'credential-definition', label: 'Publish a credential definition', detail: 'Your signing keys for that schema on the ledger.', done: (state.credentialDefinitions ?? 0) > 0, known: state.credentialDefinitions !== null },
     { key: 'api-key', label: 'Create an API key', detail: 'Your backend calls the platform with it; shown once.', done: state.apiKeys > 0, known: true },
     { key: 'webhook', label: 'Configure the webhook', detail: 'Where exchange events and wallet wake-ups are delivered.', done: state.webhookConfigured, known: true },

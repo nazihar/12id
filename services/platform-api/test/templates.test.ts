@@ -29,10 +29,10 @@ describe('proof templates', () => {
     assert.throws(() => expandTemplate(parse({ name: 'v', groups: [{ key: 'g', attributes: ['name'], credentials: [{ credentialDefinitionId: 'missing' }] }] }), sampleCatalogue), is400)
   })
 
-  it('refuses expiresAt in attributes or predicates, attributes both revealed and predicated, empty groups and duplicate keys', () => {
+  it('refuses expiresOn in attributes or predicates, attributes both revealed and predicated, empty groups and duplicate keys', () => {
     const reject = (definition: unknown, pattern: RegExp) => assert.throws(() => validateTemplate(parse(definition)), pattern)
-    reject({ name: 'v', groups: [{ key: 'g', attributes: ['expiresAt'], credentials: [{ schemaName: 'x' }] }] }, /expiresAt cannot be disclosed/)
-    reject({ name: 'v', groups: [{ key: 'g', attributes: [], predicates: [{ name: 'expiresAt', type: '>=', value: 1 }], credentials: [{ schemaName: 'x' }] }] }, /predicated automatically/)
+    reject({ name: 'v', groups: [{ key: 'g', attributes: ['expiresOn'], credentials: [{ schemaName: 'x' }] }] }, /expiresOn cannot be disclosed/)
+    reject({ name: 'v', groups: [{ key: 'g', attributes: [], predicates: [{ name: 'expiresOn', type: '>=', value: 1 }], credentials: [{ schemaName: 'x' }] }] }, /predicated automatically/)
     reject({ name: 'v', groups: [{ key: 'g', attributes: ['age'], predicates: [{ name: 'age', type: '>=', value: 18 }], credentials: [{ schemaName: 'x' }] }] }, /both disclosed and predicated/)
     reject({ name: 'v', groups: [{ key: 'g', attributes: [], credentials: [{ schemaName: 'x' }] }] }, /nothing to disclose/)
     reject({ name: 'v', groups: [{ key: 'g', attributes: ['a'], credentials: [{ schemaName: 'x' }] }, { key: 'g', attributes: ['b'], credentials: [{ schemaName: 'x' }] }] }, /unique/)

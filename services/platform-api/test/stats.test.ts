@@ -1,6 +1,6 @@
 /**
  * Dashboard aggregates (Phase 4 C8) against a real Postgres (skipped without one): the tenant
- * route is console-only, counters and the daily series match seeded rows, malformed `expiresAt`
+ * route is console-only, counters and the daily series match seeded rows, malformed `expiresOn`
  * values are ignored, the operator route needs the operator role, and reads are not audited.
  */
 import assert from 'node:assert/strict'
@@ -16,7 +16,7 @@ import { fakeAgent, silentLogger, testConfig, testDatabase } from './helpers.ts'
 const db = await testDatabase()
 
 const daysAgo = (n: number) => new Date(Date.now() - n * 24 * 60 * 60 * 1000)
-const epoch = (date: Date) => String(Math.floor(date.getTime() / 1000))
+const dateOf = (date: Date) => date.toISOString().slice(0, 10).replaceAll('-', '')
 
 describe('dashboard stats', { skip: db ? false : 'no test database' }, () => {
   const agent = fakeAgent()
@@ -52,9 +52,9 @@ describe('dashboard stats', { skip: db ? false : 'no test database' }, () => {
       { tenantId: acme, recordId: 'c3', state: 'invitation', createdAt: daysAgo(40), updatedAt: daysAgo(40) },
     ])
     await db!.db.insert(credentials).values([
-      { tenantId: acme, recordId: 'k1', state: 'done', attributes: { name: 'Ada', expiresAt: epoch(daysAgo(-10)) }, expiresAt: expiryOf({ expiresAt: epoch(daysAgo(-10)) }), createdAt: daysAgo(0), updatedAt: daysAgo(0) },
-      { tenantId: acme, recordId: 'k2', state: 'done', attributes: { name: 'Bob', expiresAt: epoch(daysAgo(5)) }, expiresAt: expiryOf({ expiresAt: epoch(daysAgo(5)) }), createdAt: daysAgo(3), updatedAt: daysAgo(3) },
-      { tenantId: acme, recordId: 'k3', state: 'done', attributes: { name: 'Cy', expiresAt: 'not-a-number' }, expiresAt: expiryOf({ expiresAt: 'not-a-number' }), createdAt: daysAgo(3), updatedAt: daysAgo(3) },
+      { tenantId: acme, recordId: 'k1', state: 'done', attributes: { name: 'Ada', expiresOn: dateOf(daysAgo(-10)) }, expiresAt: expiryOf({ expiresOn: dateOf(daysAgo(-10)) }), createdAt: daysAgo(0), updatedAt: daysAgo(0) },
+      { tenantId: acme, recordId: 'k2', state: 'done', attributes: { name: 'Bob', expiresOn: dateOf(daysAgo(5)) }, expiresAt: expiryOf({ expiresOn: dateOf(daysAgo(5)) }), createdAt: daysAgo(3), updatedAt: daysAgo(3) },
+      { tenantId: acme, recordId: 'k3', state: 'done', attributes: { name: 'Cy', expiresOn: 'not-a-number' }, expiresAt: expiryOf({ expiresOn: 'not-a-number' }), createdAt: daysAgo(3), updatedAt: daysAgo(3) },
       { tenantId: acme, recordId: 'k4', state: 'done', attributes: { name: 'Di' }, createdAt: daysAgo(3), updatedAt: daysAgo(3) },
       { tenantId: acme, recordId: 'k5', state: 'offer-sent', createdAt: daysAgo(2), updatedAt: daysAgo(2) },
       { tenantId: acme, recordId: 'k6', state: 'offer-sent', createdAt: daysAgo(0), updatedAt: daysAgo(0) },

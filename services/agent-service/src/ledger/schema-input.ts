@@ -4,8 +4,8 @@
  */
 import { z } from 'zod'
 
-/** Mandatory in every schema: the integer expiry every proof template checks (4-init §4.7). */
-export const EXPIRY_ATTRIBUTE = 'expiresAt'
+/** Mandatory in every schema: the expiry date (`YYYYMMDD`, UTC) every proof request checks (4-init §4.7). */
+export const EXPIRY_ATTRIBUTE = 'expiresOn'
 
 export const schemaInput = z
   .object({
@@ -28,7 +28,7 @@ export const schemaInput = z
       context.addIssue({
         code: 'custom',
         path: ['attributes'],
-        message: `every schema must include the integer attribute ${EXPIRY_ATTRIBUTE}; it cannot be added later`,
+        message: `every schema must include the expiry date attribute ${EXPIRY_ATTRIBUTE}; it cannot be added later`,
       })
     }
   })

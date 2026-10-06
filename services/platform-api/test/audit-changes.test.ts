@@ -9,7 +9,7 @@ describe('audit change snapshot', () => {
     const body = { url: 'https://hooks.example.com/12id', events: ['credential.state_changed'] }
     assert.deepEqual(auditChanges({ params: { id: 'k-1' }, body, recordBody: true }), { params: { id: 'k-1' }, body })
     // Names are the change itself: a schema's and a template's attribute lists stay.
-    const schema = { name: 'employee', version: '1.0', attributes: ['name', 'expiresAt'] }
+    const schema = { name: 'employee', version: '1.0', attributes: ['name', 'expiresOn'] }
     assert.deepEqual(auditChanges({ body: schema, recordBody: true }), { body: schema })
   })
 

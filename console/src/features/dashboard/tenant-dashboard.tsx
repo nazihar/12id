@@ -31,7 +31,7 @@ export function tenantAttentionItems(stats: TenantDashboard, links: TenantDashbo
     { key: 'dead-deliveries', label: 'Dead webhook deliveries', detail: 'Gave up after every retry; retry them once the endpoint is fixed.', count: a.deadDeliveries, level: 'critical', ...links.webhooks },
     { key: 'stuck-credentials', label: 'Credential exchanges stuck for over a day', detail: 'The holder never answered; re-offer on a new exchange.', count: a.stuckCredentials, level: 'warning', ...links.exchanges },
     { key: 'stuck-proofs', label: 'Proof exchanges stuck for over a day', detail: 'No presentation arrived; request again.', count: a.stuckProofs, level: 'warning', ...links.exchanges },
-    { key: 'expiring-credentials', label: 'Credentials expiring within 30 days', detail: 'Credentials cannot be revoked; re-issue before expiresAt passes.', count: a.expiringCredentials, level: 'warning', ...links.exchanges },
+    { key: 'expiring-credentials', label: 'Credentials expiring within 30 days', detail: 'Credentials cannot be revoked; re-issue before their expiresOn date passes.', count: a.expiringCredentials, level: 'warning', ...links.exchanges },
     { key: 'expired-credentials', label: 'Credentials already expired', detail: 'Verifiers refuse them; re-issue if the holder still needs one.', count: a.expiredCredentials, level: 'warning', ...links.exchanges },
     { key: 'wallets-never-connected', label: 'Wallets that never reached the mediator', detail: 'Created over a day ago with no mediator connection; usually a token that never reached the app.', count: a.walletsNeverConnected, level: 'warning', ...links.wallets },
   ]

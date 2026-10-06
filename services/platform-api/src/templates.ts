@@ -10,7 +10,7 @@ import { z } from 'zod'
 import type { AgentLedgerObject, AgentProofGroup } from './agent-client.ts'
 import { badRequest } from './http/errors.ts'
 
-export const EXPIRY_ATTRIBUTE = 'expiresAt'
+export const EXPIRY_ATTRIBUTE = 'expiresOn'
 
 const attributeName = z.string().regex(/^[A-Za-z0-9_.-]{1,100}$/, 'attribute names are 1-100 chars of [A-Za-z0-9_.-]')
 
@@ -36,7 +36,7 @@ export type TemplateDefinition = z.infer<typeof templateDefinition>
 /** Static rules that do not need the catalogue. Throws PlatformError(400). */
 export function validateTemplate(definition: TemplateDefinition) {
   for (const group of definition.groups) {
-    // The agent adds an `expiresAt >=` predicate to every group, and AnonCreds v1 refuses an
+    // The agent adds an `expiresOn >= today` predicate to every group, and AnonCreds v1 refuses an
     // attribute that is both revealed and predicated (Phase 2 A5 trap 1).
     if (group.attributes.includes(EXPIRY_ATTRIBUTE)) throw badRequest(`group ${group.key}: ${EXPIRY_ATTRIBUTE} cannot be disclosed; it is always checked by predicate`)
     if (group.predicates?.some((p) => p.name === EXPIRY_ATTRIBUTE)) throw badRequest(`group ${group.key}: ${EXPIRY_ATTRIBUTE} is predicated automatically`)

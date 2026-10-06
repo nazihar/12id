@@ -256,7 +256,7 @@ try {
   results.offline = `${offlineResult.state} + ${offline2Result.state}; wake webhook at ${wake.receivedAt}; second offer by the tail in ${tailLatency} s with ${wakes4} wake-up(s)`
 
   // --- 5: proof from a template; a second request declined -------------------------------------
-  console.log('\n=== 5 PROOF (template with the automatic expiresAt predicate) ===')
+  console.log('\n=== 5 PROOF (template with the automatic expiresOn predicate) ===')
   // The user opens the app (a foreground drain) and starts an action the backend guards with a proof
   // request: the app calls expectMessages() as it asks.
   launch()

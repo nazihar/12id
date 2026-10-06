@@ -57,7 +57,7 @@ export const tenantStatsView = z.object({
     stuckCredentials: z.number().int(),
     stuckProofs: z.number().int(),
     deadDeliveries: z.number().int(),
-    /** Issued credentials whose `expiresAt` attribute falls within the next 30 days. */
+    /** Issued credentials whose `expiresOn` date falls within the next 30 days. */
     expiringCredentials: z.number().int(),
     expiredCredentials: z.number().int(),
     walletsNeverConnected: z.number().int(),
@@ -172,8 +172,8 @@ const walletsNeverConnectedCount = (db: Database, tenantId?: string) =>
   scalar(db, sql`select count(*)::int as n from wallets where connected_at is null and revoked_at is null and created_at < now() - ${STUCK_AFTER} ${tenantId ? sql`and tenant_id = ${tenantId}` : sql``}`)
 
 /**
- * Issued credentials by their `expiresAt` attribute, read from `expires_at` (set from the attribute when
- * it is a number, §5.2), which survives the erasure of the attributes (Phase 7 H1).
+ * Issued credentials by their `expiresOn` attribute, read from `expires_at` (the end of that day, set when
+ * it is a valid date, §5.2), which survives the erasure of the attributes (Phase 7 H1).
  */
 const expiryCounts = async (db: Database, tenantId: string) => {
   const result = await db.execute<{ expiring: number; expired: number }>(sql`

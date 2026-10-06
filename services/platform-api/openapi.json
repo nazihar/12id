@@ -869,7 +869,7 @@
         "tags": [
           "credentials"
         ],
-        "description": "Asynchronous. Returns the exchange immediately in state `offer-sent`; `credential-issued` means the holder received it, `done` that it acknowledged. Attribute values are strings; `expiresAt` is epoch seconds as a string, in the future and at most 2147483647 (2038-01-19; predicates compare 32-bit integers). At most 125 attributes, names up to 100 characters, values up to 4 KB, and 64 KB in all. `credentialDefinitionId` accepts the catalogue id or the ledger id.",
+        "description": "Asynchronous. Returns the exchange immediately in state `offer-sent`; `credential-issued` means the holder received it, `done` that it acknowledged. Attribute values are strings; `expiresOn` is the expiry date as `YYYYMMDD` (UTC), today or later: the credential is accepted through the end of that day. At most 125 attributes, names up to 100 characters, values up to 4 KB, and 64 KB in all. `credentialDefinitionId` accepts the catalogue id or the ledger id.",
         "requestBody": {
           "required": true,
           "content": {
@@ -1775,7 +1775,7 @@
         "tags": [
           "proofs"
         ],
-        "description": "Asynchronous. Either a stored `templateId` or an inline `request` in the template shape. Every group automatically checks `expiresAt >= now`. When the exchange reaches `done`, `verified` and the `disclosed` attributes are available.",
+        "description": "Asynchronous. Either a stored `templateId` or an inline `request` in the template shape. Every group automatically checks `expiresOn >= today` (UTC). When the exchange reaches `done`, `verified` and the `disclosed` attributes are available.",
         "requestBody": {
           "required": true,
           "content": {

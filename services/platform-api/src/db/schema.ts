@@ -120,7 +120,8 @@ export const credentials = pgTable('credentials', {
   credentialDefinitionId: text('credential_definition_id'),
   attributes: jsonb('attributes').$type<Record<string, string>>(),
   /**
-   * The mandatory `expiresAt` attribute as a timestamp (Phase 7 H1): a validity date, not personal data,
+   * When the credential stops being accepted, from its mandatory `expiresOn` date (Phase 7 H1; the end of that
+   * UTC day): a validity date, not personal data,
    * kept after the attributes are scrubbed so the dashboard's expiry counts stay right.
    */
   expiresAt: timestamp('expires_at', { withTimezone: true }),

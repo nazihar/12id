@@ -25,12 +25,41 @@ import org.hyperledger.ariesframework.proofs.models.ProofRequest as IndyProofReq
 
 /** Framework records → SDK models. Kept free of Agent calls so JVM tests can cover them. */
 internal object Mappers {
-    /** The platform's mandatory expiry attribute (4-init §4.7): epoch seconds as a string. */
-    const val EXPIRES_AT = "expiresAt"
+    /** The platform's mandatory expiry attribute (4-init §4.7): the expiry date as `YYYYMMDD`, UTC. */
+    const val EXPIRES_ON = "expiresOn"
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    fun expiresAt(attributes: Map<String, String>): Long? = attributes[EXPIRES_AT]?.trim()?.toLongOrNull()
+    /**
+     * The last second (UTC) of the `expiresOn` day, as epoch seconds: the credential is accepted through
+     * the end of that day. Null when the attribute is missing or not a calendar date. Plain arithmetic, so
+     * it works on API 24 without java.time.
+     */
+    fun expiresAt(attributes: Map<String, String>): Long? {
+        val value = attributes[EXPIRES_ON]?.trim() ?: return null
+        if (value.length != 8 || value.any { !it.isDigit() }) return null
+        val year = value.substring(0, 4).toInt()
+        val month = value.substring(4, 6).toInt()
+        val day = value.substring(6, 8).toInt()
+        if (year < 1000 || month !in 1..12 || day !in 1..daysInMonth(year, month)) return null
+        return (daysSinceEpoch(year, month, day) + 1) * 86_400 - 1
+    }
+
+    private fun daysInMonth(year: Int, month: Int): Int = when (month) {
+        2 -> if ((year % 4 == 0 && year % 100 != 0) || year % 400 == 0) 29 else 28
+        4, 6, 9, 11 -> 30
+        else -> 31
+    }
+
+    /** Days from 1970-01-01 to the given proleptic Gregorian date (H. Hinnant's days_from_civil). */
+    private fun daysSinceEpoch(year: Int, month: Int, day: Int): Long {
+        val y = if (month <= 2) year - 1 else year
+        val era = (if (y >= 0) y else y - 399) / 400
+        val yearOfEra = y - era * 400
+        val dayOfYear = (153 * (month + if (month > 2) -3 else 9) + 2) / 5 + day - 1
+        val dayOfEra = yearOfEra * 365 + yearOfEra / 4 - yearOfEra / 100 + dayOfYear
+        return era * 146_097L + dayOfEra - 719_468
+    }
 
     /** Raw values of an AnonCreds credential: `{"values": {"name": {"raw": "…", "encoded": "…"}}}`. */
     fun credentialValues(credentialJson: String): Map<String, String> {

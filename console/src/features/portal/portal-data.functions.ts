@@ -54,7 +54,7 @@ export const listPortalCatalogue = createServerFn({ method: 'GET' })
     return { tab: 'schemas' as const, page, withDefinition: [...new Set(definitions.map((d) => d.schemaId).filter((id): id is string => id !== null && onPage.has(id)))] }
   })
 
-/** Publishes a schema on the ledger. `expiresAt` is always included: v1 credentials expire instead of being revoked. */
+/** Publishes a schema on the ledger. `expiresOn` is always included: v1 credentials expire instead of being revoked. */
 export const publishSchema = createServerFn({ method: 'POST' })
   .middleware([tenantMiddleware({ catalogue: ['publish'] })])
   .validator(organizationInput.extend(publishSchemaInput.shape))

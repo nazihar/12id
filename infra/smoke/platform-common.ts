@@ -190,16 +190,19 @@ export interface Catalogue {
 /** Publishes a fresh schema version + cred def for this run (about 4 s on staging). Console only (K1). */
 export async function publishCatalogue(api: PlatformClient, name: string): Promise<Catalogue> {
   const version = `1.${Math.floor(Date.now() / 1000) % 1_000_000}`
-  const schema = await api.must<{ id: string; schemaId: string }>('POST', '/v1/schemas', { name, version, attributes: ['name', 'employeeNumber', 'department', 'expiresAt'] })
+  const schema = await api.must<{ id: string; schemaId: string }>('POST', '/v1/schemas', { name, version, attributes: ['name', 'employeeNumber', 'department', 'expiresOn'] })
   console.log(`  [${now()}] schema ${schema.schemaId}`)
   const credDef = await api.must<{ id: string; credentialDefinitionId: string }>('POST', '/v1/credential-definitions', { schemaId: schema.id })
   console.log(`  [${now()}] cred def ${credDef.credentialDefinitionId}`)
   return { schemaId: schema.id, credentialDefinitionId: credDef.id, credentialDefinitionLedgerId: credDef.credentialDefinitionId }
 }
 
+/** The mandatory expiry date (YYYYMMDD, UTC) [days] from today. */
+export const expiryDate = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10).replaceAll('-', '')
+
 export const offerAttributes = (label: string) => ({
   name: `Ada Lovelace (${label})`,
   employeeNumber: '1815',
   department: 'Analytical Engines',
-  expiresAt: String(Math.floor(Date.now() / 1000) + 30 * 86_400),
+  expiresOn: expiryDate(30),
 })

@@ -30,9 +30,18 @@ class MappersTest {
     }
 
     @Test
-    fun `expiresAt is read as epoch seconds and ignored when not numeric`() {
-        assertEquals(1893456000L, Mappers.expiresAt(mapOf("expiresAt" to " 1893456000 ")))
-        assertNull(Mappers.expiresAt(mapOf("expiresAt" to "2030-01-01")))
+    fun `expiresOn is read as the last second of that UTC day, and ignored when not a date`() {
+        // 2030-01-01T23:59:59Z
+        assertEquals(1893542399L, Mappers.expiresAt(mapOf("expiresOn" to " 20300101 ")))
+        // Far past 2038, the old epoch-seconds limit: 2100-01-01T00:00:00Z minus one second.
+        assertEquals(4102444799L, Mappers.expiresAt(mapOf("expiresOn" to "20991231")))
+        // Leap day.
+        assertEquals(1835481599L, Mappers.expiresAt(mapOf("expiresOn" to "20280229")))
+        for (bad in listOf("2030-01-01", "20270229", "20301301", "1893456000", "abcdefgh")) {
+            assertNull(bad, Mappers.expiresAt(mapOf("expiresOn" to bad)))
+        }
+        // The retired epoch-seconds attribute is not read.
+        assertNull(Mappers.expiresAt(mapOf("expiresAt" to "1893456000")))
         assertNull(Mappers.expiresAt(emptyMap()))
     }
 

@@ -59,7 +59,7 @@ function PublishSchemaFormBody({ organizationId, orgSlug, onDone }: { organizati
             rows={4}
             mono
             placeholder={'name\ndepartment\nemployeeNumber'}
-            description={`One per line or separated by commas. ${EXPIRY_ATTRIBUTE} (epoch seconds) is added to every schema: credentials expire instead of being revoked.`}
+            description={`One per line or separated by commas. ${EXPIRY_ATTRIBUTE} (the expiry date, YYYYMMDD) is added to every schema: credentials expire instead of being revoked.`}
           />
         )}
       </form.AppField>

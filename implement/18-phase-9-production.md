@@ -25,7 +25,7 @@
   - **B, failover:**
     - Validators: 1 of 4 down, everything continues; 2 down, writes stop and the three alerts fire and arrive by mail.
     - A crashed mediator replica is back in 7–12 s with no message lost. Caddy now retries the other replica, so clients barely notice.
-    - Open: the pickup delete-before-send window (owner decision) and one unexplained clean exit (`--trace-exit` is on).
+    - Open: the pickup delete-before-send window (accepted by the owner 2026-10-06, no patch) and one unexplained clean exit (`--trace-exit` is on).
   - **C, rotation:** every key class was rotated live on staging and every smoke passed. The rehearsal found three bugs, all fixed.
   - **D, DR:**
     - Every database restored with counts equal to live.
@@ -33,7 +33,7 @@
     - The gating drill against production stays after W5.
   - **Owner decisions:**
     1. **Mediator capacity for the target wallet count:** more replicas and hosts, a longer poll interval, and/or a cheaper mediator per message.
-    2. **The delete-before-send window:** accept it, or a `-p7` patch.
+    2. ~~**The delete-before-send window:** accept it, or a `-p7` patch.~~ **Accepted (owner, 2026-10-06):** it is rare (only a mediator crash between taking and sending a batch; 1 of 897 messages in one disturbed run, 0 in clean runs) and recoverable (the exchange is abandoned by reconciliation and offered again). No patch.
 - **W5 step 0 done 2026-10-05: `v0.1.0` is released.** `-rc.1` (2026-10-04) and `-rc.2` were built by CI; `-rc.3` (commit `4dd3680`, + the W7 expiry guard) passed on staging: every service healthy, `docker inspect` 0, 22/22 targets, `smoke:platform-credo`, `smoke:biometric-credo` 18/18 and `e2e:staging` 3/3. `v0.1.0` on the same commit added `0.1.0` to the same nine digests (checked against `release-0.1.0.env`, no rebuild). Production (W5 step 4) deploys `release-0.1.0.env` from the GitHub release.
 - **W7 written and published 2026-10-05 at https://docs.12id.com** (`19-…` W7): `credential-model.md` (new) and a revised `data-protection.md`, published at `docs.12id.com` once the owner's one-time setup is done. Found: credential expiry is capped at 2038-01-19 by 32-bit predicates (offers past it are now refused; owner decision whether to keep that unit).
 - **Next:**
@@ -41,7 +41,7 @@
   - **M15** with W5's minisign keys.
   - The DR drill against production.
   - W6 (iOS) when the hardware arrives.
-- **Done as of 2026-10-05:** W0–W4 on staging and W7 written. **Left before go-live:** W5, M15, the production DR drill, W6, publishing W7, the two W4 decisions and the expiry-unit decision.
+- **Done as of 2026-10-05:** W0–W4 on staging and W7 written. **Left before go-live:** W5, M15, the production DR drill, W6, and sizing the production VM (mediator load now follows exchanges, not open apps: on-demand delivery, `20-on-demand-delivery.md`). **Decided 2026-10-06:** the delete-before-send window is accepted; expiry is a date (`expiresOn`, needs platform `v0.2.0` + SDK 0.2.1); the hosting country is agreed per customer.
 
 ## Context
 Phases 0–6 are built and verified on the staging VM `id-dev` (`*.12id.naziharitsolution.com`, [`4-init-post-phase-0.md`](4-init-post-phase-0.md) §10):
@@ -324,21 +324,21 @@ GHCR needs no secret: the workflow's `GITHUB_TOKEN` pushes to `ghcr.io/nazihar` 
   - minisign with the same configurable anchor.
 - Parity suite in CI (needs a macOS runner).
 
-### W7 — Customer-facing documents — ~2 d (after H1) — ✅ written and published 2026-10-05 at https://docs.12id.com (the hosting country is still the owner's to fill in)
+### W7 — Customer-facing documents — ~2 d (after H1) — ✅ written and published 2026-10-05 at https://docs.12id.com (hosting country: agreed per customer, owner 2026-10-06)
 > **Status 2026-10-05:**
 > - **Written:**
 >   - `services/platform-api/docs/credential-model.md` (new): validity and expiry, no revocation, wallet recovery, attribute-encoding recipes and a schema checklist.
 >   - `data-protection.md` revised: off-site backups and their effect on erasure, hosting, sub-processors and a security-measures overview.
 >   - `api.md` and the SDK guide linked to it and cleaned of internal paths.
 > - **Found while writing:** an `expiresAt` after 2038-01-19 was accepted, but AnonCreds hashes integers outside 32 bits, so every proof of such a credential would fail. Offers now refuse it (agent-service `builders.ts`, tests).
->   - **Owner:** this caps credential validity at 2038. A different expiry unit would lift the cap but changes the API contract; decide before the first customer.
+>   - ~~**Owner:** this caps credential validity at 2038; decide before the first customer.~~ **Decided (owner, 2026-10-06): expiry is now a date.** The mandatory attribute is `expiresOn` = `YYYYMMDD` (UTC), accepted through the end of that day; proofs check `expiresOn >= today`; any date to 9999. Clean break: `expiresAt` (epoch seconds) is retired, with no compatibility path (staging test data only). Code: agent-service `builders.ts` (`isCalendarDate`, `utcDateNumber`), platform-api `views.ts` `expiryOf` (the next midnight UTC), the console, smokes; the SDK reads `expiresOn` into the unchanged `expiresAtEpochSeconds` (0.2.1). Needs a platform release (`v0.2.0`) and SDK 0.2.1.
 > - **Published (owner decision): `docs.12id.com`**, a GitHub Pages site in the public repo `nazihar/12id-docs`, assembled by `docs/site/build.sh` and published by `.github/workflows/docs.yml` on every docs change. Pages: the guides, the API reference (Redoc, pinned with SRI) and `openapi.json`. The workflow skips until the setup below exists.
 > - **Owner's one-time setup** (as for `maven.12id.com`, W3):
 >   1. create the public repo `nazihar/12id-docs` and turn on Pages from `master`;
 >   2. DNS `docs.12id.com` CNAME `nazihar.github.io`, then the custom domain and "Enforce HTTPS" in Pages;
 >   3. Actions secret `DOCS_REPO_TOKEN` in `nazihar/12id`: a fine-grained PAT, Contents read/write on `nazihar/12id-docs` only;
 >   4. run the `docs` workflow once by hand.
-> - **Owner, before publishing:** the hosting country in `data-protection.md` ("Where the data is hosted").
+> - ~~**Owner, before publishing:** the hosting country in `data-protection.md`.~~ **Decided 2026-10-06:** it varies by customer; the guide now says it is agreed per customer in the data-processing agreement (self-hosting: the customer's own servers).
 
 The plan as written:
 - The §5.3 data-protection posture:

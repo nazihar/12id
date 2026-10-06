@@ -10,7 +10,7 @@ export const schemaAttributes = z.array(attributeName).min(1, 'Add at least one 
 /** What the server accepts: attributes already split into names. */
 export const publishSchemaInput = z.object({ name: schemaName, version: schemaVersion, attributes: schemaAttributes })
 
-/** Splits the attributes textarea: one per line or comma-separated, trimmed, deduplicated, `expiresAt` dropped (always appended by the server). */
+/** Splits the attributes textarea: one per line or comma-separated, trimmed, deduplicated, `expiresOn` dropped (always appended by the server). */
 export function parseAttributeList(text: string): string[] {
   const names = text
     .split(/[\s,]+/)

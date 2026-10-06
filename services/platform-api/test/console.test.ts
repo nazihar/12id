@@ -64,7 +64,7 @@ describe('console scope', { skip: db ? false : 'no test database' }, () => {
     assert.equal((await app.inject({ method: 'GET', url: '/v1/connections', headers: member('00000000-0000-4000-8000-000000000000') })).statusCode, 401, 'unknown tenant')
     assert.equal((await app.inject({ method: 'GET', url: '/v1/connections', headers: member('not-a-uuid') })).statusCode, 401)
     assert.equal((await app.inject({ method: 'GET', url: '/v1/connections', headers: { ...member(tenantA), 'x-console-role': 'root' } })).statusCode, 401)
-    const offer = await app.inject({ method: 'POST', url: '/v1/credentials/offer', headers: member(tenantA), payload: { connectionId: 'conn-1', credentialDefinitionId: 'ABC:3:CL:12:default', attributes: { name: 'Ada', expiresAt: '9999999999' } } })
+    const offer = await app.inject({ method: 'POST', url: '/v1/credentials/offer', headers: member(tenantA), payload: { connectionId: 'conn-1', credentialDefinitionId: 'ABC:3:CL:12:default', attributes: { name: 'Ada', expiresOn: '20991231' } } })
     assert.equal(offer.statusCode, 202, offer.body)
   })
 

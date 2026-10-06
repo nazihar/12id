@@ -60,7 +60,7 @@ try {
   const offer = await call<{ credentialExchangeId: string; threadId: string }>('POST', `/tenants/${tenantId}/credentials/offer`, {
     connectionId,
     credentialDefinitionObjectId: credDefObjectId,
-    values: { name: 'Ada Lovelace', employeeNumber: '1815', department: 'Analytical Engines', expiresAt: String(Math.floor(Date.now() / 1000) + 86_400) },
+    values: { name: 'Ada Lovelace', employeeNumber: '1815', department: 'Analytical Engines', expiresOn: new Date(Date.now() + 86_400_000).toISOString().slice(0, 10).replaceAll('-', '') },
     correlationId,
   })
   await credentialDone

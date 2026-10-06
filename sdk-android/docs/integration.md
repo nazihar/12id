@@ -250,8 +250,8 @@ and reference both from `<application android:dataExtractionRules=… android:fu
 - **A lost phone means a lost wallet.** There is no backup or export in this version: after a reinstall
   or a new device the app onboards a new wallet and organisations issue credentials again. Design your
   onboarding so re-issuance is one step for the user.
-- **Credentials cannot be revoked**; they carry an `expiresAt` attribute (epoch seconds) that every
-  verifier checks with a predicate, so a credential simply stops being accepted at that time.
+- **Credentials cannot be revoked**; they carry an `expiresOn` date (`YYYYMMDD`, UTC) that every
+  verifier checks with a predicate, so a credential simply stops being accepted after that day. `Credential.expiresAtEpochSeconds` is the last second of it.
   `Credential.isExpired()` tells you when to prompt for renewal. Attribute values are strings; see the
   platform guide for the encoding rules.
 

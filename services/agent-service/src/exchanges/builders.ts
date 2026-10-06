@@ -2,7 +2,7 @@
  * Pure builders for v1 offers and proof requests, so the wire-level rules are unit-tested:
  *   - only unqualified cred def ids (4-init §2.7.2);
  *   - attributes exactly match the schema, as strings (4-init §5.2);
- *   - every schema carries `expiresAt`, and every proof request checks it (4-init §4.7).
+ *   - every schema carries `expiresOn` (YYYYMMDD, UTC), and every proof request checks it is not past (4-init §4.7).
  */
 import { assertWireCredentialDefinitionId } from '@12id/credo-base/ids.ts'
 
@@ -17,6 +17,20 @@ export class ExchangeInputError extends Error {
 
 /** The largest integer AnonCreds encodes as an integer (signed 32-bit); predicates need integers. */
 export const MAX_PREDICATE_INTEGER = 2_147_483_647
+
+/** The UTC day of [epochSeconds] as the integer YYYYMMDD the expiry predicate compares. */
+export function utcDateNumber(epochSeconds: number): number {
+  const day = new Date(epochSeconds * 1000)
+  return day.getUTCFullYear() * 10_000 + (day.getUTCMonth() + 1) * 100 + day.getUTCDate()
+}
+
+/** True for an existing calendar date written as YYYYMMDD (no 20250230). */
+export function isCalendarDate(value: string): boolean {
+  if (!/^\d{8}$/.test(value)) return false
+  const [year, month, day] = [Number(value.slice(0, 4)), Number(value.slice(4, 6)), Number(value.slice(6, 8))]
+  const date = new Date(Date.UTC(year, month - 1, day))
+  return year >= 1000 && date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+}
 
 export interface OfferAttribute {
   name: string
@@ -35,17 +49,13 @@ export function buildOfferAttributes(
   if (missing.length > 0) throw new ExchangeInputError(`missing attributes: ${missing.join(', ')}`)
   if (unexpected.length > 0) throw new ExchangeInputError(`attributes not in the schema: ${unexpected.join(', ')}`)
 
-  const expiresAt = values[EXPIRY_ATTRIBUTE]
-  if (expiresAt === undefined || !/^\d{1,12}$/.test(expiresAt)) {
-    throw new ExchangeInputError(`${EXPIRY_ATTRIBUTE} must be epoch seconds as an integer string`)
+  // A date, not epoch seconds (2026-10-06): AnonCreds compares only 32-bit integers in predicates, so
+  // epoch seconds capped validity at 2038-01-19; YYYYMMDD fits until year 9999 (Phase 9 W7 finding).
+  const expiresOn = values[EXPIRY_ATTRIBUTE]
+  if (expiresOn === undefined || !isCalendarDate(expiresOn)) {
+    throw new ExchangeInputError(`${EXPIRY_ATTRIBUTE} must be a date as YYYYMMDD, e.g. 20301231`)
   }
-  if (Number(expiresAt) <= nowSeconds) throw new ExchangeInputError(`${EXPIRY_ATTRIBUTE} is not in the future`)
-  // AnonCreds encodes a value as an integer only within the signed 32-bit range and hashes anything larger,
-  // so a later expiry would be issued but fail the mandatory `expiresAt >= now` predicate in every proof
-  // (Phase 9 W7: found while writing the customer's credential-model guide).
-  if (Number(expiresAt) > MAX_PREDICATE_INTEGER) {
-    throw new ExchangeInputError(`${EXPIRY_ATTRIBUTE} must be at most ${MAX_PREDICATE_INTEGER} (2038-01-19T03:14:07Z): predicates work on 32-bit integers`)
-  }
+  if (Number(expiresOn) < utcDateNumber(nowSeconds)) throw new ExchangeInputError(`${EXPIRY_ATTRIBUTE} is in the past`)
 
   return schemaAttributes.map((name) => ({ name, value: String(values[name]) }))
 }
@@ -78,7 +88,7 @@ export function buildProofRequest(name: string, groups: ProofGroupInput[], nowSe
     const restrictions = group.credentialDefinitionIds.map((id) => ({ cred_def_id: assertWireCredentialDefinitionId(id) }))
 
     // AnonCreds refuses a request that both reveals an attribute and predicates on it
-    // (Credo: "duplicate predicates and attributes"). expiresAt is always predicated.
+    // (Credo: "duplicate predicates and attributes"). expiresOn is always predicated.
     const predicated = new Set([EXPIRY_ATTRIBUTE, ...(group.predicates ?? []).map((p) => p.name)])
     const clash = group.attributes.filter((name) => predicated.has(name))
     if (clash.length > 0) {
@@ -101,7 +111,8 @@ export function buildProofRequest(name: string, groups: ProofGroupInput[], nowSe
     request.requested_predicates[`${group.key}_not_expired`] = {
       name: EXPIRY_ATTRIBUTE,
       p_type: '>=',
-      p_value: nowSeconds,
+      // Valid through the end of its expiry day (UTC): today's date as YYYYMMDD.
+      p_value: utcDateNumber(nowSeconds),
       restrictions,
     }
   }

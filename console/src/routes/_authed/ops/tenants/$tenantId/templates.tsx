@@ -38,7 +38,7 @@ const columns = column.columns([
                 · {p.name} {p.type} {p.value}
               </span>
             ))}
-            <span className="text-muted-foreground"> · expiresAt checked</span>
+            <span className="text-muted-foreground"> · expiresOn checked</span>
           </li>
         ))}
       </ul>

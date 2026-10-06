@@ -71,7 +71,7 @@ try {
     'holder credential done'
   )
   const idempotencyKey = `offer-${externalId}`
-  // One body for both calls: offerAttributes derives expiresAt from the clock, and a retry whose body
+  // One body for both calls: offerAttributes derives expiresOn from the clock, and a retry whose body
   // differs by a second is (correctly) refused with 422.
   const offerBody = { connectionId, credentialDefinitionId: catalogue.credentialDefinitionLedgerId, attributes: offerAttributes('platform'), externalId }
   const offer = await api.must<{ id: string; state: string }>('POST', '/v1/credentials/offer', offerBody, { 'idempotency-key': idempotencyKey })

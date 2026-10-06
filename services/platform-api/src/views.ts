@@ -126,11 +126,15 @@ export function toWalletView(row: typeof wallets.$inferSelect): z.infer<typeof w
 }
 
 /**
- * The mandatory `expiresAt` attribute (epoch seconds as a string, §5.2) as a Date, or null when it is
- * missing or not a number. Stored on its own (`credentials.expires_at`) so it survives erasure.
+ * When a credential stops being accepted: the end of its mandatory `expiresOn` day (YYYYMMDD, UTC, §5.2),
+ * i.e. the next midnight UTC, or null when the attribute is missing or not a date. Stored on its own
+ * (`credentials.expires_at`) so it survives erasure.
  */
 export function expiryOf(attributes: Record<string, string> | null | undefined): Date | null {
-  const value = attributes?.expiresAt
-  if (!value || !/^[0-9]{1,12}$/.test(value)) return null
-  return new Date(Number(value) * 1000)
+  const value = attributes?.expiresOn
+  if (!value || !/^[0-9]{8}$/.test(value)) return null
+  const [year, month, day] = [Number(value.slice(0, 4)), Number(value.slice(4, 6)), Number(value.slice(6, 8))]
+  const start = new Date(Date.UTC(year, month - 1, day))
+  if (start.getUTCFullYear() !== year || start.getUTCMonth() !== month - 1 || start.getUTCDate() !== day) return null
+  return new Date(Date.UTC(year, month - 1, day + 1))
 }

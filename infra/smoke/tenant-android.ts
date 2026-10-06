@@ -10,7 +10,7 @@
  *
  * Scenario (Phase 0 S7 / Phase 1 W8, now on a tenant): connect, LIVE offer, OFFLINE offer
  * (app force-stopped, queued at the mediator, collected on reopen), PROOF with the mandatory
- * expiresAt predicate. No Credo runs on this machine; only fetch + adb.
+ * expiresOn predicate. No Credo runs on this machine; only fetch + adb.
  *
  * Env: TENANT_ID, CRED_DEF_OBJECT_ID, CRED_DEF_ID (unqualified), AGENT_API, INVITE_PORT.
  */
@@ -68,7 +68,7 @@ async function offer(connectionId: string, label: string) {
       name: `Ada Lovelace (${label})`,
       employeeNumber: '1815',
       department: 'Analytical Engines',
-      expiresAt: String(Math.floor(Date.now() / 1000) + 30 * 86_400),
+      expiresOn: new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10).replaceAll('-', ''),
     },
     correlationId,
   })
@@ -128,7 +128,7 @@ try {
   const offlineLatency = offlineResult.state === 'done' ? `(${((Date.now() - reopenedAt) / 1000).toFixed(1)} s after reopen)` : ''
 
   // --- proof -----------------------------------------------------------------------------
-  console.log('\n=== PROOF (attributes + the mandatory expiresAt predicate) ===')
+  console.log('\n=== PROOF (attributes + the mandatory expiresOn predicate) ===')
   const proof = await call<{ proofExchangeId: string }>('POST', `/tenants/${tenantId}/proofs/request`, {
     connectionId,
     name: 'smoke-tenant-android',

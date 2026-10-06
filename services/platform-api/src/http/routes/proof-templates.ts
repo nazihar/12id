@@ -46,7 +46,7 @@ export const proofTemplateRoutes = (deps: { db: Database }): FastifyPluginAsyncZ
       schema: {
         tags: writeTags,
         summary: 'Create a proof template',
-        description: 'Each group discloses attributes from one credential and may add integer predicates. Credentials are referenced by schema name (all versions, or active only) or by credential definition id. `expiresAt` is always predicated and can never be disclosed. `biometricPolicy` (optional) overrides the tenant\'s biometric default for requests made from this template.',
+        description: 'Each group discloses attributes from one credential and may add integer predicates. Credentials are referenced by schema name (all versions, or active only) or by credential definition id. `expiresOn` is always checked (`expiresOn >= today`, UTC) and can never be disclosed. `biometricPolicy` (optional) overrides the tenant\'s biometric default for requests made from this template.',
         body: templateBody,
         response: { 201: templateView, 400: errorBody, 403: errorBody },
       },

@@ -495,6 +495,7 @@ Issuer and verifier agents must either enable `connections.autoAcceptConnections
 Out of scope (§12.3). An issued AnonCreds credential **stays cryptographically valid indefinitely**; AnonCreds has no built-in expiry. "Short-lived credentials" therefore has to be implemented in the data model:
 
 - Include an integer expiry attribute (e.g. epoch seconds as a string, per §5.2) in every schema.
+  *Expiry as a date (2026-10-06, owner): the attribute is `expiresOn` = `YYYYMMDD` (UTC), accepted through the end of that day, checked with `expiresOn >= today`; epoch seconds capped validity at 2038 (32-bit predicates) and are retired (`18-phase-9-production.md` W7).*
 - Verifier proof templates add a predicate on it (`expiresAt >= now`) and must never omit it.
 - Re-issue on expiry.
 
@@ -1020,7 +1021,7 @@ Plan: [`18-phase-9-production.md`](18-phase-9-production.md); evidence (when sta
 - [ ] W4: Phase 8 Hardening (load, failover, key rotation, DR drill). **Ran on staging 2026-10-04**: all four parts done; open are the mediator capacity decision for the target wallet count, the delete-before-send window, and the DR drill against production after W5
 - [ ] W5: production bring-up on `*.12id.com` from one release `vX.Y.Z`, pinned by digest
 - [ ] W6: iOS (blocked on a Mac, an Apple developer account and an iPhone)
-- [x] W7: customer-facing documents (§5.3, no revocation, wallet recovery, §5.2). **Written and published 2026-10-05 at https://docs.12id.com** (`services/platform-api/docs/credential-model.md` new, `data-protection.md` revised); published at `docs.12id.com` (GitHub Pages) once the owner's one-time setup is done (`18-phase-9-production.md` W7). Found: expiry capped at 2038-01-19 by 32-bit predicates; offers past it are now refused
+- [x] W7: customer-facing documents (§5.3, no revocation, wallet recovery, §5.2). **Written and published 2026-10-05 at https://docs.12id.com** (`services/platform-api/docs/credential-model.md` new, `data-protection.md` revised); published at `docs.12id.com` (GitHub Pages) once the owner's one-time setup is done (`18-phase-9-production.md` W7). Found: expiry capped at 2038-01-19 by 32-bit predicates; **2026-10-06 the owner chose a date instead: `expiresOn` (YYYYMMDD)**
 - [x] On-demand delivery (2026-10-05, [`20-on-demand-delivery.md`](20-on-demand-delivery.md)): Android SDK 0.2.0 polls the mediator only when a reply is expected (windows after `connect` / `acceptOffer` / `expectMessages`), once on foreground, and on `sync()` plus a 32 s tail; no idle timer (fork F9). No platform change. Unit tests green; `smoke:sdk-android` (all steps, 0 pickups while idle) and `smoke:sdk-biometric-android` 12/12 passed on the phone; **released 2026-10-05** (tag `sdk-android-v0.2.0`, maven.12id.com)
 - [ ] Go-live gate: see the plan
 

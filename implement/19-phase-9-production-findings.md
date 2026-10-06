@@ -422,7 +422,7 @@ tracked (`delivery-report.ts`).
   - **0 lost, 0 duplicated**; delivery p50 5.1 s, p99 10 s.
 - **The delete-before-send window is real.** Credo's pickup v1 takes rows with `deleteMessages: true` before writing
   the reply. In a run disturbed by a leftover second outage, one message (1 of 897), queued 10 s before the kill,
-  never arrived. Clean runs lost none. **Owner decision pending:** accept it (narrow window; the exchange is
+  never arrived. Clean runs lost none. **Owner decision (2026-10-06): accepted, no patch.** The options were: accept it (narrow window; the exchange is
   abandoned by reconciliation and re-offered) or a `-p7` patch that deletes only after the reply is written.
 - **Fix: Caddy retries the other replica.** `lb_try_duration 5s` / `lb_try_interval 250ms` on the mediator site:
   a refused connection to a dead replica is retried on the live one.
@@ -516,7 +516,7 @@ Each step followed `runbooks/key-rotation.md`, after a fresh backup, with the sm
   `expiresAt >= now` predicate in every proof. Offers past `2147483647` are now refused with a clear message
   (agent-service `builders.ts`; tests 9/9, agent-service 61/61); the OpenAPI description and `api.md` say so. The
   same limit applies to any attribute used in a predicate (documented).
-  - **Owner decision:** keep epoch seconds (validity capped at 2038), or change the expiry unit before the first
+  - **Decided (owner, 2026-10-06): expiry is now a date.** The mandatory attribute is `expiresOn` = `YYYYMMDD` (UTC), accepted through the end of that day; proofs check `expiresOn >= today`; any date to 9999. Clean break: `expiresAt` (epoch seconds) is retired, with no compatibility path (staging test data only). Code: agent-service `builders.ts` (`isCalendarDate`, `utcDateNumber`), platform-api `views.ts` `expiryOf` (the next midnight UTC), the console, smokes; the SDK reads `expiresOn` into the unchanged `expiresAtEpochSeconds` (0.2.1). Needs a platform release (`v0.2.0`) and SDK 0.2.1. Original question: keep epoch seconds (validity capped at 2038), or change the expiry unit before the first
     customer (an API contract change).
 - **Publishing (owner decision 2026-10-05): `docs.12id.com` on GitHub Pages**, same pattern as `maven.12id.com`.
   - `docs/site/` holds the landing page, the Pages config and an API reference page (Redoc 2.5.4, SRI-pinned, rendering

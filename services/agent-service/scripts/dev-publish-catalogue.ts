@@ -33,7 +33,7 @@ try {
     logger,
   }
   const started = Date.now()
-  const schema = await publishSchema(deps, tenantId, { name: schemaName, version, attributes: ['name', 'employeeNumber', 'department', 'expiresAt'] })
+  const schema = await publishSchema(deps, tenantId, { name: schemaName, version, attributes: ['name', 'employeeNumber', 'department', 'expiresOn'] })
   const credDef = await publishCredentialDefinition(deps, tenantId, schema.id)
   console.log(
     JSON.stringify(

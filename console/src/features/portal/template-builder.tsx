@@ -62,7 +62,7 @@ type TemplateForm = ReturnType<typeof useTemplateForm>
 
 /**
  * Builds a proof request template: which credential types each group accepts, which attributes are
- * disclosed, and which integer predicates apply. `expiresAt >= now` is added to every group by the
+ * disclosed, and which integer predicates apply. `expiresOn >= today` is added to every group by the
  * platform and cannot be disclosed or edited. Every rule is checked on submit and shown at the field
  * it concerns; leaving with unsaved changes asks first.
  */
@@ -172,7 +172,7 @@ export function TemplateBuilder({
                           {(field) => (
                             <Field data-invalid={field.state.meta.errors.length > 0 || undefined}>
                               <FieldLabel>Predicates</FieldLabel>
-                              <FieldDescription>Integer comparisons the holder proves without revealing the value. {EXPIRY_ATTRIBUTE} ≥ now is always checked and never disclosed.</FieldDescription>
+                              <FieldDescription>Integer comparisons the holder proves without revealing the value. {EXPIRY_ATTRIBUTE} ≥ today is always checked and never disclosed.</FieldDescription>
                               {field.state.value.map((predicate, predicateIndex) => (
                                 <PredicateRow
                                   key={predicateIndex}

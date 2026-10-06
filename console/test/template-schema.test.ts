@@ -23,10 +23,10 @@ describe('template rules', () => {
     expect(paths(templateDefinitionForm.safeParse({ name: 'x', groups: [group('a'), group('a')] }))).toEqual(['groups.1.key: Group keys must be unique; "a" is also group 1.'])
   })
 
-  it('refuse expiresAt as disclosed or predicated, on those fields', () => {
-    const issues = paths(templateDefinitionForm.safeParse({ name: 'x', groups: [group('a', { attributes: ['expiresAt'], predicates: [{ name: 'expiresAt', type: '>=', value: 1 }] })] }))
-    expect(issues).toContain('groups.0.attributes: expiresAt cannot be disclosed; it is always checked.')
-    expect(issues).toContain('groups.0.predicates.0.name: expiresAt is checked automatically.')
+  it('refuse expiresOn as disclosed or predicated, on those fields', () => {
+    const issues = paths(templateDefinitionForm.safeParse({ name: 'x', groups: [group('a', { attributes: ['expiresOn'], predicates: [{ name: 'expiresOn', type: '>=', value: 1 }] })] }))
+    expect(issues).toContain('groups.0.attributes: expiresOn cannot be disclosed; it is always checked.')
+    expect(issues).toContain('groups.0.predicates.0.name: expiresOn is checked automatically.')
   })
 
   it('refuse an attribute both disclosed and predicated, on the predicate', () => {

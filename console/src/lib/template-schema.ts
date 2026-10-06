@@ -4,7 +4,7 @@
  */
 import { z } from 'zod'
 
-export const EXPIRY_ATTRIBUTE = 'expiresAt'
+export const EXPIRY_ATTRIBUTE = 'expiresOn'
 
 export const attributeName = z.string().regex(/^[A-Za-z0-9_.-]{1,100}$/, 'Attribute names are 1-100 characters of letters, digits, _ . -')
 

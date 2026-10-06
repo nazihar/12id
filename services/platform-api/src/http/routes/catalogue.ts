@@ -73,7 +73,7 @@ export const catalogueRoutes = (deps: CatalogueDeps): FastifyPluginAsyncZod => a
       schema: {
         tags: writeTags,
         summary: 'Publish a schema',
-        description: 'Attributes are strings on the wire (no nested values, no native numbers). `expiresAt` (epoch seconds) is mandatory: v1 has no revocation, so every credential carries an expiry that every proof request checks.',
+        description: 'Attributes are strings on the wire (no nested values, no native numbers). `expiresOn` (the expiry date as `YYYYMMDD`, UTC) is mandatory: v1 has no revocation, so every credential carries an expiry that every proof request checks.',
         body: z.object({ name: z.string().min(1).max(200), version: z.string().regex(/^\d+(\.\d+){0,2}$/, 'version like 1.0'), attributes: z.array(z.string().min(1).max(100)).min(1).max(125) }),
         response: { 201: schemaView, 400: errorBody, 403: errorBody, 409: errorBody, 422: errorBody },
       },

@@ -27,7 +27,10 @@ public data class Credential(
     val schemaVersion: String,
     val credentialDefinitionId: String,
     val attributes: Map<String, String>,
-    /** From the platform's mandatory `expiresAt` attribute (epoch seconds), when present and numeric. */
+    /**
+     * The last second (UTC) of the platform's mandatory `expiresOn` date (`YYYYMMDD`), as epoch seconds:
+     * the credential is accepted through the end of that day. Null when the attribute is missing or not a date.
+     */
     val expiresAtEpochSeconds: Long?,
 ) {
     /** True once [expiresAtEpochSeconds] has passed. Verifiers will then refuse proofs from this credential. */

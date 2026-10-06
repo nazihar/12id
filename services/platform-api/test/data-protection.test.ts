@@ -44,10 +44,12 @@ describe('data protection', { skip: database ? false : 'no test database' }, () 
   const consoleAs = (role: string, actor = `user_${role}`) => ({ 'x-console-token': token, 'x-console-actor': actor, 'x-console-role': role, 'x-console-tenant': tenantId })
   const apiKey = () => ({ authorization: `Bearer ${bearer}` })
 
-  const expiresAt = String(Math.floor(Date.now() / 1000) + 30 * 86_400)
+  const expiresOn = '20991231'
+  // The end of the expiry day (UTC): when the credential stops being accepted.
+  const validUntil = Date.UTC(2100, 0, 1)
   async function seedCredential(recordId: string, state = 'done', extra: Partial<typeof credentials.$inferInsert> = {}) {
-    const attributes = { name: 'Ada Lovelace', expiresAt }
-    await db.insert(credentials).values({ tenantId, recordId, connectionId: 'conn-1', state, attributes, expiresAt: new Date(Number(expiresAt) * 1000), credentialDefinitionId: 'ABC:3:CL:12:default', ...extra })
+    const attributes = { name: 'Ada Lovelace', expiresOn }
+    await db.insert(credentials).values({ tenantId, recordId, connectionId: 'conn-1', state, attributes, expiresAt: new Date(validUntil), credentialDefinitionId: 'ABC:3:CL:12:default', ...extra })
     await enqueueEvent(db, endpoints, tenantId, 'credential.state_changed', { id: recordId, state, attributes })
   }
 
@@ -86,7 +88,7 @@ describe('data protection', { skip: database ? false : 'no test database' }, () 
 
     const [row] = await db.select().from(credentials).where(eq(credentials.recordId, 'cred-1'))
     assert.equal(row!.attributes, null)
-    assert.equal(row!.expiresAt?.getTime(), Number(expiresAt) * 1000, 'the validity date stays for the dashboard')
+    assert.equal(row!.expiresAt?.getTime(), validUntil, 'the validity date stays for the dashboard')
     assert.match(row!.erasedBy!, /^api_key:/)
     assert.ok(agent.calls.some((c) => c.method === 'eraseCredential' && c.args[1] === 'cred-1'))
     assert.ok(biometric.calls.some((c) => c.method === 'eraseCheck'))
@@ -165,7 +167,7 @@ describe('data protection', { skip: database ? false : 'no test database' }, () 
   it('operators see personal data masked unless they reveal it with a reason; the tenant sees it', async () => {
     await seedCredential('cred-m')
     const operatorView = await app.inject({ method: 'GET', url: '/v1/credentials/cred-m', headers: consoleAs('operator') })
-    assert.deepEqual(operatorView.json().attributes, { name: MASK, expiresAt: MASK })
+    assert.deepEqual(operatorView.json().attributes, { name: MASK, expiresOn: MASK })
     const connection = await app.inject({ method: 'GET', url: '/v1/connections/conn-1', headers: consoleAs('operator') })
     assert.equal(connection.json().theirLabel, MASK)
     const list = await app.inject({ method: 'GET', url: '/v1/credentials', headers: consoleAs('operator') })

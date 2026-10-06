@@ -158,7 +158,7 @@ export interface paths {
         put?: never;
         /**
          * Publish a schema
-         * @description Attributes are strings on the wire (no nested values, no native numbers). `expiresAt` (epoch seconds) is mandatory: v1 has no revocation, so every credential carries an expiry that every proof request checks.
+         * @description Attributes are strings on the wire (no nested values, no native numbers). `expiresOn` (the expiry date as `YYYYMMDD`, UTC) is mandatory: v1 has no revocation, so every credential carries an expiry that every proof request checks.
          */
         post: {
             parameters: {
@@ -705,7 +705,7 @@ export interface paths {
         put?: never;
         /**
          * Offer a credential
-         * @description Asynchronous. Returns the exchange immediately in state `offer-sent`; `credential-issued` means the holder received it, `done` that it acknowledged. Attribute values are strings; `expiresAt` is epoch seconds as a string, in the future and at most 2147483647 (2038-01-19; predicates compare 32-bit integers). At most 125 attributes, names up to 100 characters, values up to 4 KB, and 64 KB in all. `credentialDefinitionId` accepts the catalogue id or the ledger id.
+         * @description Asynchronous. Returns the exchange immediately in state `offer-sent`; `credential-issued` means the holder received it, `done` that it acknowledged. Attribute values are strings; `expiresOn` is the expiry date as `YYYYMMDD` (UTC), today or later: the credential is accepted through the end of that day. At most 125 attributes, names up to 100 characters, values up to 4 KB, and 64 KB in all. `credentialDefinitionId` accepts the catalogue id or the ledger id.
          */
         post: {
             parameters: {
@@ -1007,7 +1007,7 @@ export interface paths {
         put?: never;
         /**
          * Request a proof
-         * @description Asynchronous. Either a stored `templateId` or an inline `request` in the template shape. Every group automatically checks `expiresAt >= now`. When the exchange reaches `done`, `verified` and the `disclosed` attributes are available.
+         * @description Asynchronous. Either a stored `templateId` or an inline `request` in the template shape. Every group automatically checks `expiresOn >= today` (UTC). When the exchange reaches `done`, `verified` and the `disclosed` attributes are available.
          */
         post: {
             parameters: {
@@ -2650,7 +2650,7 @@ export interface paths {
         put?: never;
         /**
          * Create a proof template
-         * @description Each group discloses attributes from one credential and may add integer predicates. Credentials are referenced by schema name (all versions, or active only) or by credential definition id. `expiresAt` is always predicated and can never be disclosed. `biometricPolicy` (optional) overrides the tenant's biometric default for requests made from this template.
+         * @description Each group discloses attributes from one credential and may add integer predicates. Credentials are referenced by schema name (all versions, or active only) or by credential definition id. `expiresOn` is always checked (`expiresOn >= today`, UTC) and can never be disclosed. `biometricPolicy` (optional) overrides the tenant's biometric default for requests made from this template.
          */
         post: {
             parameters: {

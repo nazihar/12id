@@ -99,7 +99,7 @@ try {
   const offlineResult = await waitState('credential.state_changed', offline.id, ['done', 'abandoned'], 180_000, 'offline credential')
 
   // --- proof from a template -------------------------------------------------------------
-  console.log('\n=== PROOF (template: attributes + automatic expiresAt predicate) ===')
+  console.log('\n=== PROOF (template: attributes + automatic expiresOn predicate) ===')
   const template = await setup.must<{ id: string }>('POST', '/v1/proof-templates', { name: 'smoke-platform-android', groups: [{ key: 'employee', attributes: ['name', 'department'], credentials: [{ credentialDefinitionId: credDefId }] }] })
   const proof = await api.must<{ id: string }>('POST', '/v1/proofs/request', { connectionId, templateId: template.id, externalId })
   const proofResult = await waitState('proof.state_changed', proof.id, ['done', 'abandoned'], 120_000, 'proof')

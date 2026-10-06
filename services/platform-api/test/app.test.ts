@@ -97,7 +97,7 @@ describe('platform-api HTTP', { skip: db ? false : 'no test database' }, () => {
 
   it('offers a credential: mirror row is readable immediately, ledger id or catalogue id accepted', async () => {
     const headers = { authorization: `Bearer ${apiKey}` }
-    const offer = await app.inject({ method: 'POST', url: '/v1/credentials/offer', headers, payload: { connectionId: 'conn-1', credentialDefinitionId: 'ABC:3:CL:12:default', attributes: { name: 'Ada', expiresAt: '9999999999' }, externalId: 'emp-42' } })
+    const offer = await app.inject({ method: 'POST', url: '/v1/credentials/offer', headers, payload: { connectionId: 'conn-1', credentialDefinitionId: 'ABC:3:CL:12:default', attributes: { name: 'Ada', expiresOn: '20991231' }, externalId: 'emp-42' } })
     assert.equal(offer.statusCode, 202, offer.body)
     assert.equal(offer.json().id, 'cred-1')
     assert.equal(offer.json().state, 'offer-sent')
@@ -205,7 +205,7 @@ describe('platform-api HTTP', { skip: db ? false : 'no test database' }, () => {
     const template = { name: 'k1', groups: [{ key: 'employee', attributes: ['name'], credentials: [{ schemaName: 'employee-badge' }] }] }
     const someId = '00000000-0000-4000-8000-000000000000'
     const writes: Array<{ method: 'POST' | 'PUT' | 'DELETE'; url: string; payload?: object }> = [
-      { method: 'POST', url: '/v1/schemas', payload: { name: 'k1', version: '1.0', attributes: ['name', 'expiresAt'] } },
+      { method: 'POST', url: '/v1/schemas', payload: { name: 'k1', version: '1.0', attributes: ['name', 'expiresOn'] } },
       { method: 'POST', url: `/v1/schemas/${someId}/deprecation`, payload: { deprecated: true } },
       { method: 'POST', url: '/v1/credential-definitions', payload: { schemaId: someId } },
       { method: 'POST', url: '/v1/proof-templates', payload: template },
@@ -228,7 +228,7 @@ describe('platform-api HTTP', { skip: db ? false : 'no test database' }, () => {
     for (const url of ['/v1/schemas', '/v1/credential-definitions', '/v1/proof-templates', '/v1/webhook/deliveries']) {
       assert.equal((await app.inject({ method: 'GET', url, headers: key })).statusCode, 200, url)
     }
-    const published = await app.inject({ method: 'POST', url: '/v1/schemas', headers: consoleHeaders(), payload: { name: 'k1', version: '1.0', attributes: ['name', 'expiresAt'] } })
+    const published = await app.inject({ method: 'POST', url: '/v1/schemas', headers: consoleHeaders(), payload: { name: 'k1', version: '1.0', attributes: ['name', 'expiresOn'] } })
     assert.equal(published.statusCode, 201, published.body)
 
     const spec = (await app.inject({ method: 'GET', url: '/openapi.json' })).json() as { paths: Record<string, Record<string, unknown>> }

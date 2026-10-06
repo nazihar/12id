@@ -29,11 +29,12 @@ What lives where:
 
 There is no revocation in this version of 12iD, so **expiry is how a credential stops being accepted.**
 
-- **Every schema contains `expiresAt`.** The console adds it when you publish a schema.
-- **You set it on every offer.** It is a Unix time in seconds, as a string (`"1798761600"` is 2027-01-01 00:00 UTC), and must be in the future.
-- **Every proof request checks it automatically** (`expiresAt >= now`), and you cannot remove that check. An expired credential fails every proof, and the wallet still keeps it.
-- **`expiresAt` is never disclosed.** A proof only shows that the credential is still valid, not its date.
-- **The latest possible expiry is 2038-01-19 03:14:07 UTC** (`2147483647`). Proofs compare integers of at most 32 bits, so a later date could never be checked; offers with one are refused (`400`).
+- **Every schema contains `expiresOn`.** The console adds it when you publish a schema.
+- **You set it on every offer.** It is the expiry date as `YYYYMMDD`, as a string (`"20271231"` is 31 December 2027), today or later. Dates are UTC.
+- **The credential is accepted through the end of that day** (until 23:59:59 UTC), and refused from the next day.
+- **Every proof request checks it automatically** (`expiresOn >= today`), and you cannot remove that check. An expired credential fails every proof, and the wallet still keeps it.
+- **`expiresOn` is never disclosed.** A proof only shows that the credential is still valid, not its date.
+- **Any date up to the year 9999 works.** Expiry is a whole day, not a time of day.
 
 **Choose the validity period for each credential type.** A shorter period limits how long a credential you
 can no longer stand behind stays usable. A longer one means fewer re-issues. As a guide: months for access
@@ -41,7 +42,7 @@ and membership, a year or two for qualifications, with re-issue on renewal.
 
 ## No revocation: what it means for you
 
-- **An issued credential cannot be withdrawn before its `expiresAt`.** This holds even when the person leaves your organisation, or you erase your records of the exchange ([`data-protection.md`](data-protection.md), "What erasure does not do").
+- **An issued credential cannot be withdrawn before its `expiresOn` date.** This holds even when the person leaves your organisation, or you erase your records of the exchange ([`data-protection.md`](data-protection.md), "What erasure does not do").
 - **If the facts change** (new department, new expiry), issue a new credential. The verifier's proof request decides which credentials it accepts. The user's app can delete the old one; you cannot delete it remotely.
 - **If you need early invalidation** (for example for high-risk access), keep expiry short and re-issue often, and talk to us. Revocation would need new credential definitions, so it cannot be added to credentials already issued.
 
@@ -84,7 +85,7 @@ time is the most common source of mistakes.
 | Yes/no | `"1"` / `"0"` | `"1"` | `isAdult >= 1` |
 | A choice from a list | Short text code | `"ENGINEERING"` | none; disclose it |
 | A document | Its hash or a reference | `"sha256:9f86…"` | none |
-| A timestamp to compare | Unix seconds, until 2038 | `"1798761600"` | `validFrom <= now` (you supply `now`) |
+| A time to compare, to the minute | Minutes since 1970-01-01 UTC (fits until the year 6053) | `"29979360"` (2027-01-01 00:00 UTC) | `validFromMinute <= <now in minutes>` |
 
 `YYYYMMDD` compares correctly as a number (`20081005 > 19851103`) and stays readable. Use it for every date
 a verifier may test with a predicate.
@@ -97,7 +98,7 @@ all names and values together. Credentials carry claims, not documents.
 - A published schema is permanent on the ledger: its attribute names never change.
 - **Adding or renaming a field means a new schema version** (and a new credential definition).
 - Deprecate the old version in the console to stop new offers. Proof templates that name the schema accept every version, so credentials issued before the change keep working.
-- Plan names carefully: use lower camel case, no personal data in names, and include `expiresAt` (added for you).
+- Plan names carefully: use lower camel case, no personal data in names, and include `expiresOn` (added for you).
 
 ## Checklist before your first schema
 

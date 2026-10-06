@@ -88,9 +88,9 @@ export const testConfig: PlatformConfig = {
 }
 
 export const sampleCatalogue: AgentLedgerObject[] = [
-  { id: 'schema-1', kind: 'schema', name: 'employee-badge', version: '1.0', tag: '', status: 'deprecated', qualifiedId: 'did:indy:x/anoncreds/v0/SCHEMA/employee-badge/1.0', unqualifiedId: 'ABC:2:employee-badge:1.0', lastError: null, attributes: ['name', 'department', 'employeeNumber', 'expiresAt'] },
+  { id: 'schema-1', kind: 'schema', name: 'employee-badge', version: '1.0', tag: '', status: 'deprecated', qualifiedId: 'did:indy:x/anoncreds/v0/SCHEMA/employee-badge/1.0', unqualifiedId: 'ABC:2:employee-badge:1.0', lastError: null, attributes: ['name', 'department', 'employeeNumber', 'expiresOn'] },
   { id: 'cd-1', kind: 'credential_definition', name: 'employee-badge', version: '1.0', tag: 'default', status: 'deprecated', qualifiedId: 'q1', unqualifiedId: 'ABC:3:CL:10:default', lastError: null, schemaObjectId: 'schema-1' },
-  { id: 'schema-2', kind: 'schema', name: 'employee-badge', version: '1.1', tag: '', status: 'published', qualifiedId: 'q2s', unqualifiedId: 'ABC:2:employee-badge:1.1', lastError: null, attributes: ['name', 'department', 'employeeNumber', 'title', 'expiresAt'] },
+  { id: 'schema-2', kind: 'schema', name: 'employee-badge', version: '1.1', tag: '', status: 'published', qualifiedId: 'q2s', unqualifiedId: 'ABC:2:employee-badge:1.1', lastError: null, attributes: ['name', 'department', 'employeeNumber', 'title', 'expiresOn'] },
   { id: 'cd-2', kind: 'credential_definition', name: 'employee-badge', version: '1.1', tag: 'default', status: 'published', qualifiedId: 'q2', unqualifiedId: 'ABC:3:CL:12:default', lastError: null, schemaObjectId: 'schema-2' },
   { id: 'cd-3', kind: 'credential_definition', name: 'visitor-pass', version: '1.0', tag: 'default', status: 'published', qualifiedId: 'q3', unqualifiedId: 'ABC:3:CL:14:default', lastError: null, schemaObjectId: 'schema-3' },
 ]
