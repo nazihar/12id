@@ -8,15 +8,20 @@
  *
  * Steps: 1 fresh install → Ready; 2 connect; 3 EXPECT + three offers → all pending → accept all at once.
  * The three credential requests and the acknowledgements go to the agent inside a few seconds, so the
- * edge refuses some of them. Pass: the three credentials reach `done`, the app log shows at least one
- * request sent again after a 429, and no reply was given up on.
+ * edge refuses some of them. Pass: the three credentials reach `done` and are stored in the app, and the
+ * edge counted at least one refused agent request while the app was accepting (Caddy's own counter, read
+ * on the VM over SSH). The app's log lines for a request sent again are printed too, but they are not part
+ * of the verdict: the sample includes the AWS add-on, which brings slf4j 2, and the SDK's slf4j 1.7 binding
+ * is then not loaded, so the framework's lines do not reach the app log.
  *
  * Plumbing and env as smoke/sdk-android.ts (the `-R 3200:127.0.0.1:3201` tunnel, PLATFORM_API_KEY,
- * PLATFORM_TENANT_ID, CRED_DEF_ID optional), plus AGENT_URL (default https://agent.12id.naziharitsolution.com/).
+ * PLATFORM_TENANT_ID, CRED_DEF_ID optional), plus AGENT_URL (default https://agent.12id.naziharitsolution.com/)
+ * and VM_SSH / VM_SSH_KEY as in platform-common.ts.
  */
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 
 import { consoleClient, env, now, offerAttributes, platformClient, publishCatalogue, sleep, startReceiver } from './platform-common.ts'
 
@@ -71,6 +76,17 @@ async function waitForDump(label: string, done: (d: Dump) => boolean, timeoutMs:
     await sleep(1_000)
   }
   throw new Error(`timed out waiting for ${label}`)
+}
+
+/** Agent requests the edge has refused since it started: Caddy's counter, read on the VM (no scrape delay). */
+async function declinedAtEdge(): Promise<number> {
+  const target = env('VM_SSH', 'ubuntu@123.176.58.72')
+  const key = env('VM_SSH_KEY', `${homedir()}/.ssh/12id_staging_ed25519`)
+  const { stdout } = await execFileAsync('ssh', ['-i', key, '-o', 'BatchMode=yes', target, 'curl -s 127.0.0.1:2019/metrics'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
+  return stdout
+    .split('\n')
+    .filter((l) => l.startsWith('caddy_rate_limit_declined_requests_total') && l.includes('zone="agent_per_ip"'))
+    .reduce((sum, l) => sum + Number(l.slice(l.lastIndexOf(' ') + 1)), 0)
 }
 
 /** Four requests at once from this machine's own address: with the limit at 2 per 10 s, some are refused. */
@@ -132,6 +148,7 @@ try {
   }
   console.log(`  [${now()}] ${OFFERS} offers pending in the app; waiting for a quiet edge window`)
   await sleep(12_000)
+  const declinedBefore = await declinedAtEdge()
   const acceptedAt = Date.now()
   // acceptOffer waits inside the SDK while a refused request is sent again, so this takes a while.
   await action('ACCEPT_OFFERS', [], 120_000)
@@ -143,6 +160,7 @@ try {
   }
   const total = ((Date.now() - acceptedAt) / 1000).toFixed(1)
   const stored = (await action('DUMP')).credentials?.length ?? 0
+  const declined = (await declinedAtEdge()) - declinedBefore
 
   const log = await sdkLines()
   const retried = log.filter((l) => l.includes('HTTP 429 from'))
@@ -150,13 +168,14 @@ try {
   const badSignatures = receiver.events.filter((e) => !e.signatureValid).length
   console.log('\n=== smoke:sdk-android-refused results ===')
   console.log(`credentials     : ${states.join(', ')} (${total} s after the accept); stored in the app: ${stored}`)
-  console.log(`sent again      : ${retried.length} request(s) after a 429`)
+  console.log(`refused at edge : ${declined} agent request(s) while the app was accepting`)
+  console.log(`sent again      : ${retried.length} line(s) in the app log (none when slf4j 2 is on the classpath, see the header)`)
   for (const line of retried) console.log(`    ${line.slice(line.indexOf('HTTP 429'))}`)
-  console.log(`given up        : ${refused.length}`)
+  console.log(`given up        : ${refused.length} line(s) in the app log`)
   for (const line of refused) console.log(`    ${line.slice(line.indexOf('Outbound message refused'))}`)
   console.log(`signatures      : ${badSignatures === 0 ? 'all valid' : `${badSignatures} INVALID`}`)
   console.log(`externalId      : ${externalId}`)
-  passed = states.every((s) => s === 'done') && stored === OFFERS && retried.length > 0 && refused.length === 0 && badSignatures === 0
+  passed = states.every((s) => s === 'done') && stored === OFFERS && declined > 0 && refused.length === 0 && badSignatures === 0
 } catch (error) {
   console.error('SMOKE FAILED:', error)
 } finally {
