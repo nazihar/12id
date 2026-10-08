@@ -734,7 +734,7 @@ Both rows include the ledger validators on the same VM (about 0.8 core idle on s
 
 ## The slow message lookups: fix (2026-10-08)
 
-**Status: released as `v0.2.1` on 2026-10-08** (commit `702925c`, the `-rc.1` digests). Staging runs `0.2.1-rc.1` and passed its smokes, except the phone smoke, which was not run. Production deploys `release-0.2.1.env`.
+**Status: released as `v0.2.1` on 2026-10-08** (commit `702925c`, the `-rc.1` digests). Staging runs `0.2.1-rc.1` and passed every smoke, the phone smoke included. Production deploys `release-0.2.1.env`.
 
 The defect is the one in "After v0.2.0" above: a message lookup that gets slower with every message a tenant keeps, quadratic under Postgres's generic plan. The fix has two parts, and both are needed: the first removes the quadratic plan and leaves linear growth; the second bounds the table.
 
@@ -798,7 +798,14 @@ Load: `load/exchanges.ts --holders 5 --duration 120 --pickup v1 --poll 1000`, sm
 | An exchange erased before its purge | the purge found no messages and marked it |
 | `smoke:biometric-credo` | **18/18** on the second run. The first run was 17/18 on "all signatures valid": the three `record.erased` events of the erase checks above belong to the other smoke tenant, were retried into this run's receiver (delivered 06:19:16 to 06:19:29) and carry that tenant's signature. Caused by the check, not by the release |
 | `e2e:staging` | **3/3** |
-| `smoke:sdk-android` | **not run**: no phone was attached. Nothing the SDK talks to changed in this release |
+| `smoke:sdk-android` (phone, sample on SDK 0.3.0 with staging's key) | **PASSED, all steps**, on the third run (07:04 UTC): expected offer in the app after 2.1 s, 0 pickups in 60 s idle, foreground drain 2.7 s, offline offer collected after one wake-up, second offer by the tail after 12.7 s, proof in the app after 1.8 s and `verified=true`, restart keeps 3 credentials, spent invitation recovered in 25 s, all signatures valid. The first two runs stopped at step 3c, both passing steps 1 to 3b first: see below |
+
+**The two failed phone runs were the smoke's tunnel, not the release.**
+- Both stopped on `timed out waiting for webhook` at step 3c, and both times the `-R 3200` SSH tunnel from the dev PC had ended with `Connection reset by peer`.
+- Around the first drop (about 06:39 to 06:43 UTC) new SSH connections to the VM timed out and one HTTPS request did too; a ping run at 06:44 lost 3 of 20 packets. The VM itself was up the whole time, with no fail2ban ban of the PC's address and nothing in its SSH log.
+- A network watcher ran through the third run (ping, the tunnel and `api` every few seconds): nothing failed, and the run passed. A tunnel left idle for 150 s with the phone untouched also stayed up.
+- **Cause not established:** a disturbance on the path between the dev PC and the VM is what the measurements show. The same symptom was seen on 2026-10-06 and blamed on the PC sleeping.
+- Each dropped tunnel left a half-open session on the VM holding port 3200; ending that `sshd: ubuntu` process (it belongs to the unprivileged user) frees it.
 
 **Release:** `v0.2.1-rc.1` was built by CI in about 15 minutes; `v0.2.1` on the same commit adds `0.2.1` to its digests.
 
@@ -807,4 +814,4 @@ Load: `load/exchanges.ts --holders 5 --duration 120 --pickup v1 --poll 1000`, sm
 **Still open:**
 - Lookups still grow linearly with a tenant's exchanges in flight (offers waiting for a holder, up to the 24 h reconciliation TTL). Not measured: these runs had no waiting offers.
 - The edge's per-IP limits (measured above) and the one uncollected offer of 2026-10-06.
-- The phone smoke on `0.2.1`.
+- Why the smoke tunnel drops (above). It only affects the test rig.
