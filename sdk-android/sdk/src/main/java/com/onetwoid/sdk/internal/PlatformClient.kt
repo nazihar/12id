@@ -18,6 +18,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import org.hyperledger.ariesframework.agent.IsrgTrust
+import org.hyperledger.ariesframework.agent.RetryAfterInterceptor
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
@@ -208,7 +209,10 @@ internal class PlatformClient(
         private val JSON = "application/json".toMediaType()
 
         // IsrgTrust: Let's Encrypt roots after the system's, so Android 7.0 (minSdk 24) reaches the platform (W3).
+        // RetryAfterInterceptor: a 429 (the edge's per-address limit, the platform's per-wallet limit) is
+        // sent again after a Retry-After of up to 10 s (fork change F10).
         fun defaultHttpClient(): OkHttpClient = IsrgTrust.applyTo(OkHttpClient.Builder())
+            .addInterceptor(RetryAfterInterceptor())
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .build()

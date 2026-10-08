@@ -877,3 +877,53 @@ Commit `2a0c32c`. `v0.2.2-rc.1` was built by CI and deployed to staging from its
 **Kept on the VM for a rollback:** `infra/compose/release.env.prev-0.2.1-rc.1`, and the previous edge files in `/opt/12id/infra.prev-20261008-edge/`.
 
 **Production deploys `release-0.2.2.env` and the `0.2.2` bundle** (the limits are in the bundle's Caddyfile and `compose.edge.yml`, not in an image).
+
+## The SDK on a refused request (2026-10-08)
+
+**Status: built and unit-tested in SDK 0.3.0 (`master`, not released, not committed). Not yet run on a phone.** No platform change.
+
+This closes "Not tested: how the SDK on a phone behaves when it does get a 429" above, as far as a JVM test can.
+
+### What the 0.2.x SDK does (source read)
+- **The framework's HTTP transport ignored the status** (`HttpOutboundTransport.sendPackage`). It parsed any non-empty response body as a DIDComm message. The edge's own errors have a plain body (`429 Too Many Requests`, `502 Bad Gateway`, `413`), so parsing threw and `MessageSender.send` reported "Message is undeliverable". A refusal with an empty body counted as delivered.
+- **A refused reply spends the offer or proof request on the device.**
+  - `acceptOffer` builds the credential request first, which moves the record to `RequestSent` (`CredentialService.createRequest`), and sends second. `respondToProofRequest` has the same order (`ProofService.createPresentation`, `PresentationSent`).
+  - When the send fails, the app gets `OneTwoIdException.Internal`. The record stays in the new state, so it is gone from `pendingOffers()` and a second `acceptOffer` answers `NotFound`.
+  - Nothing sends it again. The platform abandons the exchange at its 24 h reconciliation, and the organisation has to offer again.
+  - Declining has the same order, with less at stake: the organisation only learns of it at the reconciliation.
+- **A refused pickup** costs `PickupRunner`'s 15 s batch timeout, then the window carries on. Nothing is lost.
+- **A 429 from the platform API** (the edge's `api_per_ip`, platform-api's per-wallet limits) ended onboarding with `PlatformError(429)`; nothing tried again.
+
+### The change (fork change F10)
+- `agent/RetryAfterInterceptor.kt` (new): an OkHttp interceptor. A 429 is sent again after its `Retry-After`, twice at most. With no header it waits 2 s. A wait over 10 s is not waited for: the 429 goes back to the caller at once.
+- It is on the framework's client (`AgentHttpClient`, HTTP and the WebSocket upgrade) and on `PlatformClient`. Each repeat logs one Warn line (`HTTP 429 from <host>; sending the request again in <n> ms`).
+- **Only 429 is repeated.** It is a refusal before the request was processed, so a second copy cannot deliver a DIDComm message twice. A 502 or 504 may follow a request the service did process.
+- `HttpOutboundTransport`: a status outside 2xx is a failed send (`HttpStatusException`), before any parsing, with one Warn line (`Outbound message refused: HTTP 429 from <host>`). `MessageSender` logs failed sends at Debug only, below the SDK's default floor.
+- The edge's window for the mediator and the agent is 10 s and its `Retry-After` is at most 10, so one wait normally gets through. `api_per_ip` has a one-minute window: a `Retry-After` over 10 s there is reported, not waited for.
+- **Cost:** a refused call now holds its caller up to 20 s before it fails (two waits of 10 s) instead of failing at once. A pickup that waits more than 15 s counts as failed for `PickupRunner`, and its messages still arrive.
+
+### Verified (JVM, 2026-10-08)
+- `:ariesframework:testReleaseUnitTest` **16/16** and `testDebugUnitTest`. New `RetryAfterInterceptorTest` (6, MockWebServer): the same body and content type are sent again after the named wait; it gives up after two repeats; a 60 s wait is not waited for; the default wait; 502 and an empty 503 fail and are not repeated; the header's forms.
+- `:sdk:testReleaseUnitTest` **86/86** and `testDebugUnitTest`. New in `PlatformClientTest` (2): a 429 then 200 succeeds; a 429 with a 60 s wait is `PlatformError(429)` after one request. The first of these fails with the interceptor removed (`PlatformError`), which is the old behaviour.
+- `:sdk:apiCheck` clean (no API change), `:sample:assembleDebug` builds.
+- The transport's old behaviour is read from the source, not reproduced: it could not be called without a wallet.
+
+### Still open
+- **A send that still fails leaves the offer or proof request spent** (above). The retry makes a 429 unlikely to get that far, and does nothing for a 502, a timeout or no network at the moment of sending.
+  - Putting the record back is only safe when the request certainly did not arrive (a 429, a refused connection). After a timeout the organisation may have the request, and a second, different one would be refused.
+  - Options, not built: put the record back after a certain non-delivery; or keep the built message and send the same one again on the next call. Neither is costed yet.
+- **A real 429 on a phone has not been produced.** `infra/smoke/sdk-android-refused.ts` is written for it: three offers accepted at once with the agent's limit lowered to 2 per 10 s for the run. It type-checks and has not run: it needs that limit change on staging, which waits for the owner's word (the phone is on mobile data, so a burst from the dev PC does not share its address).
+
+### On the phone (2026-10-08, regression only)
+Xiaomi `lisa`, Android 14, the sample built from this tree (SDK 0.3.0 with F10, staging's genesis key), staging on `0.2.2-rc.1`.
+
+| Check | Result |
+|---|---|
+| `smoke:sdk-android` | **PASSED, all steps**, first run: 1 token request, expected offer in the app after 2.6 s, 0 pickups in 60 s idle, foreground drain 2.5 s, offline offer collected after one wake-up, second offer by the tail after 10.5 s, proof in the app after 3.2 s and `verified=true`, restart keeps 3 credentials, spent invitation recovered in 26 s, all signatures valid. Run `sdk-1791455697945` |
+| `smoke:sdk-biometric-android` (mock) | **PASSED 12/12**, first run. This is also the first phone run of its asynchronous adb (2026-10-06). It published credential definition `6J1JseDUUFmRcEacjbgafq:3:CL:2415:default` (schema `smoke-sdk-biometric`, now with `expiresOn`); reuse it as `CRED_DEF_ID` |
+
+The app log of the first has 55 pickups, no `HTTP 429` and no `Outbound message refused` line: nothing was refused, so these runs show that F10 changes nothing on the normal path, not that the retry works on a device.
+- The phone polls the mediator over https, not the WebSocket (Phase 5 finding 6, `14-phase-5-android-findings.md`), so every pickup is a request the edge counts and can refuse. The WebSocket is used for the mediation handshake only; its upgrade goes through the same client and gets the same retry.
+
+### The API's per-address limit is now a setting (2026-10-08, not released)
+`api_per_ip` reads `EDGE_API_LIMIT` (`Caddyfile`, `compose.edge.yml`, `env/template.env`), like the mediator's and the agent's. The default is the old value, 600 a minute, so nothing changes until an environment sets it. The number is the owner's: one customer backend at the agent's ceiling needs about 600. It is in the bundle, so it ships with the next platform release, and `caddy validate` runs then on staging's binary (not run here).

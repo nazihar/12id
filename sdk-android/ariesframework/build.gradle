@@ -63,6 +63,8 @@ dependencies {
     testImplementation 'ch.qos.logback:logback-classic:1.2.6'
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.0'
+    // 12id fork change (F10): the HTTP status and Retry-After tests.
+    testImplementation 'com.squareup.okhttp3:mockwebserver:4.10.0'
     androidTestImplementation 'ch.qos.logback:logback-classic:1.2.6'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'

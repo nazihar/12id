@@ -8,10 +8,12 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.hyperledger.ariesframework.EncryptedMessage
 import org.hyperledger.ariesframework.OutboundPackage
 import org.slf4j.LoggerFactory
+import java.io.IOException
 
 enum class DidCommMimeType(val value: String) {
     V0("application/ssi-agent-wire"),
@@ -25,17 +27,13 @@ class HttpOutboundTransport(val agent: Agent) : OutboundTransport {
         logger.debug("Sending outbound message to endpoint: {}", _package.endpoint)
 
         val responseText = withContext(Dispatchers.IO) {
-            val request = okhttp3.Request.Builder()
-                .url(_package.endpoint)
-                .post(
-                    Json.encodeToString(_package.payload)
-                        .toByteArray() // prevent okHttp from adding charset=utf-8 to the content type
-                        .toRequestBody(DidCommMimeType.V1.value.toMediaType()),
-                )
-                .build()
-            val response = AgentHttpClient.client.newCall(request).execute()
-            logger.debug("response with status code: {}", response.code)
-            response.body?.string() ?: ""
+            try {
+                postEnvelope(AgentHttpClient.client, _package.endpoint, Json.encodeToString(_package.payload))
+            } catch (e: HttpStatusException) {
+                // MessageSender logs a failed send at Debug only; a refusal should be visible.
+                logger.warn("Outbound message refused: {}", e.message)
+                throw e
+            }
         }
 
         if (responseText.isNotEmpty()) {
@@ -50,5 +48,28 @@ class HttpOutboundTransport(val agent: Agent) : OutboundTransport {
         } else {
             logger.debug("No data received")
         }
+    }
+}
+
+/** 12id fork change (F10): the server answered a DIDComm POST with a status outside 2xx. */
+internal class HttpStatusException(val code: Int, host: String) : IOException("HTTP $code from $host")
+
+/**
+ * 12id fork change (F10): posts one packed message and returns the response body. A status outside
+ * 2xx is a failed send. Upstream ignored the status: it parsed an error page as a DIDComm message and
+ * took a refusal with an empty body for a delivered message.
+ */
+internal fun postEnvelope(client: OkHttpClient, endpoint: String, envelope: String): String {
+    val request = okhttp3.Request.Builder()
+        .url(endpoint)
+        .post(
+            envelope
+                .toByteArray() // prevent okHttp from adding charset=utf-8 to the content type
+                .toRequestBody(DidCommMimeType.V1.value.toMediaType()),
+        )
+        .build()
+    return client.newCall(request).execute().use { response ->
+        if (!response.isSuccessful) throw HttpStatusException(response.code, request.url.host)
+        response.body?.string() ?: ""
     }
 }

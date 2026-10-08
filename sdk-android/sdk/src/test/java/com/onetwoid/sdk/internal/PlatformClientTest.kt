@@ -95,6 +95,30 @@ class PlatformClientTest {
     }
 
     @Test
+    fun `a rate-limited call is sent again after Retry-After`() = runBlocking {
+        server.enqueue(MockResponse().setResponseCode(429).setHeader("Retry-After", "0").setBody("429 Too Many Requests"))
+        server.enqueue(MockResponse().setBody("""{"invitationUrl":"https://m/i"}"""))
+
+        val url = client(mutableListOf("t")).mediatorInvitation()
+
+        assertEquals("https://m/i", url)
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test
+    fun `a rate limit with a long wait reports PlatformError 429 at once`() = runBlocking {
+        server.enqueue(MockResponse().setResponseCode(429).setHeader("Retry-After", "60").setBody("""{"error":"rate_limited","reason":"retry after 60 s"}"""))
+
+        try {
+            client(mutableListOf("t")).mediatorInvitation()
+            fail("expected PlatformError")
+        } catch (e: OneTwoIdException.PlatformError) {
+            assertEquals(429, e.statusCode)
+            assertEquals(1, server.requestCount)
+        }
+    }
+
+    @Test
     fun `an unreachable platform reports NetworkUnavailable`() = runBlocking {
         val url = server.url("/").toString()
         server.shutdown()
