@@ -734,7 +734,7 @@ Both rows include the ledger validators on the same VM (about 0.8 core idle on s
 
 ## The slow message lookups: fix (2026-10-08)
 
-**Status: built and unit-tested; not committed, not released, not on staging.** The staging numbers below are still to be measured.
+**Status: released as `v0.2.1` on 2026-10-08** (commit `702925c`, the `-rc.1` digests). Staging runs `0.2.1-rc.1` and passed its smokes, except the phone smoke, which was not run. Production deploys `release-0.2.1.env`.
 
 The defect is the one in "After v0.2.0" above: a message lookup that gets slower with every message a tenant keeps, quadratic under Postgres's generic plan. The fix has two parts, and both are needed: the first removes the quadratic plan and leaves linear growth; the second bounds the table.
 
@@ -766,11 +766,45 @@ The defect is the one in "After v0.2.0" above: a message lookup that gets slower
 - The purge query uses `outbox_purge_due_idx` (`EXPLAIN`, index-only scan).
 - `pg-roles.sh` passes `bash -n`. The script itself was not run here; its new statement was run twice on Postgres 15.19 with a throwaway role (idempotent, and `pg_db_role_setting` shows `plan_cache_mode=force_custom_plan`).
 
-### To do on staging
-The smoke tenant (`b729f3a6…`, about 1,160 exchanges) is a ready reproduction.
-1. Part 1 alone: `pg-roles.sh agent`, restart agent-service, then `load/exchanges.ts` with `WEBHOOK_URL` and the tunnel. Expected: offer → done back near 3 s p50, and no step up in the agent Postgres's CPU.
-2. Part 2: `v0.2.1-rc.1`, deploy. Expected: the smoke tenant's message records fall to near zero within minutes and stay flat through a second load run.
-3. `smoke:platform-credo` (the proof still shows `verified` and its disclosed values), `smoke:biometric-credo`, `e2e:staging`, `smoke:sdk-android` on the phone.
-4. Erase one purged credential and one purged proof through the API.
+### On staging (2026-10-08)
+Load: `load/exchanges.ts --holders 5 --duration 120 --pickup v1 --poll 1000`, smoke tenant `b729f3a6…`, from the dev PC through the edge, with the webhook receiver.
 
-**Still open:** lookups still grow linearly with a tenant's exchanges in flight (offers waiting for a holder, up to the 24 h reconciliation TTL); measure it in step 2. The edge's per-IP limits and the one uncollected offer are unchanged.
+| Run | Staging | Exchanges a minute | Offer → done p50 | p95 |
+|---|---|---|---|---|
+| Before | `0.2.0-rc.2` | 15.5 | 25.2 s | 32.2 s |
+| Part 1 only (`pg-roles.sh agent`, agent-service restarted) | `0.2.0-rc.2` | 77 | 2.0 s | 30.1 s |
+| Parts 1 and 2 | `0.2.1-rc.1` | 77 | 2.0 s | 29.4 s |
+| Parts 1 and 2, `--poll 2000` | `0.2.1-rc.1` | 77.5 | 4.0 s | 4.2 s |
+
+- **Before:** agent-service logged 43 `DidCommHttpInboundTransport` timeouts in the two minutes. After part 1: none.
+- **The 30 s tail is the edge, not the agent.** The slow exchanges were exactly ten: all five holders at the start of the run and again one minute later. Caddy declined about 700 mediator requests in that run (`mediator_per_ip`, 300 a minute): five holders polling every second from one address use the whole budget, and all of them wait for the window. With 2 s polling it declined 12 and the tail is gone (the p50 is then the poll interval). This is the per-IP finding of "After v0.2.0", now with a number.
+- **Throughput is bound by the five holders**, not by the agent, in every run after part 1.
+
+**The purge against the real agent** (first start of `0.2.1-rc.1`):
+- The backlog was 2,345 finished exchanges. One run deleted **6,829 stored messages in 37 s**, with no error or warning.
+- The agent store went from about 9,900 records and 77,200 tags to **3,905 records and 15,739 tags**. The two large tenants went from 4,962 and 4,479 records to 1,473 and 1,475.
+- After that it took each minute's finished exchanges: 17 to 78 a run during the load, 0 due at the end (2,664 purged in total).
+
+**Checks on `0.2.1-rc.1`:**
+
+| Check | Result |
+|---|---|
+| Deploy (seven stacks) | no step failed; every migration and provision job exited 0 (only the known harmless Askar "Duplicate entry" line); every container with a health check is healthy |
+| Secrets in `docker inspect` | 0 of 32 |
+| Monitoring | 22/22 targets up, no alert firing |
+| `smoke:platform-credo` | **PASSED** (39 s): offer, credential, proof `verified=true` with its disclosed values, all signatures valid, 0 deliveries pending |
+| A proof purged at 06:11 | still shows its disclosed values; erasing it through the API answered 200 |
+| A credential purged a minute after `done` | erased through the API (200); a second erase is a no-op |
+| An exchange erased before its purge | the purge found no messages and marked it |
+| `smoke:biometric-credo` | **18/18** on the second run. The first run was 17/18 on "all signatures valid": the three `record.erased` events of the erase checks above belong to the other smoke tenant, were retried into this run's receiver (delivered 06:19:16 to 06:19:29) and carry that tenant's signature. Caused by the check, not by the release |
+| `e2e:staging` | **3/3** |
+| `smoke:sdk-android` | **not run**: no phone was attached. Nothing the SDK talks to changed in this release |
+
+**Release:** `v0.2.1-rc.1` was built by CI in about 15 minutes; `v0.2.1` on the same commit adds `0.2.1` to its digests.
+
+**Kept on the VM for a rollback:** `infra/compose/release.env.prev-0.2.0-rc.2` and `infra/scripts/pg-roles.sh.prev-20261008`. Migration 0002 only adds a column and an index, so `0.2.0` runs on the migrated database. To undo the role setting: `ALTER ROLE agent_service IN DATABASE agent_root RESET plan_cache_mode`.
+
+**Still open:**
+- Lookups still grow linearly with a tenant's exchanges in flight (offers waiting for a holder, up to the 24 h reconciliation TTL). Not measured: these runs had no waiting offers.
+- The edge's per-IP limits (measured above) and the one uncollected offer of 2026-10-06.
+- The phone smoke on `0.2.1`.
