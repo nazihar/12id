@@ -818,7 +818,7 @@ Load: `load/exchanges.ts --holders 5 --duration 120 --pickup v1 --poll 1000`, sm
 
 ## The edge's per-IP limits for phones (2026-10-08)
 
-**Status: on staging since about 08:10 UTC (the Caddyfile and `compose.edge.yml` were copied there; no image changed). Not committed and not in a release: `v0.2.1`'s bundle still carries the old limits.**
+**Status: released as `v0.2.2`** (below). First applied on staging at about 08:10 UTC by copying the Caddyfile and `compose.edge.yml` there; the measurements in this section were taken then, on the `0.2.1-rc.1` images.
 
 **What a phone costs** (edge counters during the passing phone smoke, the only client on the mediator and agent hosts at the time; 30 s scrapes, so about ±4):
 
@@ -859,3 +859,21 @@ The app logged 55 pickups in that run, so a pickup is more than one request at t
 **Noticed:** `api_per_ip` is 600 a minute, and the 20-holder run used about 400 from one address. A customer's backend calls the API from one address, with at least three calls per new user, so it reaches this limit at roughly the agent's own ceiling. Not changed.
 
 **Kept on the VM for a rollback:** `/opt/12id/infra.prev-20261008-edge/` (the previous `Caddyfile` and `compose.edge.yml`); copy them back and run `deploy.sh edge up -d`.
+
+### Released as `v0.2.2` (2026-10-08)
+Commit `2a0c32c`. `v0.2.2-rc.1` was built by CI and deployed to staging from its bundle: the bundle's `compose/`, `scripts/` and `systemd/` matched the VM's tree file for file (the limits had been copied there by hand an hour earlier), so only `release.env` changed. `v0.2.2` on the same commit carries the rc's digests.
+
+| Check on `0.2.2-rc.1` | Result |
+|---|---|
+| Deploy (seven stacks) | no step failed; every migration and provision job exited 0; every container with a health check is healthy |
+| Secrets in `docker inspect` | 0 of 32 |
+| Monitoring | 22/22 targets up, no alert firing |
+| Live limits | `mediator_per_ip` 500 per 10 s, `agent_per_ip` 200 per 10 s; nothing declined during the smokes |
+| `smoke:platform-credo` | **PASSED** |
+| `smoke:biometric-credo` | **18/18** |
+| `e2e:staging` | **3/3** |
+| `smoke:sdk-android` (phone, sample on SDK 0.3.0 with staging's key) | **PASSED, all steps**, on the second run: expected offer after 2.2 s, 0 pickups in 60 s idle, foreground drain 2.8 s, proof in the app after 3.8 s and `verified=true`, restart keeps 3 credentials, spent invitation recovered in 26 s, all signatures valid. The first run stopped at 3b (`3b needs the app in the foreground`): an incoming WhatsApp call had taken the phone's screen |
+
+**Kept on the VM for a rollback:** `infra/compose/release.env.prev-0.2.1-rc.1`, and the previous edge files in `/opt/12id/infra.prev-20261008-edge/`.
+
+**Production deploys `release-0.2.2.env` and the `0.2.2` bundle** (the limits are in the bundle's Caddyfile and `compose.edge.yml`, not in an image).
