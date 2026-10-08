@@ -42,6 +42,7 @@
   - The DR drill against production.
   - W6 (iOS) when the hardware arrives.
 - **Done as of 2026-10-06:** W0–W4 on staging, W7 written, M15 built and phone-tested (SDK 0.3.0, unreleased: it needs W5's keys), and the production VM sized (`19-phase-9-production-findings.md`, "After v0.2.0"). **Found by the sizing runs, open:** agent-service message lookups slow down with a tenant's stored exchanges (5.4 s at 1,160), and the edge's per-IP limits throttle SDK polling. **Left before go-live:** W5, the M15 release, the production DR drill, W6. Mediator load follows exchanges, not open apps (on-demand delivery, `20-on-demand-delivery.md`). **Decided 2026-10-06:** the delete-before-send window is accepted; expiry is a date (`expiresOn`, needs platform `v0.2.0` + SDK 0.2.1); the hosting country is agreed per customer.
+- **2026-10-08: the slow message lookups have a fix, built and unit-tested, not yet on staging** (`19-…`, "The slow message lookups: fix"). The agent's database role plans each Askar query for its values (`pg-roles.sh`), and agent-service deletes a finished exchange's stored messages once the platform has acknowledged the final state. It needs a platform release (`v0.2.1`) and the staging measurements before W5. Still open: the edge's per-IP limits and the one uncollected offer.
 
 ## Context
 Phases 0–6 are built and verified on the staging VM `id-dev` (`*.12id.naziharitsolution.com`, [`4-init-post-phase-0.md`](4-init-post-phase-0.md) §10):

@@ -216,8 +216,8 @@ export async function getProofExchange(deps: ExchangeDeps, tenantId: string, id:
 // Exchanges created with `hold: true` park at request-received / presentation-received. The
 // platform releases them once its gate passes, or abandons them when the gate fails or expires.
 
-const FINAL_CREDENTIAL_STATES: string[] = [DidCommCredentialState.Done, DidCommCredentialState.Abandoned, DidCommCredentialState.Declined]
-const FINAL_PROOF_STATES: string[] = [DidCommProofState.Done, DidCommProofState.Abandoned, DidCommProofState.Declined]
+export const FINAL_CREDENTIAL_STATES: string[] = [DidCommCredentialState.Done, DidCommCredentialState.Abandoned, DidCommCredentialState.Declined]
+export const FINAL_PROOF_STATES: string[] =[DidCommProofState.Done, DidCommProofState.Abandoned, DidCommProofState.Declined]
 
 /** Issues a held credential. 409 unless the holder's request has arrived. */
 export async function issueCredential(deps: ExchangeDeps, tenantId: string, id: string) {

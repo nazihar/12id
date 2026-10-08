@@ -15,6 +15,13 @@
       "when": 1790237799815,
       "tag": "0001_catalogue_list_index",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791436410568,
+      "tag": "0002_outbox_messages_purged",
+      "breakpoints": true
     }
   ]
 }

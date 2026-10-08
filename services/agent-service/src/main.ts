@@ -19,6 +19,7 @@ import { createEndorserClient } from './endorser/endorser-client.ts'
 import { PendingCorrelations } from './events/correlation.ts'
 import { startOutboxListener } from './events/outbox-listener.ts'
 import { startOutboxPrune } from './events/outbox-prune.ts'
+import { startMessagePurge } from './exchanges/message-purge.ts'
 import { startReconciler } from './exchanges/reconcile.ts'
 import { commandRoutes } from './http/command-routes.ts'
 import { type ReadinessReport, buildInternalApi } from './http/internal-api.ts'
@@ -78,6 +79,7 @@ const internalApi = buildInternalApi({
 await internalApi.listen({ host: config.INTERNAL_API_HOST, port: config.INTERNAL_API_PORT })
 const stopReconciler = startReconciler(agent, db, { ttlMs: config.RECONCILE_TTL_MS, intervalMs: config.RECONCILE_INTERVAL_MS }, logger)
 const stopOutboxPrune = startOutboxPrune(db, { retentionDays: config.OUTBOX_RETENTION_DAYS, intervalMs: config.OUTBOX_PRUNE_INTERVAL_MS }, logger)
+const stopMessagePurge = startMessagePurge(agent, db, { intervalMs: config.MESSAGE_PURGE_INTERVAL_MS }, logger)
 
 const drain = createDrain(
   tracker,
@@ -89,6 +91,7 @@ const drain = createDrain(
     shutdownAgent: async () => {
       stopReconciler()
       await stopOutboxPrune()
+      await stopMessagePurge()
       await agent.shutdown()
       stopOutbox()
       await pool.end()

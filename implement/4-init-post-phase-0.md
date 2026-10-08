@@ -1136,6 +1136,13 @@ Plan: [`18-phase-9-production.md`](18-phase-9-production.md); evidence (when sta
     - Check with `docker exec edge-caddy-1 grep … /etc/caddy/Caddyfile`.
     - After any sync that touches the Caddyfile, run `deploy.sh edge up -d --force-recreate caddy`, not a reload. Or mount the directory instead of the file.
 
+51. **Askar's tag lookups get slower with every record a tenant keeps, and Postgres's cached plan makes it quadratic** (Phase 9, found 2026-10-06, fix built 2026-10-08).
+    - Credo finds a stored DIDComm message through four or five encrypted tags, and most of them hold the same value on every message. Askar sends the lookup as a prepared statement; the generic plan Postgres settles on rescans a tag range for every row: 5.4 s at 3,489 message records, 43 ms when planned for the values.
+    - Nothing fails. Exchanges just take longer, and agent-service is one serial process, so every tenant slows down.
+    - Two fixes, both needed: `plan_cache_mode = force_custom_plan` for `agent_service` in `agent_root` (`pg-roles.sh`), and agent-service deletes a finished exchange's stored messages once the platform has acknowledged the final state (`exchanges/message-purge.ts`).
+    - The platform reads those messages once more at the final state (a proof's disclosed values, a credential's definition id), so they must not be deleted at `done` itself.
+    - Evidence: `19-phase-9-production-findings.md`, "After v0.2.0" and "The slow message lookups: fix".
+
 ---
 
 ## 12. Decisions

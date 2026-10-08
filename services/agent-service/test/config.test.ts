@@ -59,6 +59,12 @@ describe('loadConfig', () => {
     assert.throws(() => loadConfig({ ...valid, ASKAR_MAX_CONNECTIONS: '0' }), /ASKAR_MAX_CONNECTIONS/)
   })
 
+  it('runs the message purge every minute unless told otherwise; 0 turns it off', () => {
+    assert.equal(loadConfig(valid).MESSAGE_PURGE_INTERVAL_MS, 60_000)
+    assert.equal(loadConfig({ ...valid, MESSAGE_PURGE_INTERVAL_MS: '0' }).MESSAGE_PURGE_INTERVAL_MS, 0)
+    assert.throws(() => loadConfig({ ...valid, MESSAGE_PURGE_INTERVAL_MS: '-1' }), /MESSAGE_PURGE_INTERVAL_MS/)
+  })
+
   it('parses roles and the concurrency flag', () => {
     const config = loadConfig({ ...valid, AGENT_ROLES: 'verifier', PROCESS_MESSAGES_CONCURRENTLY: 'true' })
     assert.deepEqual(config.AGENT_ROLES, ['verifier'])

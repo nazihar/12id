@@ -1,0 +1,2 @@
+ALTER TABLE "outbox" ADD COLUMN "messages_purged_at" timestamp with time zone;--> statement-breakpoint
+CREATE INDEX "outbox_purge_due_idx" ON "outbox" USING btree ("id") WHERE "outbox"."delivered_at" is not null and "outbox"."messages_purged_at" is null and "outbox"."record_type" in ('credential', 'proof') and "outbox"."state" in ('done', 'abandoned', 'declined');

@@ -136,6 +136,12 @@ agent() {
   role "$c" biometric BIOMETRIC_DB_PASSWORD
   role "$c" monitoring_ro MONITORING_DB_PASSWORD
   database "$c" agent_root agent_service       # Askar root store (tenant wallets)
+  # Askar's tag lookups are prepared statements, and the generic plan Postgres caches for them rescans
+  # a tag range per row: a five-tag message lookup took 5.4 s at 3,489 records, 43 ms planned for its
+  # values (19-phase-9-production-findings.md, "After v0.2.0"). Applies to new connections.
+  psql_in "$c" <<SQL
+ALTER ROLE agent_service IN DATABASE agent_root SET plan_cache_mode = force_custom_plan;
+SQL
   database "$c" agent_service agent_service
   database "$c" endorser endorser_service      # Askar endorser store (the endorser DID key)
   database "$c" endorser_service endorser_service

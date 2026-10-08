@@ -41,6 +41,8 @@ After this change:
 | `message_pickup` | `mediator` | `monitoring_ro`: SELECT on `queued_message`, `live_session` |
 | `mediator` (Askar KMS) | `mediator` | — |
 
+**`agent_service` in `agent_root` runs with `plan_cache_mode = force_custom_plan`** (2026-10-08, set by `pg-roles.sh agent`). Askar sends its tag lookups as prepared statements, and the generic plan Postgres caches for them made a message lookup take 5.4 s at 3,489 records (43 ms planned for its values; `implement/19-phase-9-production-findings.md`). The setting applies to new connections: restart agent-service after the first run. Check it with `SELECT setconfig FROM pg_db_role_setting` on `agent-postgres`.
+
 `monitoring_ro` also has `pg_monitor`, which gives the exporters' default metrics. The name cannot start with `pg_`, because Postgres reserves that prefix.
 
 The superuser passwords, `AGENT_POSTGRES_PASSWORD` and `POSTGRES_PASSWORD`, remain in four places only:

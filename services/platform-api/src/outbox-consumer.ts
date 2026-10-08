@@ -100,11 +100,13 @@ export async function applyRow(deps: ConsumerDeps, resolve: TenantResolver, row:
     if (!updated.erasedAt && (!updated.credentialDefinitionId || row.state === 'abandoned')) {
       const detail = await deps.agent.getCredential(row.tenantId, row.recordId).catch(() => null)
       if (detail) {
-        updated.credentialDefinitionId = detail.credentialDefinitionId
+        // The agent deletes a finished exchange's stored messages once this consumer has acknowledged
+        // it, and the id comes from the stored offer: a replayed row must not empty the mirror.
+        updated.credentialDefinitionId = detail.credentialDefinitionId ?? updated.credentialDefinitionId
         updated.attributes = detail.attributes
         updated.errorMessage = detail.errorMessage
         updated.expiresAt = expiryOf(detail.attributes)
-        await deps.db.update(credentials).set({ credentialDefinitionId: detail.credentialDefinitionId, attributes: detail.attributes, expiresAt: updated.expiresAt, errorMessage: detail.errorMessage }).where(sql`${credentials.tenantId} = ${tenantId} and ${credentials.recordId} = ${row.recordId}`)
+        await deps.db.update(credentials).set({ credentialDefinitionId: updated.credentialDefinitionId, attributes: detail.attributes, expiresAt: updated.expiresAt, errorMessage: detail.errorMessage }).where(sql`${credentials.tenantId} = ${tenantId} and ${credentials.recordId} = ${row.recordId}`)
       }
     }
     const gate = deps.gates ? await deps.gates.onExchangeState(tenantId, 'credential', row.recordId, row.state) : undefined
@@ -125,7 +127,9 @@ export async function applyRow(deps: ConsumerDeps, resolve: TenantResolver, row:
     const detail = await deps.agent.getProof(row.tenantId, row.recordId).catch(() => null)
     if (detail) {
       updated.verified = detail.isVerified
-      updated.disclosed = row.state === 'done' ? detail.disclosed : null
+      // As for credentials above: the disclosed values come from the stored presentation.
+      const disclosed = updated.disclosed && Object.keys(detail.disclosed).length === 0 ? updated.disclosed : detail.disclosed
+      updated.disclosed = row.state === 'done' ? disclosed : null
       updated.errorMessage = detail.errorMessage
       await deps.db.update(proofs).set({ verified: updated.verified, disclosed: updated.disclosed, errorMessage: updated.errorMessage }).where(sql`${proofs.tenantId} = ${tenantId} and ${proofs.recordId} = ${row.recordId}`)
     }

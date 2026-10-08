@@ -106,4 +106,29 @@ describe('outbox consumer', { skip: db ? false : 'no test database' }, () => {
     assert.equal(await consumer.runOnce(), 2)
     assert.equal((await ours()).length, 2)
   })
+
+  it('keeps the mirrored definition id and disclosed values when the agent has purged the stored messages', async () => {
+    await db!.db.insert(tenants).values({ name: 'Purge', agentTenantId: 'agent-tenant-purge', status: 'ready' })
+    await db!.db.update(outboxCursor).set({ lastId: 19 })
+    const mine = { tenantId: 'agent-tenant-purge' }
+    // After the purge the agent still has the exchange records, but nothing that came from the messages.
+    let purged = false
+    const agent = fakeAgent({
+      getCredential: async () => ({ id: 'cred-p', state: 'abandoned', threadId: 'thread-cred-p', connectionId: 'conn-1', errorMessage: 'holder gone', credentialDefinitionId: purged ? null : 'ABC:3:CL:12:default', attributes: { name: 'Ada' } }),
+      getProof: async () => ({ id: 'proof-p', state: 'done', threadId: 'thread-proof-p', connectionId: 'conn-1', isVerified: true, errorMessage: null, disclosed: (purged ? {} : { employee: { name: 'Ada' } }) as Record<string, Record<string, string>> }),
+    })
+    agent.outbox.push(row(20, 'credential', 'cred-p', 'offer-sent', null, mine), row(21, 'credential', 'cred-p', 'abandoned', 'offer-sent', mine), row(22, 'proof', 'proof-p', 'done', 'presentation-received', { ...mine, payload: { connectionId: 'conn-1', isVerified: true } }))
+    const consumer = createOutboxConsumer({ db: db!.db, agent: agent.client, logger: silentLogger, endpoints: endpointLookup(db!.db), batch: 10 })
+    assert.equal(await consumer.runOnce(), 3)
+
+    // The last row of each record applies again when the cursor is behind the mirror (a restored database).
+    purged = true
+    await db!.db.update(outboxCursor).set({ lastId: 20 })
+    assert.equal(await consumer.runOnce(), 2)
+    const [cred] = await db!.db.select().from(credentials).where(eq(credentials.recordId, 'cred-p'))
+    assert.equal(cred.credentialDefinitionId, 'ABC:3:CL:12:default')
+    assert.equal(cred.errorMessage, 'holder gone')
+    const [proof] = await db!.db.select().from(proofs).where(eq(proofs.recordId, 'proof-p'))
+    assert.deepEqual(proof.disclosed, { employee: { name: 'Ada' } })
+  })
 })

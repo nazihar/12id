@@ -9,7 +9,7 @@
  *     after GET_NYM confirms it.
  */
 import { sql } from 'drizzle-orm'
-import { bigserial, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
+import { type AnyPgColumn, bigserial, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
 
 export const TENANT_STATUSES = ['pending', 'did_created', 'nym_endorsed', 'nym_written', 'ready', 'failed'] as const
 export type TenantStatus = (typeof TENANT_STATUSES)[number]
@@ -70,6 +70,17 @@ export const ledgerObjects = pgTable('ledger_objects', {
 
 export const OUTBOX_RECORD_TYPES = ['connection', 'credential', 'proof'] as const
 
+/** Credo's final credential and proof exchange states, as the outbox stores them. */
+export const OUTBOX_FINAL_STATES = ['done', 'abandoned', 'declined'] as const
+
+/**
+ * Rows whose stored DIDComm messages are due for deletion (exchanges/message-purge.ts): a finished
+ * exchange, read by the platform, not purged yet. Literals, not parameters: the query has to match
+ * the partial index's predicate.
+ */
+export const outboxPurgeDue = (table: { recordType: AnyPgColumn; state: AnyPgColumn; deliveredAt: AnyPgColumn; messagesPurgedAt: AnyPgColumn }) =>
+  sql`${table.deliveredAt} is not null and ${table.messagesPurgedAt} is null and ${table.recordType} in ('credential', 'proof') and ${table.state} in (${sql.raw(OUTBOX_FINAL_STATES.map((state) => `'${state}'`).join(', '))})`
+
 /**
  * Transactional outbox of Credo state transitions (A6), consumed by the Phase 3 platform API.
  * One row per transition; `threadId` is the cross-hop key (clocks differ across hosts).
@@ -86,7 +97,10 @@ export const outbox = pgTable('outbox', {
   payload: jsonb('payload').$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   deliveredAt: timestamp('delivered_at', { withTimezone: true }),
+  /** Set when the finished exchange's stored DIDComm messages were deleted from the tenant wallet. */
+  messagesPurgedAt: timestamp('messages_purged_at', { withTimezone: true }),
 }, (table) => [
   index('outbox_undelivered_idx').on(table.id).where(sql`${table.deliveredAt} is null`),
   index('outbox_record_idx').on(table.tenantId, table.recordType, table.recordId),
+  index('outbox_purge_due_idx').on(table.id).where(outboxPurgeDue(table)),
 ])

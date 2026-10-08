@@ -731,3 +731,46 @@ Both rows include the ledger validators on the same VM (about 0.8 core idle on s
 **State left on staging by these runs:**
 - The smoke tenant gained about 770 exchanges (22 load wallets, revoked), so its message lookups are slower than this morning. `smoke:platform-credo` still passed its functional checks in 43 s afterwards.
 - The last short run had no webhook receiver, which left 56 deliveries queued for retry (backoff up to an hour, 12 attempts). A smoke run in that state reported `deliveries pending : 56` and 9 `BAD SIGNATURE` (events signed before its own secret rotation). A receiver then ran for 20 minutes and absorbed 77 events; the next `smoke:platform-credo` **PASSED** (42 s, all signatures valid, 0 pending).
+
+## The slow message lookups: fix (2026-10-08)
+
+**Status: built and unit-tested; not committed, not released, not on staging.** The staging numbers below are still to be measured.
+
+The defect is the one in "After v0.2.0" above: a message lookup that gets slower with every message a tenant keeps, quadratic under Postgres's generic plan. The fix has two parts, and both are needed: the first removes the quadratic plan and leaves linear growth; the second bounds the table.
+
+### Part 1: plan each Askar query for its values
+- `infra/scripts/pg-roles.sh`, `agent()`: `ALTER ROLE agent_service IN DATABASE agent_root SET plan_cache_mode = force_custom_plan`.
+- It is in `pg-roles.sh` because that script already runs after every restore and fresh provision, so a rebuilt VM gets it too.
+- Scope: the Askar root store only. agent-service's own database, the endorser store and the mediator are untouched.
+- Cost: about 3–6 ms of planning per query (measured 2026-10-06). It applies to new connections, so agent-service restarts once.
+
+### Part 2: delete a finished exchange's stored messages
+**The constraint.** platform-api reads the stored messages once more at the final state: `outbox-consumer.ts` calls `getProof` on `done` (the disclosed values come from the stored presentation) and `getCredential` on `abandoned` (the credential definition id comes from the stored offer). So the messages go only after the platform has acknowledged the final outbox row. `POST /outbox/ack` sets `outbox.delivered_at` after a whole batch is applied.
+
+**agent-service:**
+- Migration `0002_outbox_messages_purged`: `outbox.messages_purged_at`, and the partial index `outbox_purge_due_idx` over the rows that are due (credential or proof, final state, delivered, not purged).
+- `src/exchanges/message-purge.ts`, shaped like `outbox-prune.ts`: every minute it reads the due rows in batches, opens one tenant session per tenant, deletes each record's messages (`DidCommMessageRepository.findByQuery({ associatedRecordId })`, the same lookup and delete as Credo's `deleteById(..., { deleteAssociatedDidCommMessages: true })`) and marks the row. The exchange record stays.
+- A record or tenant that fails is logged and stays due; the run moves past it. One run at a time. A shutdown stops it between tenants.
+- `MESSAGE_PURGE_INTERVAL_MS` (default 60 s, `0` = off). No compose change.
+- The existing backlog drains by itself on the first start: every acknowledged final row still in the outbox (30 days) is due.
+
+**platform-api,** `outbox-consumer.ts`: a replayed row never replaces a stored `credentialDefinitionId` or `disclosed` with an empty value from the agent. This matters only when rows are applied again after a platform database restore.
+
+**Unchanged:** erasing a purged exchange works (the erase finds no messages); held biometric exchanges are not final, so their messages stay until they are released or abandoned.
+
+**Accepted trade-off (owner, 2026-10-08, with the plan):** after a platform database restore, a proof that finished between the backup and the failure cannot get its disclosed values back from the agent. Its webhook was already delivered to the customer. Keeping the messages for a day to cover this would bring the slowdown back at production rates.
+
+### Verified locally
+- agent-service: `tsc` clean, **71/71** tests. New `message-purge.test.ts` (real Postgres, fake tenant wallets): only acknowledged final rows are purged; running, unacknowledged and connection rows keep their messages; a second run does nothing; a row acknowledged later is taken by the next run; an exchange with no messages is marked; a failing tenant or record does not block the others and stays due; a stop request ends the run between exchanges.
+- platform-api: `tsc` clean, **104/104** tests. New consumer test: rows replayed after the purge keep the mirrored definition id and disclosed values.
+- The purge query uses `outbox_purge_due_idx` (`EXPLAIN`, index-only scan).
+- `pg-roles.sh` passes `bash -n`. The script itself was not run here; its new statement was run twice on Postgres 15.19 with a throwaway role (idempotent, and `pg_db_role_setting` shows `plan_cache_mode=force_custom_plan`).
+
+### To do on staging
+The smoke tenant (`b729f3a6…`, about 1,160 exchanges) is a ready reproduction.
+1. Part 1 alone: `pg-roles.sh agent`, restart agent-service, then `load/exchanges.ts` with `WEBHOOK_URL` and the tunnel. Expected: offer → done back near 3 s p50, and no step up in the agent Postgres's CPU.
+2. Part 2: `v0.2.1-rc.1`, deploy. Expected: the smoke tenant's message records fall to near zero within minutes and stay flat through a second load run.
+3. `smoke:platform-credo` (the proof still shows `verified` and its disclosed values), `smoke:biometric-credo`, `e2e:staging`, `smoke:sdk-android` on the phone.
+4. Erase one purged credential and one purged proof through the API.
+
+**Still open:** lookups still grow linearly with a tenant's exchanges in flight (offers waiting for a holder, up to the 24 h reconciliation TTL); measure it in step 2. The edge's per-IP limits and the one uncollected offer are unchanged.

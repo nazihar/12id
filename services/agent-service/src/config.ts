@@ -74,6 +74,10 @@ const configSchema = z.object({
   OUTBOX_RETENTION_DAYS: z.coerce.number().int().min(0).default(30),
   OUTBOX_PRUNE_INTERVAL_MS: z.coerce.number().int().positive().default(60 * 60 * 1000),
 
+  // Stored DIDComm messages of finished exchanges are deleted once the platform has read the final
+  // state (exchanges/message-purge.ts): lookups slow down with every message a tenant keeps. 0 = off.
+  MESSAGE_PURGE_INTERVAL_MS: z.coerce.number().int().min(0).default(60 * 1000),
+
   // Graceful shutdown (T3b): must be shorter than the container's stop grace period.
   DRAIN_DEADLINE_MS: z.coerce.number().int().positive().default(15_000),
 })
