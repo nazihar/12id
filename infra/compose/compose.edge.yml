@@ -25,6 +25,8 @@ services:
       # environment overrides them in its env file (template.env).
       EDGE_MEDIATOR_LIMIT: ${EDGE_MEDIATOR_LIMIT:-500}
       EDGE_AGENT_LIMIT: ${EDGE_AGENT_LIMIT:-200}
+      # Requests per minute from one address to the customer API.
+      EDGE_API_LIMIT: ${EDGE_API_LIMIT:-600}
       CONSOLE_HOST: ${CONSOLE_HOST:?env file}
       API_HOST: ${API_HOST:?env file}
       AGENT_HOST: ${AGENT_HOST:?env file}

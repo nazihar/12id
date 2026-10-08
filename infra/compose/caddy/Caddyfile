@@ -147,7 +147,10 @@
 	@consoleHeader header X-Console-Token *
 	respond @consoleHeader "Not Found" 404
 
-	import per_ip_limit api_per_ip 600 1m
+	# A customer's backend calls from one address, with three calls or more per new user, so at the
+	# agent's ceiling (about 200 exchanges a minute, Phase 9 sizing) it needs about the default, 600
+	# a minute (EDGE_API_LIMIT). What limits a single key is platform-api's own per-key limit.
+	import per_ip_limit api_per_ip {$EDGE_API_LIMIT} 1m
 
 	reverse_proxy 127.0.0.1:3500
 }
