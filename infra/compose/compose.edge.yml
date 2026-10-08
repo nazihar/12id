@@ -21,6 +21,10 @@ services:
     environment:
       ACME_EMAIL: ${ACME_EMAIL:?env file}
       EDGE_RATE_LIMIT_EXEMPT: ${EDGE_RATE_LIMIT_EXEMPT:?env file}
+      # Requests per 10 s from one address to the mediator and to the agent's DIDComm endpoint; an
+      # environment overrides them in its env file (template.env).
+      EDGE_MEDIATOR_LIMIT: ${EDGE_MEDIATOR_LIMIT:-500}
+      EDGE_AGENT_LIMIT: ${EDGE_AGENT_LIMIT:-200}
       CONSOLE_HOST: ${CONSOLE_HOST:?env file}
       API_HOST: ${API_HOST:?env file}
       AGENT_HOST: ${AGENT_HOST:?env file}

@@ -815,3 +815,47 @@ Load: `load/exchanges.ts --holders 5 --duration 120 --pickup v1 --poll 1000`, sm
 - Lookups still grow linearly with a tenant's exchanges in flight (offers waiting for a holder, up to the 24 h reconciliation TTL). Not measured: these runs had no waiting offers.
 - The edge's per-IP limits (measured above) and the one uncollected offer of 2026-10-06.
 - Why the smoke tunnel drops (above). It only affects the test rig.
+
+## The edge's per-IP limits for phones (2026-10-08)
+
+**Status: on staging since about 08:10 UTC (the Caddyfile and `compose.edge.yml` were copied there; no image changed). Not committed and not in a release: `v0.2.1`'s bundle still carries the old limits.**
+
+**What a phone costs** (edge counters during the passing phone smoke, the only client on the mediator and agent hosts at the time; 30 s scrapes, so about ±4):
+
+| Minute of the run | Mediator requests | Agent requests |
+|---|---|---|
+| Onboarding, connect, first offer accepted | 56 | 8 |
+| Process started by a push, two offers, sync tail | 64 | 20 |
+| Whole run (2 onboardings, 5 offers, 2 proofs), 6 minutes | 131 | 22 |
+
+The app logged 55 pickups in that run, so a pickup is more than one request at the edge.
+
+**So the old limits were far too low.** `mediator_per_ip` was 300 a minute: about **5 phones a minute** onboarding behind one address (an office Wi-Fi, a carrier's NAT). `agent_per_ip` was 300 a minute as well. Both dated from Phase 1, when a holder kept one WebSocket open; since SDK 0.2.0 every pickup is an https request. And the window was one minute, so an address that used its budget was refused until requests a minute old left it: the 30 s stalls measured above.
+
+**Change (`infra/compose/caddy/Caddyfile`, `compose.edge.yml`, `env/template.env`):**
+- `mediator_per_ip`: **500 per 10 s** (3,000 a minute, about 50 phones a minute onboarding behind one address).
+- `agent_per_ip`: **200 per 10 s** (1,200 a minute, 60 phones or more).
+- The window for these two is 10 s, so a used-up budget clears in 10 s instead of a minute. The other zones (`api` 600, `console` 300, `vdr` 120 a minute) are unchanged.
+- Both numbers are settings: `EDGE_MEDIATOR_LIMIT` and `EDGE_AGENT_LIMIT` in the environment file, with these defaults in `compose.edge.yml`. They will need tuning against real traffic, and a self-hoster's network is not ours.
+
+**What it costs:** this limit was never what protects the mediator's capacity, and now it is clearly not. Two staging replicas handle about 80 requests a second (W4); one address may now use 50 of them. A flood from a few addresses was already enough at 300 a minute (16 addresses then, 2 now). What still stops junk is the 512 KB body cap and the mediator's own checks.
+
+**On staging**, the same load as above (`--pickup v1 --poll 1000`, one address):
+
+| Run | Exchanges a minute | Offer → done p50 | p95 | Declined at the edge |
+|---|---|---|---|---|
+| 5 holders, old limits | 77 | 2.0 s | 29.4 s | about 700 |
+| 5 holders, new limits | **143.5** | 2.0 s | **3.0 s** | 0 |
+| 20 holders, new limits | 169 | 7.3 s | 8.3 s | 0 |
+
+- The old limits were also holding the 5-holder run to 77 a minute: with them gone it reaches 143.5. Those holders sent about 960 mediator and 450 agent requests a minute, both over the old 300.
+- With 20 holders the agent's serial queue is the limit, as the sizing runs said (about 200 a minute); the 7 s is waiting there, not at the edge. The mediator took about 2,400 requests a minute from the one address.
+- **No exchange was lost or left unfinished in these 625** (every one reached `done`), and none in the 494 of the earlier runs today.
+- **The limit still works:** 900 requests in 0.9 s got 500 answers and 400 times 429 with `Retry-After: 10`; the next request passed 10.2 s after the burst began. `agent.` answered normally meanwhile.
+- `caddy validate` passed on staging's own binary before the change; after it, the live config shows the five zones as intended, 22/22 targets are up and no service logged an error.
+
+**Not tested:** how the SDK on a phone behaves when it does get a 429. Nothing in today's runs made a phone hit the limit.
+
+**Noticed:** `api_per_ip` is 600 a minute, and the 20-holder run used about 400 from one address. A customer's backend calls the API from one address, with at least three calls per new user, so it reaches this limit at roughly the agent's own ceiling. Not changed.
+
+**Kept on the VM for a rollback:** `/opt/12id/infra.prev-20261008-edge/` (the previous `Caddyfile` and `compose.edge.yml`); copy them back and run `deploy.sh edge up -d`.

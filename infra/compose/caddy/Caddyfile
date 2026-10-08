@@ -24,9 +24,14 @@
 # Per-IP request limits (W6). Hairpinned traffic from agents on this VM arrives from the
 # provider gateway (staging: 10.1.1.1, findings W1) and is exempt, as is loopback. Only that one
 # address: on a provider network other customers share the rest of 10.0.0.0/8 (Phase 7 review I2).
-# Each environment sets its own in EDGE_RATE_LIMIT_EXEMPT. The values are placeholders to tune against real traffic: a
-# PickUpV1 holder polls over one WebSocket (a single HTTP request), so a legitimate device makes
-# few HTTP requests per minute.
+# Each environment sets its own in EDGE_RATE_LIMIT_EXEMPT.
+#
+#   import per_ip_limit <zone> <requests> <window>
+#
+# The window is sliding: once an address has used its requests, every request from it gets 429 until
+# the oldest ones leave the window. Phones share addresses (an office Wi-Fi, a carrier's NAT), so on
+# the two hosts phones talk DIDComm to, the window is 10 s: a full budget clears in seconds, not a
+# minute (EDGE_MEDIATOR_LIMIT and EDGE_AGENT_LIMIT, below).
 (per_ip_limit) {
 	rate_limit {
 		zone {args[0]} {
@@ -35,7 +40,7 @@
 			}
 			key {remote_host}
 			events {args[1]}
-			window 1m
+			window {args[2]}
 		}
 	}
 }
@@ -89,7 +94,7 @@
 	@notRead not method GET HEAD
 	respond @notRead "Method Not Allowed" 405
 
-	import per_ip_limit vdr_per_ip 120
+	import per_ip_limit vdr_per_ip 120 1m
 
 	reverse_proxy 127.0.0.1:3100
 }
@@ -109,7 +114,10 @@
 		path /readyz
 	}
 	handle @didcomm {
-		import per_ip_limit agent_per_ip 300
+		# A phone sends its replies here: about 8 requests in the minute it onboards and takes its
+		# first credential, up to 20 in a busy minute (measured on a phone, 2026-10-08). The default,
+		# 200 per 10 s, is 60 or more phones a minute behind one address.
+		import per_ip_limit agent_per_ip {$EDGE_AGENT_LIMIT} 10s
 		# Phase 7 review M1: Credo's HTTP transport accepts 5 MB and every tenant shares one serial
 		# message queue, so junk is refused here. A 125-attribute offer or presentation with ordinary
 		# values is tens of KB once encrypted; 512 KB leaves a wide margin.
@@ -139,7 +147,7 @@
 	@consoleHeader header X-Console-Token *
 	respond @consoleHeader "Not Found" 404
 
-	import per_ip_limit api_per_ip 600
+	import per_ip_limit api_per_ip 600 1m
 
 	reverse_proxy 127.0.0.1:3500
 }
@@ -162,7 +170,7 @@
 		reverse_proxy 127.0.0.1:3600
 	}
 	handle {
-		import per_ip_limit console_per_ip 300
+		import per_ip_limit console_per_ip 300 1m
 		reverse_proxy 127.0.0.1:3600
 	}
 }
@@ -183,7 +191,12 @@
 	@admin path /admin /admin/*
 	respond @admin "Not Found" 404
 
-	import per_ip_limit mediator_per_ip 300
+	# The SDK collects messages over https, one request or more per pickup, and only while it expects
+	# a message (on-demand delivery). A phone makes about 56 requests in the minute it onboards and
+	# takes its first credential (measured, 2026-10-08). At 300 a minute that was 5 phones a minute
+	# behind one address; the default, 500 per 10 s, is about 50. It is not what protects the
+	# mediator's capacity: one address may now use a large part of two replicas.
+	import per_ip_limit mediator_per_ip {$EDGE_MEDIATOR_LIMIT} 10s
 
 	# Phase 7 review M1: the same 512 KB cap as the agent for HTTP bodies (forwarded messages,
 	# pickup requests). WebSocket frames are capped inside the mediator (-p3 patch).

@@ -366,6 +366,7 @@ Hashed tokens with prefix lookup and length-checked `timingSafeEqual` (`auth/tok
 
 ### M1 · Medium · Public DIDComm endpoint: 5 MB junk, serial processing
 *Phase 9 W4 (2026-10-04): the concurrency switch was measured and stays off (no gain). The SDK polls over HTTPS, so `mediator_per_ip` (300/min) counts every poll: one open app uses 6/min, so a carrier NAT with more than about 50 open apps would hit it. Raise or drop the mediator's per-IP limit before go-live; the load test showed the mediator's own CPU, not abuse, is the binding limit (`19-phase-9-production-findings.md` W4).*
+*2026-10-08: raised on staging. Since on-demand delivery a phone makes about 56 mediator and 8 agent requests in the minute it onboards, so 300 a minute was about 5 phones a minute behind one address. Now `mediator_per_ip` is 500 per 10 s and `agent_per_ip` 200 per 10 s, both settings (`EDGE_MEDIATOR_LIMIT`, `EDGE_AGENT_LIMIT`); evidence in `19-phase-9-production-findings.md`, "The edge's per-IP limits for phones".*
 
 **Where:** `node_modules/@credo-ts/node/build/transport/DidCommHttpInboundTransport.mjs:19` (`limit: "5mb"`), `services/agent-service/src/config.ts` (`PROCESS_MESSAGES_CONCURRENTLY` default false), `Caddyfile` (`agent_per_ip 300`, no `request_body`).
 **Evidence:** *run* — `POST https://agent.<domain>/ -H 'content-type: application/ssi-agent-wire' --data '{"protected":"x"}'` → `500 Error processing message` with `X-Powered-By: Express` (junk reaches Credo). The body limit and serial processing are *source read*.
