@@ -22,6 +22,21 @@ grafana.12id.naziharitsolution.com {
 	reverse_proxy 127.0.0.1:3300
 }
 
+# The reference integration's backend (reference/backend, implement/21-reference-integration.md): a
+# stand-in customer backend for demos, run from its own compose file, not from the release bundle. It
+# is a customer of the platform like any other: an API key and signed webhooks, nothing internal.
+# The app and the platform's webhooks both arrive here.
+demo.12id.naziharitsolution.com {
+	import hardening
+
+	import per_ip_limit demo_per_ip 300 1m
+	request_body {
+		max_size 1MB
+	}
+
+	reverse_proxy 127.0.0.1:3700
+}
+
 # W8 smoke issuer: the DIDComm endpoint used by the smoke tests. It listens only while a
 # smoke run is in progress (502 otherwise). The mediator and phones must both reach it.
 smoke-issuer.12id.naziharitsolution.com {

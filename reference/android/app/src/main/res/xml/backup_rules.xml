@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 and older. The wallet must never leave the device: its key lives in the Keystore, so
+     restored wallet files would be unreadable (the SDK reports WalletKeyLost). -->
+<full-backup-content>
+    <exclude domain="file" path="wallet" />
+    <exclude domain="sharedpref" path="aries-framework-kotlin.xml" />
+</full-backup-content>

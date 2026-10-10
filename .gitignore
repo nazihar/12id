@@ -42,3 +42,10 @@ Thumbs.db
 # Phase 9 W3: public Let's Encrypt root certificates for the sample's network security config (not keys)
 !sdk-android/sample/src/main/res/raw/isrg_root_*.pem
 !infra/build/
+
+# Reference integration: the backend's local state
+reference/backend/data/
+# Public Let's Encrypt root certificates for the reference app's network security config (not keys)
+!reference/android/app/src/main/res/raw/isrg_root_*.pem
+# The organisation this backend is pointed at; copied from tenant.example.json, like .env from env.example
+reference/backend/tenant.json

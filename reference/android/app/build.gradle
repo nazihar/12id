@@ -1,0 +1,89 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'org.jetbrains.kotlin.plugin.compose'
+}
+
+android {
+    namespace 'com.onetwoid.reference'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'com.onetwoid.reference'
+        minSdk 24
+        targetSdk 36
+        versionCode((project.findProperty('appVersionCode') ?: '1') as int)
+        versionName project.findProperty('appVersionName') ?: '0.1.0'
+
+        // The 12id platform the SDK talks to, and this app's own backend (reference/backend).
+        buildConfigField 'String', 'PLATFORM_API_URL', "\"${project.findProperty('platformApiUrl') ?: 'https://api.12id.naziharitsolution.com'}\""
+        buildConfigField 'String', 'BACKEND_URL', "\"${project.findProperty('backendUrl') ?: 'https://demo.12id.naziharitsolution.com'}\""
+    }
+
+    // A release needs one stable signing key, or an update will not install over the previous build.
+    // CI passes the keystore; without it the release is signed with the debug key of this machine.
+    signingConfigs {
+        release {
+            if (project.hasProperty('keystoreFile')) {
+                storeFile file(project.property('keystoreFile'))
+                storePassword project.property('keystorePassword')
+                keyAlias project.findProperty('keyAlias') ?: 'reference'
+                keyPassword project.property('keystorePassword')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig project.hasProperty('keystoreFile') ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+
+    // The SDK's native libraries arrive for three ABIs; one APK per ABI keeps each download small.
+    splits {
+        abi {
+            enable true
+            reset()
+            include 'arm64-v8a', 'armeabi-v7a', 'x86_64'
+            universalApk false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+
+    buildFeatures {
+        compose true
+        buildConfig true
+    }
+
+    packagingOptions {
+        resources.excludes += ['META-INF/AL2.0', 'META-INF/LGPL2.1']
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11
+    }
+}
+
+dependencies {
+    // The 12id wallet SDK. Its native libraries come with it.
+    implementation "com.12id:holder-sdk-android:${project.property('sdkVersion')}"
+
+    implementation platform('androidx.compose:compose-bom:2025.09.01')
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.activity:activity-compose:1.11.0'
+    implementation 'androidx.lifecycle:lifecycle-runtime-compose:2.9.4'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.9.4'
+    implementation 'androidx.core:core-ktx:1.17.0'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2'
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+}

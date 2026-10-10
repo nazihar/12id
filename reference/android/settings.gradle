@@ -1,0 +1,20 @@
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+        // The 12id SDK. This one line is all the repository setup an app needs.
+        maven { url = uri("https://maven.12id.com") }
+    }
+}
+
+rootProject.name = "12id-reference-app"
+include ':app'

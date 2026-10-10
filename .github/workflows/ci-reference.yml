@@ -1,0 +1,52 @@
+# Checks for reference/ (the reference integration, implement/21-reference-integration.md): the backend's
+# typecheck and tests, and the app built against the released SDK on maven.12id.com. The reference uses
+# only what a customer gets, so a failure here means a platform or SDK change breaks customers.
+name: ci-reference
+
+on:
+  push:
+    branches: [master]
+    paths: ['reference/**', '.github/workflows/ci-reference.yml']
+  pull_request:
+    paths: ['reference/**', '.github/workflows/ci-reference.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: reference/backend
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.20.0
+          cache: npm
+          cache-dependency-path: reference/backend/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  app:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: reference/android
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1 # v4.4.4
+      - run: bash ./gradlew --console=plain :app:assembleDebug

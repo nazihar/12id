@@ -1,0 +1,63 @@
+# The reference app's APK (implement/21-reference-integration.md), on the tag reference-app-vN (N = a whole
+# number, the app's version code): a release build signed with the reference keystore, attached to a release
+# in the public repository nazihar/12id-maven. The newest one is always at
+#   https://github.com/nazihar/12id-maven/releases/latest/download/12id-demo.apk
+# which is where the backend's GET /app sends a phone.
+#
+# Secrets: REFERENCE_KEYSTORE_B64 (the keystore, base64), REFERENCE_KEYSTORE_PASSWORD, and MAVEN_REPO_TOKEN
+# (Contents read/write on nazihar/12id-maven; it already publishes the SDK there).
+name: release-reference-app
+
+on:
+  push:
+    tags: ['reference-app-v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-reference-app
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - name: The tag must point at master and carry a whole number
+        run: |
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/master
+          [[ "${GITHUB_REF_NAME#reference-app-v}" =~ ^[1-9][0-9]*$ ]] || { echo "tag $GITHUB_REF_NAME: expected reference-app-v<number>" >&2; exit 1; }
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1 # v4.4.4
+      - name: Build and sign
+        working-directory: reference/android
+        env:
+          KEYSTORE_B64: ${{ secrets.REFERENCE_KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.REFERENCE_KEYSTORE_PASSWORD }}
+        run: |
+          [ -n "$KEYSTORE_B64" ] && [ -n "$KEYSTORE_PASSWORD" ] || { echo "REFERENCE_KEYSTORE_B64 and REFERENCE_KEYSTORE_PASSWORD are not set" >&2; exit 1; }
+          keystore="$RUNNER_TEMP/reference.jks"
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$keystore"
+          n="${GITHUB_REF_NAME#reference-app-v}"
+          bash ./gradlew --console=plain :app:assembleRelease \
+            -PkeystoreFile="$keystore" -PkeystorePassword="$KEYSTORE_PASSWORD" -PappVersionCode="$n" -PappVersionName="$n"
+          rm -f "$keystore"
+          mkdir -p "$RUNNER_TEMP/apk"
+          cp app/build/outputs/apk/release/app-arm64-v8a-release.apk "$RUNNER_TEMP/apk/12id-demo.apk"
+          cp app/build/outputs/apk/release/app-armeabi-v7a-release.apk "$RUNNER_TEMP/apk/12id-demo-armv7.apk"
+      - name: Release in the public repository
+        env:
+          GH_TOKEN: ${{ secrets.MAVEN_REPO_TOKEN }}
+        run: |
+          sdk="$(sed -n 's/^sdkVersion=//p' reference/android/gradle.properties)"
+          gh release create "$GITHUB_REF_NAME" --repo nazihar/12id-maven --latest \
+            --title "12iD demo app ${GITHUB_REF_NAME#reference-app-v}" \
+            --notes "The 12iD reference app, built with com.12id:holder-sdk-android:$sdk. 12id-demo.apk is for current phones (arm64); 12id-demo-armv7.apk is for older 32-bit phones." \
+            "$RUNNER_TEMP/apk/12id-demo.apk" "$RUNNER_TEMP/apk/12id-demo-armv7.apk"

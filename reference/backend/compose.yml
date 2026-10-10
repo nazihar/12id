@@ -1,0 +1,33 @@
+# Runs the backend as it is: Node 22 reads the TypeScript sources directly, and there is nothing to install.
+#
+#   cp env.example .env                    # fill it in
+#   cp tenant.example.json tenant.json     # fill it in
+#   docker compose up -d
+#
+# It listens on 127.0.0.1:3700; put your HTTPS reverse proxy in front (the app and 12id's webhooks need
+# https). After changing src/, tenant.json or .env: docker compose up -d --force-recreate
+name: 12id-reference
+
+services:
+  backend:
+    image: node:22.20.0-bookworm-slim@sha256:b21fe589dfbe5cc39365d0544b9be3f1f33f55f3c86c87a76ff65a02f8f5848e
+    working_dir: /app
+    command: ['node', 'src/main.ts']
+    # The image's unprivileged `node` user; ./data must be writable by uid 1000.
+    user: '1000:1000'
+    env_file: .env
+    environment:
+      PORT: '3700'
+      DATA_FILE: /data/store.json
+    volumes:
+      - .:/app:ro
+      - ./data:/data
+    ports:
+      - '127.0.0.1:3700:3700'
+    restart: unless-stopped
+    mem_limit: 256m
+    healthcheck:
+      test: ['CMD-SHELL', 'node -e "fetch(\"http://127.0.0.1:3700/healthz\").then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"']
+      interval: 15s
+      timeout: 5s
+      retries: 5

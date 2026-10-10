@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- For this app's own backend on Android 7.0, whose trust store predates the Let's Encrypt roots. The system
+     store stays first. The SDK needs none of this for its own connections; an app needs it only when its own
+     servers use Let's Encrypt and it supports Android 7.0. -->
+<network-security-config>
+    <base-config>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="@raw/isrg_root_x1" />
+            <certificates src="@raw/isrg_root_x2" />
+            <certificates src="@raw/isrg_root_ye" />
+            <certificates src="@raw/isrg_root_yr" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
