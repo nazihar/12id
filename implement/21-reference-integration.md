@@ -1,6 +1,6 @@
 # Reference integration: one client backend, one app (plan and status)
 
-**Status (2026-10-10):** the backend is **live on staging at `https://demo.12id.naziharitsolution.com`** (owner go-ahead the same day), with its own tenant, and `smoke:reference-credo` **PASSED** against it. The app is **released as `reference-app-v1`** and downloads from `https://demo.12id.naziharitsolution.com/app`, but it has **not run on a phone yet**. Nothing in the platform or the SDK changed.
+**Status (2026-10-10):** the backend is **live on staging at `https://demo.12id.naziharitsolution.com`** (owner go-ahead the same day), with its own tenant, and `smoke:reference-credo` **PASSED** against it. The app is **released as `reference-app-v1`**, downloads from `https://demo.12id.naziharitsolution.com/app`, and **ran the whole flow on the phone** the same day (below). Nothing in the platform or the SDK changed.
 
 | Part | State |
 |---|---|
@@ -47,7 +47,7 @@ A client demo needed a stand-in backend on the dev PC behind an SSH tunnel, hand
 
 - **Done 2026-10-10 (owner):** the access code is set on the VM, and the keystore's two Actions secrets are in `nazihar/12id`. The owner's code is four digits, which a stranger with the app could guess within the edge's rate limit in about half an hour; acceptable for staging, to be replaced before the link is handed out widely.
 - **Owner, in the operator console:** create the console organisation and an owner account for tenant `Acme Bank`. Without it only operators see the tenant, and operators see personal data masked.
-- **Then:** the phone run (install from the link, sign in, card, approve; relaunch and the next day: still one wallet), and the tenant swap drill.
+- **Done 2026-10-10:** the first phone run (above). **Still owed:** a relaunch on the next day (still one wallet in the console), and the tenant swap drill.
 - **Extensions, each on its own:** the face check (a selfie at sign-in as the photo on file, a second template with the check required, the AWS add-on); a second skin and a chooser; a flow that starts outside the app (web login by QR, a counter check).
 - **Not covered:** a verifier that is a different organisation from the issuer (proof templates resolve only the tenant's own catalogue, `services/platform-api/src/templates.ts`); iOS; push.
 
@@ -69,6 +69,22 @@ A client demo needed a stand-in backend on the dev PC behind an SSH tunnel, hand
 
   The backend's log shows the three webhooks it acted on: `wallet.sync_requested`, connection completed → offer, proof → approved.
 - **Left on staging by the check:** one user, one wallet and one connection in tenant `Acme Bank`.
+
+## On the phone (2026-10-10)
+
+Xiaomi 2109119DI, Android 14, on mobile data; the released `reference-app-v1` APK, downloaded on the phone through `/app` and installed. The owner tapped through the flow; the evidence is the app's log, the backend's log and its store.
+
+| Step | Result |
+|---|---|
+| Sign in (name and access code) | accepted |
+| Wallet | created and mediated; `wallet ready` |
+| Card | the offer reached the wallet 5.3 s after `wallet ready`; accepted; the backend shows the credential `done` |
+| "Send money" (5000 to Rahim), approve | "Transfer approved"; the backend shows the action `approved` with only `memberId` disclosed, equal to the user's |
+| Whole flow | about 35 s from the offer to the approval, taps and typing included |
+
+- The SDK made 24 mediator pickups in the session, all inside its expect windows or on a foreground.
+- **The download link:** the owner's first download in the phone's browser hung. It did not reproduce: the phone fetched the APK with curl in 8.6 s (21.8 MB), and Chrome on the phone downloaded it in under 12 s when opened again. Cause not established. Chrome leaves a blank tab after the download starts, which can look like a hang.
+- **Not checked yet:** a relaunch on the next day (still one wallet), and the tenant swap drill.
 
 ## Verification so far
 
