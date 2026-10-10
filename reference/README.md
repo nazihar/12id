@@ -75,6 +75,8 @@ Replace these with your own:
 ### 1. In the 12iD console
 
 1. **Catalogue → Publish schema.** Name it (for example `member-card`, version `1.0`) with the attributes `fullName`, `memberId`, `level`, `birthDate`. The console adds `expiresOn`.
+   - The app shows the attributes its skin names (`Skin.kt`); with other names it works, but the card shows them unlabelled or not at all.
+   - Do not name an attribute `id`: some wallets cannot store such a credential, and a published schema cannot be changed.
 2. **Catalogue → Credential definitions → Publish** for that schema.
 3. **Proof templates → New.** One group that uses the schema; disclose `memberId`; add the predicate `level >= 1`. The template's name is what the user's phone shows.
 4. **API keys → Create.** Copy the key; it is shown once.

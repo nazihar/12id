@@ -91,7 +91,9 @@ try {
   console.log('card              :', me.credentialState)
   console.log('enrol again       :', second.connected && second.invitationUrl === null ? 'already connected, no new invitation' : 'UNEXPECTED')
   console.log('action            :', result.state, JSON.stringify(result.details))
-  console.log('disclosed         :', JSON.stringify(disclosed), `(member id ${disclosed.memberId === session.user.memberId ? 'matches' : 'DOES NOT MATCH'})`)
+  // The attribute's name is the tenant's choice (tenant.json); its value is this user's member id.
+  const memberIdDisclosed = Object.values(disclosed).includes(session.user.memberId)
+  console.log('disclosed         :', JSON.stringify(disclosed), `(member id ${memberIdDisclosed ? 'matches' : 'DOES NOT MATCH'})`)
   passed =
     refused.status === 401 &&
     again.walletToken === walletToken &&
@@ -99,7 +101,7 @@ try {
     me.credentialState === 'done' &&
     second.connected &&
     result.state === 'approved' &&
-    disclosed.memberId === session.user.memberId &&
+    memberIdDisclosed &&
     Object.keys(disclosed).length === 1
 } catch (error) {
   console.error('SMOKE FAILED:', error)

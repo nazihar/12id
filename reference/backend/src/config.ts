@@ -48,10 +48,18 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
 }
 
 export function loadTenant(file: string): Tenant {
-  const tenant = JSON.parse(readFileSync(file, 'utf8')) as Tenant
+  let tenant: Tenant
+  try {
+    tenant = JSON.parse(readFileSync(file, 'utf8')) as Tenant
+  } catch (error) {
+    // The usual cause is a comma left after the last entry of a list.
+    throw new Error(`${file} is not valid JSON: ${(error as Error).message}`)
+  }
   if (!tenant.credentialDefinitionId || !tenant.credential?.attributes || !tenant.actions) throw new Error(`${file}: credentialDefinitionId, credential.attributes and actions are required`)
   const ids = [tenant.credentialDefinitionId, ...Object.values(tenant.actions).map((action) => action.proofTemplateId)]
   if (ids.some((id) => !id || id.startsWith('REPLACE'))) throw new Error(`${file}: fill in the credential definition id and each action's proof template id`)
+  const unknown = Object.values(tenant.credential.attributes).flatMap((value) => value.match(/\{[^}]*\}/g) ?? []).filter((p) => p !== '{name}' && p !== '{memberId}')
+  if (unknown.length > 0) throw new Error(`${file}: unknown placeholder ${unknown.join(', ')}; the user supplies {name} and {memberId}, anything else is issued as written`)
   if ('expiresOn' in tenant.credential.attributes) throw new Error(`${file}: leave expiresOn out; it is computed from credential.validDays`)
   return tenant
 }

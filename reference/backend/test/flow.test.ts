@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict'
 import { createHmac } from 'node:crypto'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, before, test } from 'node:test'
 
-import type { Config } from '../src/config.ts'
+import { type Config, loadTenant } from '../src/config.ts'
 import { type Platform, platformClient, PlatformError } from '../src/platform.ts'
 import { createApp } from '../src/server.ts'
 import { Store } from '../src/store.ts'
@@ -244,6 +244,23 @@ test('credential attributes: placeholders and the expiry date', () => {
   const attributes = credentialAttributes(config.tenant, { name: 'Ada', memberId: '42' }, new Date('2026-10-10T12:00:00Z'))
   assert.deepEqual(attributes, { fullName: 'Ada', memberId: '42', level: '2', expiresOn: '20271010' })
   assert.equal(dateNumber(new Date('2026-01-02T23:59:59Z')), '20260102')
+})
+
+test('a tenant file with a mistake is refused with a message that names it', () => {
+  const file = join(dir, 'tenant.json')
+  const write = (text: string) => writeFileSync(file, text)
+  const good = { credentialDefinitionId: 'd', credential: { validDays: 30, attributes: { id: '{memberId}' } }, actions: { transfer: { proofTemplateId: 't' } } }
+
+  write(JSON.stringify(good))
+  assert.equal(loadTenant(file).credentialDefinitionId, 'd')
+  write('{ "credentialDefinitionId": "d", "credential": { "validDays": 30, "attributes": { "id": "{memberId}", } }, "actions": {} }')
+  assert.throws(() => loadTenant(file), /is not valid JSON/)
+  write(JSON.stringify({ ...good, credential: { validDays: 30, attributes: { id: '{id}' } } }))
+  assert.throws(() => loadTenant(file), /unknown placeholder \{id\}/)
+  write(JSON.stringify({ ...good, credentialDefinitionId: 'REPLACE: …' }))
+  assert.throws(() => loadTenant(file), /fill in/)
+  write(JSON.stringify({ ...good, credential: { validDays: 30, attributes: { expiresOn: '20300101' } } }))
+  assert.throws(() => loadTenant(file), /leave expiresOn out/)
 })
 
 test('the platform client sends the API key and the idempotency key, and reports refusals', async () => {

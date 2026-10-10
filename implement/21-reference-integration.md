@@ -43,6 +43,13 @@ A client demo needed a stand-in backend on the dev PC behind an SSH tunnel, hand
 2. **`.gitignore` ignores `.env*`,** so the backend's template is `env.example`, not `.env.example`.
 3. **A sync must never carry the tenant settings** (trap 45 again): `tenant.json` is git-ignored like `.env`; the committed file is `tenant.example.json`, and the backend refuses to start while an id still says `REPLACE`.
 
+4. **A tenant file with a mistake crash-looped the backend with a stack trace** (2026-10-10, the owner's first tenant swap: a comma after the last attribute, and a placeholder `{id}` the backend does not know). `loadTenant` now refuses invalid JSON and unknown placeholders with one line that says what to fix, and `main.ts` prints that line instead of a stack. Tests 11/11.
+5. **An attribute named `id` cannot be stored by a Credo-based wallet** (2026-10-10, the owner's new tenant: schema `customer 1.0` with `id` and `expiresOn`).
+   - `smoke:reference-credo` failed on that tenant at the point where the holder stores the issued credential (`Error handling message … issue-credential`); the platform had issued it (`credential-issued`). The same check had passed an hour earlier on the `member-card` schema, and the schema is the only difference.
+   - Source read, `@credo-ts/core` 0.7.0 `W3cCredentialSubject`: `const { id, ...claims } = options.claims`. Credo keeps AnonCreds credentials in W3C form and takes `id` out of the claims as the subject's identifier.
+   - **Not established:** whether the Android SDK (the Kotlin holder) stores such a credential; no phone was attached.
+   - **Open (platform, owner):** the schema routes accept `id` as an attribute name. Refusing it at publication, or at least a line in `credential-model.md`, would keep a tenant from publishing a schema some wallets cannot hold. A published schema cannot be changed.
+
 ## Not done yet
 
 - **Done 2026-10-10 (owner):** the access code is set on the VM, and the keystore's two Actions secrets are in `nazihar/12id`. The owner's code is four digits, which a stranger with the app could guess within the edge's rate limit in about half an hour; acceptable for staging, to be replaced before the link is handed out widely.
