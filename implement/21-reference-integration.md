@@ -1,6 +1,6 @@
 # Reference integration: one client backend, one app (plan and status)
 
-**Status (2026-10-10):** the backend is **live on staging at `https://demo.12id.naziharitsolution.com`** (owner go-ahead the same day), with its own tenant, and `smoke:reference-credo` **PASSED** against it. The app builds but has **not run on a phone yet**, and the first app release waits for the two signing secrets and a commit. Nothing in the platform or the SDK changed.
+**Status (2026-10-10):** the backend is **live on staging at `https://demo.12id.naziharitsolution.com`** (owner go-ahead the same day), with its own tenant, and `smoke:reference-credo` **PASSED** against it. The app is **released as `reference-app-v1`** and downloads from `https://demo.12id.naziharitsolution.com/app`, but it has **not run on a phone yet**. Nothing in the platform or the SDK changed.
 
 | Part | State |
 |---|---|
@@ -8,7 +8,8 @@
 | Tenant `Acme Bank` on staging | created 2026-10-10: schema `member-card 1.0`, credential definition `9V8saypYnfJrnSodDatDGw:3:CL:2602:default`, template `Approve transfer`, one API key, webhook to `demo.` |
 | End to end (`infra/smoke/reference-credo.ts`) | **PASSED** on staging (below) |
 | App (`reference/android`) | built; debug and minified release compile against the released SDK 0.2.1 from maven.12id.com; arm64 release 20.8 MB, signed with the reference keystore. **Not run on a phone yet** |
-| CI (`ci-reference.yml`, `release-reference-app.yml`) | written, not run (the tree is not committed yet) |
+| CI (`ci-reference.yml`) | green on commit `7d1b183` (backend typecheck and tests, app debug build) |
+| App release (`release-reference-app.yml`) | **`reference-app-v1` released 2026-10-10**: `/app` redirects to the release in `nazihar/12id-maven` and downloads a 20.8 MB APK, `com.onetwoid.reference` version 1, arm64, signed `CN=12iD reference app` |
 | Staging edge site `demo.` | live (Caddy reloaded, certificate issued; the other hosts kept answering) |
 | Client README, runbook | `reference/README.md`, `infra/runbooks/reference-demo.md` |
 
@@ -44,7 +45,7 @@ A client demo needed a stand-in backend on the dev PC behind an SSH tunnel, hand
 
 ## Not done yet
 
-- **Done 2026-10-10 (owner):** the access code is set on the VM, and the keystore's two Actions secrets are in `nazihar/12id`.
+- **Done 2026-10-10 (owner):** the access code is set on the VM, and the keystore's two Actions secrets are in `nazihar/12id`. The owner's code is four digits, which a stranger with the app could guess within the edge's rate limit in about half an hour; acceptable for staging, to be replaced before the link is handed out widely.
 - **Owner, in the operator console:** create the console organisation and an owner account for tenant `Acme Bank`. Without it only operators see the tenant, and operators see personal data masked.
 - **Then:** the phone run (install from the link, sign in, card, approve; relaunch and the next day: still one wallet), and the tenant swap drill.
 - **Extensions, each on its own:** the face check (a selfie at sign-in as the photo on file, a second template with the check required, the AWS add-on); a second skin and a chooser; a flow that starts outside the app (web login by QR, a counter check).
