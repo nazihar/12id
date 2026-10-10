@@ -70,7 +70,21 @@ A client demo needed a stand-in backend on the dev PC behind an SSH tunnel, hand
   - Tests 16/16 (`test/face-check.test.ts` new).
 - **App (version 2):** the AWS add-on `com.12id:holder-sdk-android-biometrics-aws:0.2.1`, registered in `Wallet.kt`; a photo step at the first sign-in (`Photo.kt`: the phone's camera app through a `FileProvider`, the picture turned upright and scaled to 1080 px); the offer and approval dialogs run `verifyFace` first when the SDK reports a pending check. arm64 release 28.1 MB (20.8 MB before the add-on).
 - **`smoke:reference-credo`** stops with "SKIPPED" on a backend that uses face checks: a scripted wallet cannot pass one.
-- **Not run yet: the face check on a phone.** No phone was attached when the app was built. The photo step, the camera permission order and the AWS capture inside this app are untested until the owner runs them.
+- **Released:** `reference-app-v2` (CI green; `/app` serves 29.5 MB).
+- **Run on the phone (2026-10-10, Xiaomi, Android 14, mobile data, app version 2 signed with the reference key, real AWS):**
+
+  | Step | Result |
+  |---|---|
+  | Update over version 1 | installed; the existing card was still there and nothing was issued again |
+  | Reset, sign in | the photo step appeared; the camera permission prompt, then the phone's camera app |
+  | Photo | saved at the backend (128 KB) |
+  | Card | offered with the face check pending; **liveness 99.63, match 99.99997, passed on the first attempt**; issued (`gate_created > session_started > attempt_completed:passed > hold_reached > issued`) |
+  | "Send money" | proof request with the face check pending; **liveness 99.63, match 99.99993, passed**; `verified`, action `approved`, only `memberId` disclosed |
+  | Time | 58 s from the card offer to the approved transfer, both face checks and the typing included |
+
+  The reset, the sign-in and the permission tap were driven over adb; the photo and both face checks were done by the owner at the phone.
+- **Found by that run:** the backend's log line for `biometric.check_completed` printed `undefined`. The event is `{ recordType, recordId, threadId, attempt: { decision, livenessScore, matchScore, … } | null, biometric: { status, attemptsRemaining, … } }`, not a flat object as `docs/api.md` suggests ("with the scores and the decision"). The log line is fixed; **open (docs):** `api.md` should show this event's shape.
+- **Not checked:** a failed face check (another person), the locked case after three failures, and the photo step on other phones (the system camera opened on the app's hint, which camera apps may ignore). Both checks reported the same liveness score to six decimals in two separate sessions; not investigated.
 
 ## Not done yet
 

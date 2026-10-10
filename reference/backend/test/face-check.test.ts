@@ -119,8 +119,13 @@ test('a photo is needed before enrolling, and it travels with the offer and the 
 })
 
 test('a face-check attempt is logged with its scores', async () => {
-  assert.equal(await webhook('biometric.check_completed', { recordType: 'credential', recordId: 'credential-1', status: 'passed', livenessScore: 99.5, matchScore: 99.9, attemptsRemaining: 2 }), 200)
-  assert.ok(logs.some((line) => line.includes('face check for credential credential-1: passed (liveness 99.5, match 99.9, 2 attempts left)')))
+  // The event's shape as the platform sends it (seen on staging, 2026-10-10).
+  const event = { recordType: 'credential', recordId: 'credential-1', threadId: 't', attempt: { attempt: 1, decision: 'passed', reason: 'passed', livenessScore: 99.5, matchScore: 99.9 }, biometric: { required: true, status: 'passed', attempts: 1, attemptsRemaining: 2 } }
+  assert.equal(await webhook('biometric.check_completed', event), 200)
+  assert.ok(logs.some((line) => line.includes('face check for credential credential-1: passed (liveness 99.5, match 99.9), 2 attempts left')))
+  // An expired check has no attempt.
+  assert.equal(await webhook('biometric.check_completed', { ...event, attempt: null, biometric: { status: 'expired', attemptsRemaining: 3 } }), 200)
+  assert.ok(logs.some((line) => line.includes('face check for credential credential-1: expired, 3 attempts left')))
 })
 
 test('tenant.json must say photoOnFile where the console requires a face check', () => {

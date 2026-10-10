@@ -118,9 +118,14 @@ export async function handleEvent(deps: WebhookDeps, event: WebhookEvent): Promi
 
     // One attempt at a face check ended. The scores are the organisation's audit trail; the exchange
     // itself moves on by its own events (the credential is issued, or the proof result is released).
-    case 'biometric.check_completed':
-      log(`face check for ${String(event.data.recordType)} ${String(event.data.recordId)}: ${String(event.data.status)} (liveness ${String(event.data.livenessScore)}, match ${String(event.data.matchScore)}, ${String(event.data.attemptsRemaining)} attempts left)`)
+    case 'biometric.check_completed': {
+      // `attempt` is the try that just ended (null when the check expired); `biometric` is the check as a whole.
+      const attempt = event.data.attempt as { decision?: string; livenessScore?: number | null; matchScore?: number | null } | null
+      const check = event.data.biometric as { status?: string; attemptsRemaining?: number } | undefined
+      const scores = attempt ? ` (liveness ${attempt.livenessScore ?? '-'}, match ${attempt.matchScore ?? '-'})` : ''
+      log(`face check for ${String(event.data.recordType)} ${String(event.data.recordId)}: ${attempt?.decision ?? check?.status ?? 'ended'}${scores}, ${check?.attemptsRemaining ?? 0} attempts left`)
       return
+    }
 
     // Messages are waiting for this wallet. Send a silent push to that installation here (FCM, APNs);
     // its handler calls the SDK's sync(). This stand-in has no push: the app starts every exchange itself.
