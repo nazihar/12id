@@ -19,8 +19,10 @@ export interface User {
   walletGeneration: number
   /** Set by the connection.state_changed webhook; every later offer and proof request goes here. */
   connectionId: string | null
-  /** The latest credential.state_changed state: offer-sent … done, or abandoned. */
+  /** The latest credential.state_changed state: offer-sent … done, or abandoned. Null: no offer was accepted by the platform yet. */
   credentialState: string | null
+  /** How many offers ended without a card (declined, timed out); part of the next offer's Idempotency-Key. */
+  offerAttempt?: number
 }
 
 export interface Action {

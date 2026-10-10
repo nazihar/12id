@@ -50,6 +50,13 @@ A client demo needed a stand-in backend on the dev PC behind an SSH tunnel, hand
    - **Not established:** whether the Android SDK (the Kotlin holder) stores such a credential; no phone was attached.
    - **Open (platform, owner):** the schema routes accept `id` as an attribute name. Refusing it at publication, or at least a line in `credential-model.md`, would keep a tenant from publishing a schema some wallets cannot hold. A published schema cannot be changed.
 
+6. **A tenant file that does not fit the catalogue showed up only as "Your card did not arrive"** (2026-10-10, the owner's swap to schema `customer 3.0`: the new credential definition id with the old schema's attribute).
+   - The platform refused every offer (`400 missing attributes: memberId`), the backend answered the connection webhook with 502, and the app waited out its 60 s.
+   - **The refusal would have outlived the fix.** The platform keeps a 4xx answer for an `Idempotency-Key` for 24 hours, and the same key with a changed body answers 422. The backend's key was `offer:<user>:<connection>`, so the corrected offer could not be sent under it. The key now covers the offer's content and the attempt number (`offerCredential` in `webhooks.ts`).
+   - `POST /enrol` now offers again whenever a connected user has no card on the way (it did so only after `abandoned`), so "Get my card" recovers.
+   - **The backend now checks `tenant.json` against the catalogue when it starts** (`tenant-check.ts`: the credential definition exists and is published, the attribute names are exactly the schema's, each template exists) and refuses to start with one line per problem. `npm run tenant` prints the same verdict. If the platform cannot be reached, it starts anyway.
+   - After the fix on staging: the platform's webhook retry sent the offer, the phone collected it on its next foreground and shows the card; `smoke:reference-credo` PASSED on the new tenant (which also fits finding 5: the same tenant fails with `id` and passes with `memberId`). Tests 13/13.
+
 ## Not done yet
 
 - **Done 2026-10-10 (owner):** the access code is set on the VM, and the keystore's two Actions secrets are in `nazihar/12id`. The owner's code is four digits, which a stranger with the app could guess within the edge's rate limit in about half an hour; acceptable for staging, to be replaced before the link is handed out widely.

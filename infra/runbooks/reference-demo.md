@@ -55,6 +55,14 @@ Run step 2 again, then `docker compose up -d --force-recreate` in `/opt/12id-ref
 
 Replace `tenant.json`, and `PLATFORM_API_KEY` and `WEBHOOK_SECRET` in `.env`; move `data/store.json` aside (its users belong to the old tenant); `docker compose up -d --force-recreate`. Phones use "Reset this app" and sign in again.
 
+Before restarting, check the file:
+
+```bash
+docker compose run --rm backend node src/tenant-info.ts
+```
+
+It lists each credential definition with its schema's attributes and each template, and ends with "tenant.json fits this catalogue" or the list of what does not fit. `credential.attributes` must name exactly the schema's attributes (without `expiresOn`), with no comma after the last one. The backend runs the same check when it starts and refuses to start on a mismatch; `docker compose logs backend` shows the reason in one line.
+
 ## Releasing the app
 
 One-time: a signing keystore, kept offline, and two Actions secrets in `nazihar/12id`.

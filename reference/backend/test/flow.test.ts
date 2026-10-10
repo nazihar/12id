@@ -11,6 +11,7 @@ import { type Config, loadTenant } from '../src/config.ts'
 import { type Platform, platformClient, PlatformError } from '../src/platform.ts'
 import { createApp } from '../src/server.ts'
 import { Store } from '../src/store.ts'
+import { type Catalogue, tenantProblems } from '../src/tenant-check.ts'
 import { credentialAttributes, dateNumber, verifySignature } from '../src/webhooks.ts'
 
 const SECRET = 'whsec_test'
@@ -33,6 +34,7 @@ const config: Config = {
 function fakePlatform() {
   const calls: { call: string; input: unknown; key?: string }[] = []
   const revoked = new Set<string>()
+  const state = { refuseOffers: false }
   let n = 0
   const platform: Platform = {
     async createWallet(externalId, key) {
@@ -47,6 +49,7 @@ function fakePlatform() {
     },
     async offerCredential(input, key) {
       calls.push({ call: 'offerCredential', input, key })
+      if (state.refuseOffers) throw new PlatformError('POST', '/v1/credentials/offer', 400, { error: 'bad_request', reason: 'missing attributes: memberId' })
       return { id: 'credential-1', state: 'offer-sent' }
     },
     async requestProof(input, key) {
@@ -54,7 +57,7 @@ function fakePlatform() {
       return { id: 'proof-1', state: 'request-sent' }
     },
   }
-  return { platform, calls, revoked, of: (call: string) => calls.filter((c) => c.call === call) }
+  return { platform, calls, revoked, state, of: (call: string) => calls.filter((c) => c.call === call) }
 }
 
 let dir: string
@@ -244,6 +247,63 @@ test('credential attributes: placeholders and the expiry date', () => {
   const attributes = credentialAttributes(config.tenant, { name: 'Ada', memberId: '42' }, new Date('2026-10-10T12:00:00Z'))
   assert.deepEqual(attributes, { fullName: 'Ada', memberId: '42', level: '2', expiresOn: '20271010' })
   assert.equal(dateNumber(new Date('2026-01-02T23:59:59Z')), '20260102')
+})
+
+test('an offer the platform refused is sent again by the next enrol, and each attempt has its own key', async () => {
+  const session = await call('POST', '/session', { name: 'Grace', accessCode: 'open-sesame', installationId: '22222222-2222-4333-8444-555555555555' })
+  const token = session.json.sessionToken as string
+  const userId = session.json.user.id as string
+  await call('POST', '/enrol', {}, token)
+
+  // The platform refuses the offer (say, tenant.json names the wrong attributes): the webhook is not acknowledged.
+  fake.state.refuseOffers = true
+  assert.equal(await webhook('connection.state_changed', { id: 'connection-2', state: 'completed', externalId: userId }), 502)
+  assert.deepEqual((await call('GET', '/me', undefined, token)).json.credentialState, null)
+  assert.equal((await call('POST', '/enrol', {}, token)).status, 502)
+
+  // Fixed: the app's next enrol offers on the connection it already has.
+  fake.state.refuseOffers = false
+  assert.deepEqual((await call('POST', '/enrol', {}, token)).json, { connected: true, invitationUrl: null })
+  assert.equal((await call('GET', '/me', undefined, token)).json.credentialState, 'offer-sent')
+  const first = fake.of('offerCredential').at(-1)!.key!
+  assert.match(first, new RegExp(`^offer:${userId}:0:[0-9a-f]{24}$`))
+  // While that offer is on its way, enrol does not send another.
+  const count = fake.of('offerCredential').length
+  await call('POST', '/enrol', {}, token)
+  assert.equal(fake.of('offerCredential').length, count)
+
+  // Declined: the next offer is a new attempt, so the platform does not answer it from the first.
+  await webhook('credential.state_changed', { id: 'credential-9', state: 'abandoned', externalId: userId })
+  await call('POST', '/enrol', {}, token)
+  const second = fake.of('offerCredential').at(-1)!.key!
+  assert.match(second, new RegExp(`^offer:${userId}:1:`))
+  assert.notEqual(second, first)
+})
+
+test('tenant.json is compared with the catalogue', () => {
+  const catalogue: Catalogue = {
+    definitions: [
+      { id: 'def-3', credentialDefinitionId: 'L:3:CL:9:default', schemaId: 'schema-3', schemaName: 'customer', schemaVersion: '3.0', tag: 'default', status: 'published' },
+      { id: 'def-1', credentialDefinitionId: 'L:3:CL:7:default', schemaId: 'schema-1', schemaName: 'customer', schemaVersion: '1.0', tag: 'default', status: 'deprecated' },
+    ],
+    schemas: [
+      { id: 'schema-3', name: 'customer', version: '3.0', attributes: ['memberId', 'expiresOn'] },
+      { id: 'schema-1', name: 'customer', version: '1.0', attributes: ['id', 'expiresOn'] },
+    ],
+    templates: [{ id: 'template-1', name: 'transaction', definition: { groups: [{ attributes: ['memberId'] }] } }],
+  }
+  const tenant = (credentialDefinitionId: string, attributes: Record<string, string>, proofTemplateId = 'template-1') => ({ credentialDefinitionId, credential: { validDays: 365, attributes }, actions: { transfer: { proofTemplateId } } })
+
+  assert.deepEqual(tenantProblems(tenant('def-3', { memberId: '{memberId}' }), catalogue), [])
+  assert.deepEqual(tenantProblems(tenant('L:3:CL:9:default', { memberId: '{memberId}' }), catalogue), [])
+  // The new credential definition with the old schema's attribute: what "your card did not arrive" was.
+  assert.deepEqual(tenantProblems(tenant('def-3', { id: '{memberId}' }), catalogue), [
+    'credential.attributes lacks memberId, which schema customer 3.0 has',
+    'credential.attributes has id, which schema customer 3.0 does not have',
+  ])
+  assert.match(tenantProblems(tenant('def-1', { id: '{memberId}' }), catalogue)[0], /is deprecated; offers from it are refused/)
+  assert.match(tenantProblems(tenant('nope', { memberId: 'x' }), catalogue)[0], /is not one of this organisation's credential definitions/)
+  assert.match(tenantProblems(tenant('def-3', { memberId: 'x' }, 'gone'), catalogue)[0], /actions\.transfer\.proofTemplateId gone is not one of/)
 })
 
 test('a tenant file with a mistake is refused with a message that names it', () => {

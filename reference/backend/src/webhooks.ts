@@ -2,11 +2,11 @@
  * 12id webhooks: how to check that an event really comes from the platform, and what this backend
  * does with each one. Everything in 12id is asynchronous, so these events are where the work happens.
  */
-import { createHmac, timingSafeEqual } from 'node:crypto'
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 
 import type { Tenant } from './config.ts'
 import type { Platform } from './platform.ts'
-import type { Store } from './store.ts'
+import type { Store, User } from './store.ts'
 
 export interface WebhookEvent {
   id: string
@@ -42,6 +42,21 @@ export function credentialAttributes(tenant: Tenant, user: { name: string; membe
   return attributes
 }
 
+/**
+ * Offers the user's credential on their connection. The Idempotency-Key covers what is offered and
+ * which attempt it is:
+ *  - a repeated webhook sends the same offer under the same key, and the platform answers from the first;
+ *  - an offer the platform refused can be sent again once its content is fixed (the platform keeps a
+ *    4xx answer for a key too, so reusing the key would repeat the refusal for a day);
+ *  - after an offer was declined or timed out, the next one is a new attempt.
+ */
+export async function offerCredential(deps: Pick<WebhookDeps, 'platform' | 'store' | 'tenant'>, user: User, connectionId: string): Promise<void> {
+  const offer = { connectionId, credentialDefinitionId: deps.tenant.credentialDefinitionId, attributes: credentialAttributes(deps.tenant, user), externalId: user.id }
+  const key = `offer:${user.id}:${user.offerAttempt ?? 0}:${createHash('sha256').update(JSON.stringify(offer)).digest('hex').slice(0, 24)}`
+  const { state } = await deps.platform.offerCredential(offer, key)
+  deps.store.saveUser({ ...deps.store.user(user.id)!, credentialState: state })
+}
+
 export interface WebhookDeps {
   platform: Platform
   store: Store
@@ -66,11 +81,7 @@ export async function handleEvent(deps: WebhookDeps, event: WebhookEvent): Promi
       const connectionId = String(event.data.id)
       if (user.connectionId === connectionId && user.credentialState) return
       store.saveUser({ ...user, connectionId })
-      const offer = await platform.offerCredential(
-        { connectionId, credentialDefinitionId: tenant.credentialDefinitionId, attributes: credentialAttributes(tenant, user), externalId: user.id },
-        `offer:${user.id}:${connectionId}`
-      )
-      store.saveUser({ ...store.user(user.id)!, credentialState: offer.state })
+      await offerCredential(deps, user, connectionId)
       log(`user ${user.id}: connected, credential offered`)
       return
     }
@@ -79,7 +90,8 @@ export async function handleEvent(deps: WebhookDeps, event: WebhookEvent): Promi
     case 'credential.state_changed': {
       const user = externalId ? store.user(externalId) : undefined
       if (!user) return
-      store.saveUser({ ...user, credentialState: state })
+      const ended = state === 'abandoned' && user.credentialState !== 'abandoned'
+      store.saveUser({ ...user, credentialState: state, offerAttempt: (user.offerAttempt ?? 0) + (ended ? 1 : 0) })
       return
     }
 

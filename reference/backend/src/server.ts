@@ -15,7 +15,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { Config } from './config.ts'
 import { type Platform, PlatformError } from './platform.ts'
 import type { Action, Store, User } from './store.ts'
-import { credentialAttributes, handleEvent, verifySignature, type WebhookEvent } from './webhooks.ts'
+import { handleEvent, offerCredential, verifySignature, type WebhookEvent } from './webhooks.ts'
 
 export interface AppDeps {
   config: Config
@@ -94,14 +94,8 @@ export function createApp(deps: AppDeps): Server {
       const invitation = await platform.createInvitation(user.id)
       return { connected: false, invitationUrl: invitation.invitationUrl }
     }
-    // Already connected. If the last offer was declined or timed out, offer again on the same connection.
-    if (user.credentialState === 'abandoned') {
-      const offer = await platform.offerCredential(
-        { connectionId: user.connectionId, credentialDefinitionId: tenant.credentialDefinitionId, attributes: credentialAttributes(tenant, user), externalId: user.id },
-        `offer:${user.id}:${randomUUID()}`
-      )
-      store.saveUser({ ...user, credentialState: offer.state })
-    }
+    // Already connected. If no card is on its way (the offer was refused, declined or timed out), offer again.
+    if (user.credentialState === null || user.credentialState === 'abandoned') await offerCredential({ platform, store, tenant }, user, user.connectionId)
     return { connected: true, invitationUrl: null }
   }
 
