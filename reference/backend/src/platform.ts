@@ -14,11 +14,20 @@ export class PlatformError extends Error {
   }
 }
 
+/**
+ * The photo the user's live face is compared with (base64 JPEG or PNG, one face). Where the
+ * organisation's policy requires a face check, a command without it is refused with 422
+ * `biometric_reference_required`; 12id deletes the image as soon as the check is decided.
+ */
+export interface FaceReference {
+  referenceImage: string
+}
+
 export interface Platform {
   createWallet(externalId: string, idempotencyKey: string): Promise<{ id: string; walletToken: string }>
   createInvitation(externalId: string): Promise<{ invitationId: string; invitationUrl: string }>
-  offerCredential(input: { connectionId: string; credentialDefinitionId: string; attributes: Record<string, string>; externalId: string }, idempotencyKey: string): Promise<{ id: string; state: string }>
-  requestProof(input: { connectionId: string; templateId: string; externalId: string }, idempotencyKey: string): Promise<{ id: string; state: string }>
+  offerCredential(input: { connectionId: string; credentialDefinitionId: string; attributes: Record<string, string>; externalId: string; biometric?: FaceReference }, idempotencyKey: string): Promise<{ id: string; state: string }>
+  requestProof(input: { connectionId: string; templateId: string; externalId: string; biometric?: FaceReference }, idempotencyKey: string): Promise<{ id: string; state: string }>
 }
 
 export function platformClient(baseUrl: string, apiKey: string): Platform {

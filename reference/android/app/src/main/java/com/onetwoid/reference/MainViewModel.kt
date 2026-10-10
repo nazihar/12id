@@ -2,10 +2,13 @@ package com.onetwoid.reference
 
 import android.app.Application
 import android.util.Log
+import androidx.activity.ComponentActivity
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.onetwoid.sdk.BiometricOutcome
 import com.onetwoid.sdk.Credential
 import com.onetwoid.sdk.CredentialOffer
+import com.onetwoid.sdk.OneTwoIdException
 import com.onetwoid.sdk.ProofRequest
 import com.onetwoid.sdk.WalletEvent
 import kotlinx.coroutines.Job
@@ -19,6 +22,9 @@ import kotlinx.coroutines.launch
 sealed interface Screen {
     data object SignIn : Screen
     data class Working(val message: String) : Screen
+
+    /** The organisation uses face checks and needs a photo of this user first. */
+    data object Photo : Screen
     data object Home : Screen
     data object ActionForm : Screen
     data class ActionWaiting(val details: Map<String, String>, val message: String) : Screen
@@ -41,6 +47,7 @@ data class Ui(
  * The two flows of the SDK guide's recipe, started by the app:
  *  - sign-in → connect → the organisation offers a credential → the user accepts it;
  *  - an action → the organisation asks for a proof → the user approves → the backend allows the action.
+ * Where the organisation requires it, a face check comes before the accept and before the approval.
  */
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val app = application as ReferenceApp
@@ -69,9 +76,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setUp() = task("Could not set up your wallet") {
         show(Screen.Working("Opening your wallet…"))
         wallet.open()
-        _ui.update { it.copy(user = it.user ?: backend.me()) }
+        val user = backend.me()
+        _ui.update { it.copy(user = user) }
         refresh()
         if (_ui.value.card != null) return@task show(Screen.Home)
+        // First sign-in at an organisation that uses face checks: it needs the user's photo before it issues.
+        if (user.photoRequired) return@task show(Screen.Photo)
 
         show(Screen.Working("Connecting to ${skin.organisation}…"))
         val enrolment = backend.enrol()
@@ -82,8 +92,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         giveUpAfter(60, "Your card did not arrive. Try again.")
     }
 
-    fun acceptOffer() = task("Could not accept") {
+    /** The photo the user just took becomes their photo on file at the backend; then enrolment goes on. */
+    fun submitPhoto(jpeg: ByteArray) = task("Could not save your photo") {
+        show(Screen.Working("Saving your photo…"))
+        backend.uploadPhoto(jpeg)
+        setUp()
+    }
+
+    fun acceptOffer(activity: ComponentActivity) = task("Could not accept") {
         val offer = _ui.value.offer ?: return@task
+        if (wallet.needsFaceCheck(offer) && !faceCheck(activity, offer.id)) return@task
         _ui.update { it.copy(offer = null, screen = Screen.Working("Receiving your card…")) }
         wallet.accept(offer)
         giveUpAfter(60, "Your card did not arrive. Try again.")
@@ -115,9 +133,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         giveUpAfter(45, "No request arrived. Try again.")
     }
 
-    fun approveRequest() = task("Could not approve") {
+    fun approveRequest(activity: ComponentActivity) = task("Could not approve") {
         val request = _ui.value.request ?: return@task
         val screen = _ui.value.screen as? Screen.ActionWaiting ?: return@task
+        if (wallet.needsFaceCheck(request) && !faceCheck(activity, request.id)) return@task
         waiting?.cancel()
         _ui.update { it.copy(request = null, screen = screen.copy(message = "Sending your approval…")) }
         if (!wallet.approve(request)) return@task fail("Your card cannot answer this request.")
@@ -138,6 +157,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         waiting?.cancel()
         _ui.update { it.copy(request = null, screen = Screen.ActionDone(false, screen?.details.orEmpty(), emptyMap())) }
         wallet.decline(request)
+    }
+
+    /**
+     * Runs the organisation's face check for an offer or a proof request. True when it passed; otherwise
+     * the dialog stays, with a message, until the attempts run out and the organisation cancels.
+     */
+    private suspend fun faceCheck(activity: ComponentActivity, exchangeId: String): Boolean {
+        val outcome = try {
+            wallet.verifyFace(activity, exchangeId)
+        } catch (e: OneTwoIdException.BiometricCancelled) {
+            _ui.update { it.copy(error = "The face check was not finished.") }
+            return false
+        }
+        return when (outcome) {
+            BiometricOutcome.Passed -> true
+            is BiometricOutcome.Failed -> {
+                refresh()
+                _ui.update { it.copy(error = "The face check did not pass. ${outcome.attemptsRemaining} attempts left.") }
+                false
+            }
+            BiometricOutcome.Locked -> {
+                refresh()
+                fail("The face check did not pass, and ${skin.organisation} cancelled the request.")
+                false
+            }
+        }
     }
 
     /** Deletes the wallet and signs out; the next sign-in is a new user with a new card. */
@@ -204,6 +249,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 when (e.code) {
                     "wrong_access_code" -> _ui.update { it.copy(error = "That access code is not right.") }
                     // The backend no longer knows this session (or this installation): start over.
+                    // The organisation requires a face check for this and has no photo of the user yet.
+                    "photo_required" -> show(Screen.Photo)
                     "not_signed_in" -> {
                         backend.forget()
                         _ui.value = Ui(error = "Please sign in again.")

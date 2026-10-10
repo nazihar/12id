@@ -4,6 +4,7 @@
  *
  *   app  POST /session       sign in (a stand-in for your own sign-in)
  *   app  POST /wallet-token  the SDK asks for this installation's wallet token
+ *   app  POST /photo         the user's photo on file (only where the organisation uses face checks)
  *   app  POST /enrol         an invitation to connect; the credential offer follows by webhook
  *   app  POST /actions       something that needs the user's proof (e.g. a transfer)
  *   app  GET  /actions/:id   the result
@@ -15,7 +16,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { Config } from './config.ts'
 import { type Platform, PlatformError } from './platform.ts'
 import type { Action, Store, User } from './store.ts'
-import { handleEvent, offerCredential, verifySignature, type WebhookEvent } from './webhooks.ts'
+import { faceReference, handleEvent, offerCredential, verifySignature, type WebhookEvent } from './webhooks.ts'
 
 export interface AppDeps {
   config: Config
@@ -88,8 +89,28 @@ export function createApp(deps: AppDeps): Server {
     }
   }
 
+  /** True while the organisation uses face checks and we hold no photo of this user yet. */
+  const photoRequired = (user: User) => tenant.photoOnFile === true && store.photo(user.id) === null
+
+  const publicUser = (user: User) => ({ id: user.id, name: user.name, memberId: user.memberId, connected: user.connectionId !== null, credentialState: user.credentialState, photoRequired: photoRequired(user) })
+
+  /**
+   * The photo a face check compares the live face with. A real organisation took it when it verified
+   * the customer; here the app sends one at the first sign-in. It never goes to the wallet: the backend
+   * sends it to 12id with each offer and proof request, and 12id deletes it once the check is decided.
+   */
+  function savePhoto(user: User, body: Record<string, unknown>) {
+    const image = Buffer.from(typeof body.image === 'string' ? body.image : '', 'base64')
+    const jpeg = image.length > 3 && image[0] === 0xff && image[1] === 0xd8
+    const png = image.length > 8 && image.subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47]))
+    if (!(jpeg || png) || image.length > 1_000_000) throw new HttpError(400, 'invalid_photo')
+    store.savePhoto(user.id, image)
+    return publicUser(user)
+  }
+
   /** First time: an invitation for the SDK's connect(). The offer is sent when the connection completes (webhooks.ts). */
   async function enrol(user: User) {
+    if (photoRequired(user)) throw new HttpError(409, 'photo_required')
     if (!user.connectionId) {
       const invitation = await platform.createInvitation(user.id)
       return { connected: false, invitationUrl: invitation.invitationUrl }
@@ -109,8 +130,15 @@ export function createApp(deps: AppDeps): Server {
     for (const [key, value] of Object.entries((body.details ?? {}) as Record<string, unknown>).slice(0, 10)) details[key.slice(0, 50)] = String(value).slice(0, 200)
 
     const action = store.saveAction({ id: randomUUID(), userId: user.id, type, details, state: 'pending', proofId: null, disclosed: null, createdAt: new Date().toISOString() })
-    const proof = await platform.requestProof({ connectionId: user.connectionId, templateId: template.proofTemplateId, externalId: action.id }, `action:${action.id}`)
-    return publicAction(store.saveAction({ ...store.action(action.id)!, proofId: proof.id }))
+    try {
+      const proof = await platform.requestProof({ connectionId: user.connectionId, templateId: template.proofTemplateId, externalId: action.id, ...faceReference(store, user) }, `action:${action.id}`)
+      return publicAction(store.saveAction({ ...store.action(action.id)!, proofId: proof.id }))
+    } catch (error) {
+      store.saveAction({ ...store.action(action.id)!, state: 'failed' })
+      // The template requires a face check and we hold no photo of this user.
+      if (error instanceof PlatformError && error.status === 422 && (error.body as { error?: string }).error === 'biometric_reference_required') throw new HttpError(409, 'photo_required')
+      throw error
+    }
   }
 
   async function webhook(request: IncomingMessage, rawBody: string) {
@@ -144,6 +172,7 @@ export function createApp(deps: AppDeps): Server {
       const user = authenticated(request)
       return { walletToken: await walletToken(user, (await readJson(request)).refresh === true) }
     }
+    if (is('POST', '/photo')) return savePhoto(authenticated(request), await readJson(request, 1_500_000))
     if (is('POST', '/enrol')) return enrol(authenticated(request))
     if (is('POST', '/actions')) return startAction(authenticated(request), await readJson(request))
     const actionId = /^\/actions\/([0-9a-f-]{36})$/.exec(pathname)?.[1]
@@ -170,7 +199,6 @@ export function createApp(deps: AppDeps): Server {
   })
 }
 
-const publicUser = (user: User) => ({ id: user.id, name: user.name, memberId: user.memberId, connected: user.connectionId !== null, credentialState: user.credentialState })
 const publicAction = (action: Action) => ({ id: action.id, type: action.type, details: action.details, state: action.state, disclosed: action.disclosed })
 
 function send(response: ServerResponse, status: number, body: unknown) {
@@ -194,8 +222,8 @@ function readBody(request: IncomingMessage, limit: number): Promise<string> {
   })
 }
 
-async function readJson(request: IncomingMessage): Promise<Record<string, unknown>> {
-  const raw = await readBody(request, 64_000)
+async function readJson(request: IncomingMessage, limit = 64_000): Promise<Record<string, unknown>> {
+  const raw = await readBody(request, limit)
   if (!raw) return {}
   try {
     const body: unknown = JSON.parse(raw)

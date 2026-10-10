@@ -18,7 +18,7 @@ const log = (message: string) => console.log(`${new Date().toISOString()} ${mess
 // in words, instead of surfacing later as a card that never arrives. If the platform cannot be reached
 // right now, the backend starts anyway.
 try {
-  const problems = tenantProblems(config.tenant, await fetchCatalogue(config.platformApiUrl, config.platformApiKey))
+  const problems = tenantProblems(config.tenant, await fetchCatalogue(config.platformApiUrl, config.platformApiKey, config.tenant))
   if (problems.length > 0) {
     console.error(`Cannot start: tenant.json does not fit the organisation's catalogue:\n${problems.map((p) => `  - ${p}`).join('\n')}`)
     process.exit(1)

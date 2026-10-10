@@ -64,11 +64,31 @@ No code is sent by SMS and nothing is typed: the phone proves it holds the card 
 - **Trust `verified`, nothing else.** An action is approved only by a `proof.state_changed` event with `state: done` and `verified: true`.
 - **Every wait ends.** A message may never arrive; the app gives up after a time and lets the user try again.
 
+## With a face check
+
+An organisation can require a face check before a card is issued or before a proof is accepted (console, **Biometrics**: per credential definition and per proof template). The user looks at the camera; 12iD checks that a live person is there and that the face matches the photo the organisation holds.
+
+```
+app                         backend                          12iD
+ │ POST /photo (first sign-in) │  keeps the photo on file      │
+ │ POST /enrol, connect …      │ POST /v1/credentials/offer    │
+ │                             │   + biometric.referenceImage ▶│
+ │◀──────────────────────────── the offer, "face check needed" │
+ │ verifyFace()  → the camera screen → passed                  │
+ │ acceptOffer() → the card is issued                          │
+```
+
+- **Backend:** set `"photoOnFile": true` in `tenant.json`. The backend then sends the user's photo as `biometric.referenceImage` with every offer and proof request (`faceReference` in `webhooks.ts`). 12iD uses it only where the policy requires a check and deletes it once the check is decided.
+- **App:** add the face-check add-on next to the SDK and register it once (`build.gradle`, `Wallet.kt`). When an offer or a proof request says a check is needed, call `verifyFace` before accepting (`faceCheck` in `MainViewModel.kt`).
+- **Nothing else changes.** The decision is made by 12iD from the provider's result, not by the app: an app that skips the check gets no card and no approval.
+- A later sign-in does not issue again: the wallet already holds the card.
+
 ## What is a stand-in
 
 Replace these with your own:
 
 - **Sign-in.** `POST /session` takes a name and a shared access code. Yours authenticates a real user.
+- **The photo on file.** Where face checks are on, the app takes a photo at the first sign-in (`POST /photo`). You already hold one from your own customer onboarding.
 - **The store.** One JSON file. Yours is your database.
 - **Push.** The flows here start in the app, so none is needed. For messages you send on your own, your backend sends a push when it receives `wallet.sync_requested`, and the app calls the SDK's `sync()` (the SDK guide has the code).
 
@@ -102,10 +122,12 @@ It listens on `127.0.0.1:3700`. Put your HTTPS reverse proxy in front: the app a
 {
   "credentialDefinitionId": "…",
   "credential": { "validDays": 365, "attributes": { "fullName": "{name}", "memberId": "{memberId}", "level": "2", "birthDate": "19900101" } },
+  "photoOnFile": false,
   "actions": { "transfer": { "proofTemplateId": "…" } }
 }
 ```
 
+- `photoOnFile`: `true` when the organisation uses face checks (see "With a face check").
 - One attribute per schema attribute, except `expiresOn`, which is computed from `validDays`.
 - `{name}` and `{memberId}` come from the signed-in user; anything else is issued as written. A real backend takes every value from its own records.
 - **To point the backend at another organisation:** replace `tenant.json`, `PLATFORM_API_KEY` and `WEBHOOK_SECRET`, then `docker compose up -d --force-recreate`.

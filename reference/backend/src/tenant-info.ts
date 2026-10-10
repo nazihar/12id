@@ -4,14 +4,22 @@
  *
  *   PLATFORM_API_URL=… PLATFORM_API_KEY=… node src/tenant-info.ts
  */
-import { loadTenant } from './config.ts'
+import { loadTenant, type Tenant } from './config.ts'
 import { fetchCatalogue, tenantProblems } from './tenant-check.ts'
 
 const baseUrl = (process.env.PLATFORM_API_URL ?? '').replace(/\/+$/, '')
 const apiKey = process.env.PLATFORM_API_KEY ?? ''
 if (!baseUrl || !apiKey) throw new Error('set PLATFORM_API_URL and PLATFORM_API_KEY')
 
-const catalogue = await fetchCatalogue(baseUrl, apiKey)
+const file = process.env.TENANT_FILE ?? './tenant.json'
+let tenant: Tenant | undefined
+let unreadable: string | undefined
+try {
+  tenant = loadTenant(file)
+} catch (error) {
+  unreadable = (error as Error).message
+}
+const catalogue = await fetchCatalogue(baseUrl, apiKey, tenant)
 
 console.log('Credential definitions (tenant.json "credentialDefinitionId"):')
 for (const d of catalogue.definitions) {
@@ -26,11 +34,14 @@ for (const t of catalogue.templates) {
   console.log(`  ${t.id}  "${t.name}"  shows: ${shows}; proves: ${proves}`)
 }
 
-const file = process.env.TENANT_FILE ?? './tenant.json'
-let problems: string[] | undefined
-try {
-  problems = tenantProblems(loadTenant(file), catalogue)
-} catch (error) {
-  console.log(`\n${file}: ${(error as Error).message}`)
+const policies = Object.entries(catalogue.facePolicies ?? {})
+if (policies.length > 0) {
+  console.log('\nFace check (console, Biometrics) for the ids tenant.json uses:')
+  for (const [id, mode] of policies) console.log(`  ${id}  ${mode === 'inherit' ? "inherit (the organisation's default decides)" : mode}`)
 }
-if (problems) console.log(problems.length === 0 ? `\n${file} fits this catalogue.` : `\n${file} does not fit:\n${problems.map((p) => `  - ${p}`).join('\n')}`)
+
+if (unreadable) console.log(`\n${file}: ${unreadable}`)
+if (tenant) {
+  const problems = tenantProblems(tenant, catalogue)
+  console.log(problems.length === 0 ? `\n${file} fits this catalogue.` : `\n${file} does not fit:\n${problems.map((p) => `  - ${p}`).join('\n')}`)
+}

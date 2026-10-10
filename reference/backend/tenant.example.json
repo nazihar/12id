@@ -9,6 +9,7 @@
       "birthDate": "19900101"
     }
   },
+  "photoOnFile": false,
   "actions": {
     "transfer": {
       "proofTemplateId": "REPLACE: id of your proof template (console, Proof templates)"

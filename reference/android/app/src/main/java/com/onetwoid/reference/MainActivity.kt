@@ -1,9 +1,12 @@
 package com.onetwoid.reference
 
+import android.Manifest
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -38,10 +41,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.onetwoid.sdk.BiometricStatus
 import com.onetwoid.sdk.Credential
 import com.onetwoid.sdk.CredentialOffer
 import com.onetwoid.sdk.ProofRequest
@@ -76,6 +81,7 @@ private fun App(viewModel: MainViewModel, skin: Skin) {
             when (val screen = ui.screen) {
                 Screen.SignIn -> SignIn(skin, ui.busy, viewModel::signIn)
                 is Screen.Working -> Progress(screen.message)
+                Screen.Photo -> PhotoStep(skin, ui.busy, viewModel::submitPhoto)
                 Screen.Home -> Home(skin, ui, viewModel)
                 Screen.ActionForm -> ActionForm(skin, ui.busy, viewModel::startAction, viewModel::backHome)
                 is Screen.ActionWaiting -> {
@@ -88,9 +94,10 @@ private fun App(viewModel: MainViewModel, skin: Skin) {
         }
     }
 
-    ui.offer?.let { OfferDialog(skin, it, viewModel::acceptOffer, viewModel::declineOffer) }
+    val activity = LocalContext.current as ComponentActivity
+    ui.offer?.let { OfferDialog(skin, it, ui, onAccept = { viewModel.acceptOffer(activity) }, onDecline = viewModel::declineOffer) }
     val waiting = ui.screen as? Screen.ActionWaiting
-    if (waiting != null) ui.request?.let { ApprovalDialog(skin, waiting.details, it, viewModel::approveRequest, viewModel::declineRequest) }
+    if (waiting != null) ui.request?.let { ApprovalDialog(skin, waiting.details, it, ui, onApprove = { viewModel.approveRequest(activity) }, onDecline = viewModel::declineRequest) }
     BackHandler(enabled = ui.screen is Screen.ActionForm || ui.screen is Screen.ActionDone, onBack = viewModel::backHome)
 }
 
@@ -114,6 +121,29 @@ private fun SignIn(skin: Skin, busy: Boolean, onSignIn: (String, String) -> Unit
     Button(enabled = !busy && name.isNotBlank() && code.isNotBlank(), onClick = { onSignIn(name, code) }, modifier = Modifier.fillMaxWidth()) {
         Text("Sign in to ${skin.organisation}")
     }
+}
+
+/**
+ * First sign-in at an organisation that uses face checks: it needs a photo of the user to compare a
+ * live face with. A real organisation has it from its own onboarding; here the user takes it now.
+ */
+@Composable
+private fun PhotoStep(skin: Skin, busy: Boolean, onPhoto: (ByteArray) -> Unit) {
+    val context = LocalContext.current
+    var problem by remember { mutableStateOf<String?>(null) }
+    val camera = rememberLauncherForActivityResult(Photo.Capture()) { taken ->
+        val photo = if (taken) Photo.taken(context) else null
+        if (photo != null) onPhoto(photo) else problem = "No photo was taken."
+    }
+    // The face-check add-on declares the camera permission, so Android wants it granted before any camera use.
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) camera.launch(Photo.target(context)) else problem = "The camera is needed to take your photo."
+    }
+    Text("Your photo", style = MaterialTheme.typography.headlineSmall)
+    Text("${skin.organisation} keeps a photo of each customer. Before important steps it checks that the person holding this phone is you, by comparing your face with that photo.")
+    Text("Take a clear photo of your face, looking at the camera.")
+    problem?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+    Button(enabled = !busy, onClick = { problem = null; permission.launch(Manifest.permission.CAMERA) }, modifier = Modifier.fillMaxWidth()) { Text("Take my photo") }
 }
 
 @Composable
@@ -210,7 +240,8 @@ private fun ActionDone(skin: Skin, screen: Screen.ActionDone, onBack: () -> Unit
 }
 
 @Composable
-private fun OfferDialog(skin: Skin, offer: CredentialOffer, onAccept: () -> Unit, onDecline: () -> Unit) {
+private fun OfferDialog(skin: Skin, offer: CredentialOffer, ui: Ui, onAccept: () -> Unit, onDecline: () -> Unit) {
+    val faceCheck = offer.biometric?.status == BiometricStatus.Pending
     AlertDialog(
         onDismissRequest = {},
         title = { Text("Your ${skin.cardTitle} card") },
@@ -218,16 +249,27 @@ private fun OfferDialog(skin: Skin, offer: CredentialOffer, onAccept: () -> Unit
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("${skin.organisation} wants to add this card to your phone:")
                 Attributes(skin, offer.attributes)
+                if (faceCheck) FaceCheckNote(skin, offer.biometric?.attemptsRemaining)
+                ui.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
         },
-        confirmButton = { Button(onClick = onAccept) { Text("Add card") } },
-        dismissButton = { OutlinedButton(onClick = onDecline) { Text("Not now") } },
+        confirmButton = { Button(enabled = !ui.busy, onClick = onAccept) { Text(if (faceCheck) "Check my face" else "Add card") } },
+        dismissButton = { OutlinedButton(enabled = !ui.busy, onClick = onDecline) { Text("Not now") } },
+    )
+}
+
+@Composable
+private fun FaceCheckNote(skin: Skin, attemptsRemaining: Int?) {
+    Text(
+        "${skin.organisation} first checks that it is you: you look at the camera for a few seconds." + (attemptsRemaining?.let { " Attempts left: $it." } ?: ""),
+        style = MaterialTheme.typography.bodySmall,
     )
 }
 
 /** What the user approves: the action's details, what is shared, and what is proven without being shown. */
 @Composable
-private fun ApprovalDialog(skin: Skin, details: Map<String, String>, request: ProofRequest, onApprove: () -> Unit, onDecline: () -> Unit) {
+private fun ApprovalDialog(skin: Skin, details: Map<String, String>, request: ProofRequest, ui: Ui, onApprove: () -> Unit, onDecline: () -> Unit) {
+    val faceCheck = request.biometric?.status == BiometricStatus.Pending
     val shared = request.attributeGroups.flatMap { it.attributeNames }.map { skin.attributeLabels[it] ?: it }
     val proven = request.predicates.map { predicate ->
         if (predicate.attributeName == "expiresOn") "your card is still valid"
@@ -241,10 +283,12 @@ private fun ApprovalDialog(skin: Skin, details: Map<String, String>, request: Pr
                 Details(skin, details)
                 if (shared.isNotEmpty()) Text("${skin.organisation} will see: ${shared.joinToString()}.")
                 if (proven.isNotEmpty()) Text("Proven without being shown: ${proven.joinToString()}.")
+                if (faceCheck) FaceCheckNote(skin, request.biometric?.attemptsRemaining)
+                ui.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
         },
-        confirmButton = { Button(onClick = onApprove) { Text("Approve") } },
-        dismissButton = { OutlinedButton(onClick = onDecline) { Text("Decline") } },
+        confirmButton = { Button(enabled = !ui.busy, onClick = onApprove) { Text(if (faceCheck) "Check my face and approve" else "Approve") } },
+        dismissButton = { OutlinedButton(enabled = !ui.busy, onClick = onDecline) { Text("Decline") } },
     )
 }
 

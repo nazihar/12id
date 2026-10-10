@@ -13,7 +13,7 @@ android {
         minSdk 24
         targetSdk 36
         versionCode((project.findProperty('appVersionCode') ?: '1') as int)
-        versionName project.findProperty('appVersionName') ?: '0.1.0'
+        versionName project.findProperty('appVersionName') ?: '0.2.0'
 
         // The 12id platform the SDK talks to, and this app's own backend (reference/backend).
         buildConfigField 'String', 'PLATFORM_API_URL', "\"${project.findProperty('platformApiUrl') ?: 'https://api.12id.naziharitsolution.com'}\""
@@ -55,6 +55,8 @@ android {
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_11
         targetCompatibility JavaVersion.VERSION_11
+        // Required by the face-check add-on (its AWS libraries use Java 8+ APIs).
+        coreLibraryDesugaringEnabled true
     }
 
     buildFeatures {
@@ -76,6 +78,9 @@ kotlin {
 dependencies {
     // The 12id wallet SDK. Its native libraries come with it.
     implementation "com.12id:holder-sdk-android:${project.property('sdkVersion')}"
+    // The camera screen for face checks, for organisations that use AWS Rekognition. Same version as the SDK.
+    implementation "com.12id:holder-sdk-android-biometrics-aws:${project.property('sdkVersion')}"
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
 
     implementation platform('androidx.compose:compose-bom:2025.09.01')
     implementation 'androidx.compose.material3:material3'

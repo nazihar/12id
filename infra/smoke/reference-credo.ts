@@ -50,6 +50,12 @@ try {
   const refused = await fetch(`${backendUrl}/session`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name, accessCode: 'not-the-code', installationId: randomUUID() }) })
   const session = await backend<{ sessionToken: string; user: { id: string; memberId: string; connected: boolean } }>('POST', '/session', { name, accessCode: env('REFERENCE_ACCESS_CODE'), installationId: randomUUID() })
   sessionToken = session.sessionToken
+  // A face check needs a live person in front of a phone's camera; a scripted wallet cannot pass one.
+  if ((session.user as { photoRequired?: boolean }).photoRequired) {
+    console.log('\nThis backend is set to use face checks (tenant.json "photoOnFile"): run the flow on a phone instead.')
+    console.log('\n=== smoke:reference-credo SKIPPED ===')
+    process.exit(2)
+  }
   console.log(`  [${now()}] signed in as "${name}" (member ${session.user.memberId}); a wrong code answered ${refused.status}`)
 
   // --- the SDK's part: wallet token → mediator ---------------------------------------------------

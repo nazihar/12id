@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The only place another app (the camera) may write to: one file in this app's cache. -->
+<paths>
+    <cache-path name="photo" path="photo/" />
+</paths>

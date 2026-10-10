@@ -63,6 +63,15 @@ docker compose run --rm backend node src/tenant-info.ts
 
 It lists each credential definition with its schema's attributes and each template, and ends with "tenant.json fits this catalogue" or the list of what does not fit. `credential.attributes` must name exactly the schema's attributes (without `expiresOn`), with no comma after the last one. The backend runs the same check when it starts and refuses to start on a mismatch; `docker compose logs backend` shows the reason in one line.
 
+## Face checks
+
+1. In the console, as the tenant's owner: **Biometrics** → configure the provider (AWS Rekognition: region and role ARN; the tenant's external id must be in the role's trust policy), pass the connection test, switch the gate on.
+2. Set the policy to "always require" on the **active** credential definition and on the proof template the backend uses. `docker compose run --rm backend node src/tenant-info.ts` prints the policy of both.
+3. In `tenant.json` set `"photoOnFile": true`, then `docker compose up -d --force-recreate`.
+4. On a phone that already has a card: "Reset this app", then sign in. The app asks for a photo, then for the face check before it adds the card, and again before it approves a transfer.
+
+User photos are in `data/photos/` on the VM (mode 600). Delete a file to make that user take a new one.
+
 ## Releasing the app
 
 One-time: a signing keystore, kept offline, and two Actions secrets in `nazihar/12id`.

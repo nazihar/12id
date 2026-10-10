@@ -2,6 +2,9 @@ package com.onetwoid.reference
 
 import android.content.Context
 import android.util.Log
+import androidx.activity.ComponentActivity
+import com.onetwoid.sdk.BiometricOutcome
+import com.onetwoid.sdk.BiometricStatus
 import com.onetwoid.sdk.Credential
 import com.onetwoid.sdk.CredentialOffer
 import com.onetwoid.sdk.LogLevel
@@ -10,6 +13,7 @@ import com.onetwoid.sdk.OneTwoId
 import com.onetwoid.sdk.OneTwoIdConfig
 import com.onetwoid.sdk.ProofRequest
 import com.onetwoid.sdk.WalletEvent
+import com.onetwoid.sdk.biometrics.aws.AwsFaceLivenessCapture
 import kotlinx.coroutines.flow.SharedFlow
 import kotlin.time.Duration.Companion.seconds
 
@@ -20,6 +24,11 @@ import kotlin.time.Duration.Companion.seconds
  */
 class Wallet(private val context: Context, private val backend: Backend) {
     private var tokenAsked = false
+
+    init {
+        // The add-on that shows the camera screen of a face check. Without it, verifyFace() cannot run.
+        OneTwoId.registerCapture(AwsFaceLivenessCapture())
+    }
 
     /** Offers, proof requests and results arrive here. */
     val events: SharedFlow<WalletEvent> get() = OneTwoId.events
@@ -83,6 +92,21 @@ class Wallet(private val context: Context, private val backend: Backend) {
     }
 
     suspend fun decline(request: ProofRequest) = OneTwoId.declineProofRequest(request.id)
+
+    /**
+     * Some organisations require a face check before they issue a credential or accept a proof. The
+     * SDK says so on the offer or the request (`biometric`); the check must pass before accepting.
+     */
+    fun needsFaceCheck(offer: CredentialOffer) = offer.biometric?.status == BiometricStatus.Pending
+
+    fun needsFaceCheck(request: ProofRequest) = request.biometric?.status == BiometricStatus.Pending
+
+    /**
+     * Shows the camera screen and returns the organisation's decision. The picture goes to the
+     * organisation's own face-check provider; neither the app nor the SDK sees the result's details.
+     * Each call uses one of the attempts the organisation allows.
+     */
+    suspend fun verifyFace(activity: ComponentActivity, exchangeId: String): BiometricOutcome = OneTwoId.verifyFace(activity, exchangeId)
 
     /** Deletes the wallet and its key. The credentials are gone; the organisation issues them again. */
     suspend fun reset() {

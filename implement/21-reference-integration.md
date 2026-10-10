@@ -57,6 +57,21 @@ A client demo needed a stand-in backend on the dev PC behind an SSH tunnel, hand
    - **The backend now checks `tenant.json` against the catalogue when it starts** (`tenant-check.ts`: the credential definition exists and is published, the attribute names are exactly the schema's, each template exists) and refuses to start with one line per problem. `npm run tenant` prints the same verdict. If the platform cannot be reached, it starts anyway.
    - After the fix on staging: the platform's webhook retry sent the offer, the phone collected it on its next foreground and shows the card; `smoke:reference-credo` PASSED on the new tenant (which also fits finding 5: the same tenant fails with `id` and passes with `memberId`). Tests 13/13.
 
+## Face check extension (2026-10-10)
+
+**Owner's request:** the first sign-in issues the card after a face check; a later sign-in issues nothing; the proof inside the app is face-checked as well.
+
+- **Tenant MTB on staging** (`24b4ee16-d4c3-4bf0-af74-364a2a191ab9`, the one the backend points at): the owner configured AWS Rekognition (`ap-south-1`, role `12id-biometric-spike-tenant`, connection test `ok`) and set the template `transaction` to required. The active credential definition (`customer 3.0`) was still `inherit`; the requirement had been put on the deprecated `customer 1.0`. It was set to required through the console scope (match 90, liveness 90, 3 attempts), at the owner's request that issuance be checked.
+- **Backend:**
+  - `tenant.json` gains `photoOnFile`. When true, a user needs a photo before enrolling (`POST /photo`, a JPEG or PNG up to 1 MB, kept in `data/photos/<user>.jpg`, mode 600), and the photo is sent as `biometric.referenceImage` with every offer and proof request. The platform ignores it where no check is required.
+  - `GET /me` and sign-in say `photoRequired`; `POST /enrol` answers 409 `photo_required` without a photo; a proof request the platform refuses with 422 `biometric_reference_required` becomes 409 `photo_required` for the app.
+  - `biometric.check_completed` is logged with its scores.
+  - The start-up check reads the face-check policy of the ids `tenant.json` uses (API key) and refuses to start when one is `required` and `photoOnFile` is not set. `inherit` cannot be judged with an API key (the organisation's default is console only).
+  - Tests 16/16 (`test/face-check.test.ts` new).
+- **App (version 2):** the AWS add-on `com.12id:holder-sdk-android-biometrics-aws:0.2.1`, registered in `Wallet.kt`; a photo step at the first sign-in (`Photo.kt`: the phone's camera app through a `FileProvider`, the picture turned upright and scaled to 1080 px); the offer and approval dialogs run `verifyFace` first when the SDK reports a pending check. arm64 release 28.1 MB (20.8 MB before the add-on).
+- **`smoke:reference-credo`** stops with "SKIPPED" on a backend that uses face checks: a scripted wallet cannot pass one.
+- **Not run yet: the face check on a phone.** No phone was attached when the app was built. The photo step, the camera permission order and the AWS capture inside this app are untested until the owner runs them.
+
 ## Not done yet
 
 - **Done 2026-10-10 (owner):** the access code is set on the VM, and the keystore's two Actions secrets are in `nazihar/12id`. The owner's code is four digits, which a stranger with the app could guess within the edge's rate limit in about half an hour; acceptable for staging, to be replaced before the link is handed out widely.

@@ -42,6 +42,12 @@ export function credentialAttributes(tenant: Tenant, user: { name: string; membe
   return attributes
 }
 
+/** The user's photo on file, in the shape offers and proof requests take; nothing when there is none. */
+export function faceReference(store: Store, user: User): { biometric?: { referenceImage: string } } {
+  const referenceImage = store.photo(user.id)
+  return referenceImage ? { biometric: { referenceImage } } : {}
+}
+
 /**
  * Offers the user's credential on their connection. The Idempotency-Key covers what is offered and
  * which attempt it is:
@@ -51,7 +57,7 @@ export function credentialAttributes(tenant: Tenant, user: { name: string; membe
  *  - after an offer was declined or timed out, the next one is a new attempt.
  */
 export async function offerCredential(deps: Pick<WebhookDeps, 'platform' | 'store' | 'tenant'>, user: User, connectionId: string): Promise<void> {
-  const offer = { connectionId, credentialDefinitionId: deps.tenant.credentialDefinitionId, attributes: credentialAttributes(deps.tenant, user), externalId: user.id }
+  const offer = { connectionId, credentialDefinitionId: deps.tenant.credentialDefinitionId, attributes: credentialAttributes(deps.tenant, user), externalId: user.id, ...faceReference(deps.store, user) }
   const key = `offer:${user.id}:${user.offerAttempt ?? 0}:${createHash('sha256').update(JSON.stringify(offer)).digest('hex').slice(0, 24)}`
   const { state } = await deps.platform.offerCredential(offer, key)
   deps.store.saveUser({ ...deps.store.user(user.id)!, credentialState: state })
@@ -109,6 +115,12 @@ export async function handleEvent(deps: WebhookDeps, event: WebhookEvent): Promi
       }
       return
     }
+
+    // One attempt at a face check ended. The scores are the organisation's audit trail; the exchange
+    // itself moves on by its own events (the credential is issued, or the proof result is released).
+    case 'biometric.check_completed':
+      log(`face check for ${String(event.data.recordType)} ${String(event.data.recordId)}: ${String(event.data.status)} (liveness ${String(event.data.livenessScore)}, match ${String(event.data.matchScore)}, ${String(event.data.attemptsRemaining)} attempts left)`)
+      return
 
     // Messages are waiting for this wallet. Send a silent push to that installation here (FCM, APNs);
     // its handler calls the SDK's sync(). This stand-in has no push: the app starts every exchange itself.

@@ -3,7 +3,7 @@
  * database: per user and installation, the 12id wallet and connection; per action, the proof request.
  */
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
-import { dirname } from 'node:path'
+import { dirname, join } from 'node:path'
 
 export interface User {
   id: string
@@ -78,6 +78,27 @@ export class Store {
     this.data.actions[action.id] = action
     this.write()
     return action
+  }
+
+  /**
+   * The user's photo on file, as base64, or null. An organisation that uses face checks already holds
+   * one per customer (from its own onboarding); it is the reference a live face is compared with.
+   */
+  photo(userId: string): string | null {
+    try {
+      return readFileSync(this.photoFile(userId)).toString('base64')
+    } catch {
+      return null
+    }
+  }
+
+  savePhoto(userId: string, image: Buffer) {
+    mkdirSync(dirname(this.photoFile(userId)), { recursive: true })
+    writeFileSync(this.photoFile(userId), image, { mode: 0o600 })
+  }
+
+  private photoFile(userId: string) {
+    return join(dirname(this.file), 'photos', `${userId}.jpg`)
   }
 
   /** Written to a temporary file and renamed, so a crash never leaves half a file. */

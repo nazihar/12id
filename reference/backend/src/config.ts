@@ -14,6 +14,12 @@ export interface Tenant {
     /** One entry per schema attribute except `expiresOn`. `{name}` and `{memberId}` come from the user. */
     attributes: Record<string, string>
   }
+  /**
+   * True when the organisation uses face checks: the backend then needs a photo of each user and sends
+   * it with every offer and proof request as the reference image. 12id uses it only where the
+   * organisation's policy (console, Biometrics) requires a check, and ignores it elsewhere.
+   */
+  photoOnFile?: boolean
   /** What the app may ask for, and the proof template that backs each. */
   actions: Record<string, { proofTemplateId: string }>
 }

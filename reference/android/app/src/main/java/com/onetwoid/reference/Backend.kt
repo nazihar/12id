@@ -1,6 +1,7 @@
 package com.onetwoid.reference
 
 import android.content.Context
+import android.util.Base64
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -21,7 +22,8 @@ class Backend(context: Context, private val baseUrl: String) {
 
     class Refused(val status: Int, val code: String) : IOException("backend answered $status $code")
 
-    data class User(val name: String, val memberId: String)
+    /** `photoRequired`: the organisation uses face checks and has no photo of this user yet. */
+    data class User(val name: String, val memberId: String, val photoRequired: Boolean)
     data class Enrolment(val connected: Boolean, val invitationUrl: String?)
     data class ActionResult(val id: String, val state: String, val disclosed: Map<String, String>)
 
@@ -36,10 +38,16 @@ class Backend(context: Context, private val baseUrl: String) {
     suspend fun signIn(name: String, accessCode: String): User {
         val json = post("/session", JSONObject().put("name", name).put("accessCode", accessCode).put("installationId", installationId), authenticated = false)
         prefs.edit().putString("sessionToken", json.getString("sessionToken")).apply()
-        return json.getJSONObject("user").let { User(it.getString("name"), it.getString("memberId")) }
+        return user(json.getJSONObject("user"))
     }
 
-    suspend fun me(): User = get("/me").let { User(it.getString("name"), it.getString("memberId")) }
+    suspend fun me(): User = user(get("/me"))
+
+    /** The user's photo on file: what a face check compares the live face with. It goes to the backend, never into the wallet. */
+    suspend fun uploadPhoto(jpeg: ByteArray): User =
+        user(post("/photo", JSONObject().put("image", Base64.encodeToString(jpeg, Base64.NO_WRAP))))
+
+    private fun user(json: JSONObject) = User(json.getString("name"), json.getString("memberId"), json.optBoolean("photoRequired", false))
 
     /** `refresh` when the SDK says the previous token was rejected. */
     suspend fun walletToken(refresh: Boolean): String =
