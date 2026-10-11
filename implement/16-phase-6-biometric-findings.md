@@ -263,6 +263,12 @@ Commit `d0213ae`; `v0.3.0-rc.1` was built by CI in about 12 minutes and deployed
 - The 422's wording read "send it as numbers" for a single missing parameter. Fixed in the source after the rc; the rc on staging still has the old wording.
 - The public docs site rebuilt on the push to `master`, so `api.md` describes the conditional mode before production runs it.
 
+### Released as `v0.3.0` (2026-10-11)
+`v0.3.0` is on the rc's commit (`d0213ae`) and carries the rc's digests (checked: `release-0.3.0.env` and `release-0.3.0-rc.1.env` name the same nine). Staging keeps running `0.3.0-rc.1`.
+
+**Production deploys `release-0.3.0.env` and the `0.3.0` bundle**: the bundle's `Caddyfile` and `compose.edge.yml` carry `EDGE_API_LIMIT`, which the previous bundle did not have.
+
+Not in `0.3.0`, on `master` only: the wording of the 422 for a single missing parameter, and `infra/smoke/conditional-gate-check.ts`.
+
 ### Still to do
-- `v0.3.0`: the release tag on the rc's commit (`d0213ae`).
 - Not checked: the console's Exchanges page for these two proofs on staging (the same view passed in the local Playwright spec); a failed check on a conditional proof from the phone.
