@@ -8,7 +8,7 @@ import { z } from 'zod'
 
 import type { Database } from '../../db/client.ts'
 import { proofTemplates } from '../../db/schema.ts'
-import { biometricOverride } from '../../biometric/policy.ts'
+import { templateBiometricOverride } from '../../biometric/policy.ts'
 import { templateDefinition, validateTemplate } from '../../templates.ts'
 import { type TenantContext, requireConsolePrincipal } from '../auth.ts'
 import { notFound } from '../errors.ts'
@@ -16,18 +16,18 @@ import { containsI, listPage, pageOf, pageQuery, searchQuery } from '../list.ts'
 import { CONSOLE_ONLY_TAG } from './console.ts'
 
 const errorBody = z.object({ error: z.string(), reason: z.string() })
-const templateView = z.object({ id: z.string(), name: z.string(), definition: templateDefinition, biometricPolicy: biometricOverride, createdAt: z.iso.datetime(), updatedAt: z.iso.datetime() })
+const templateView = z.object({ id: z.string(), name: z.string(), definition: templateDefinition, biometricPolicy: templateBiometricOverride, createdAt: z.iso.datetime(), updatedAt: z.iso.datetime() })
 const view = (row: typeof proofTemplates.$inferSelect) => ({
   id: row.id,
   name: row.name,
   definition: templateDefinition.parse(row.definition),
-  biometricPolicy: row.biometricPolicy ? biometricOverride.parse(row.biometricPolicy) : { mode: 'inherit' as const },
+  biometricPolicy: row.biometricPolicy ? templateBiometricOverride.parse(row.biometricPolicy) : { mode: 'inherit' as const },
   createdAt: row.createdAt.toISOString(),
   updatedAt: row.updatedAt.toISOString(),
 })
 
 /** The template plus an optional biometric gate override (Phase 6), stored outside `definition`. */
-const templateBody = templateDefinition.extend({ biometricPolicy: biometricOverride.optional() })
+const templateBody = templateDefinition.extend({ biometricPolicy: templateBiometricOverride.optional() })
 const split = (body: z.infer<typeof templateBody>) => {
   const { biometricPolicy, ...definition } = body
   // Omitted: keep the stored policy (undefined leaves the column out of the UPDATE). inherit: clear it.
@@ -99,7 +99,7 @@ export const proofTemplateRoutes = (deps: { db: Database }): FastifyPluginAsyncZ
     return view(row)
   })
 
-  app.get('/v1/proof-templates/:id/biometric-policy', { schema: { tags: ['proofs'], summary: 'Biometric policy of a proof template', params: z.object({ id: z.uuid() }), response: { 200: z.object({ templateId: z.string(), biometricPolicy: biometricOverride }), 404: errorBody } } }, async (request) => {
+  app.get('/v1/proof-templates/:id/biometric-policy', { schema: { tags: ['proofs'], summary: 'Biometric policy of a proof template', params: z.object({ id: z.uuid() }), response: { 200: z.object({ templateId: z.string(), biometricPolicy: templateBiometricOverride }), 404: errorBody } } }, async (request) => {
     const [row] = await deps.db.select().from(proofTemplates).where(and(eq(proofTemplates.tenantId, tenant(request).id), eq(proofTemplates.id, request.params.id)))
     if (!row) throw notFound('proof template')
     return { templateId: row.id, biometricPolicy: view(row).biometricPolicy }
@@ -111,10 +111,10 @@ export const proofTemplateRoutes = (deps: { db: Database }): FastifyPluginAsyncZ
       schema: {
         tags: writeTags,
         summary: 'Set the biometric policy of a proof template',
-        description: '`inherit` follows the tenant default, `off` never gates, `required` gates with the given thresholds. Applies to proof requests made from this template after the change.',
+        description: '`inherit` follows the tenant default, `off` never gates, `required` gates with the given thresholds. `conditional` gates when its rule holds for the numbers sent with the proof request (`biometric.params`): up to 5 conditions, each a parameter name of your choosing, a comparison (`gte`, `gt`, `lte`, `lt`) and a number, joined by `match` (`any` or `all`). A request that lacks a parameter the rule names is refused. Applies to proof requests made from this template after the change.',
         params: z.object({ id: z.uuid() }),
-        body: biometricOverride,
-        response: { 200: z.object({ templateId: z.string(), biometricPolicy: biometricOverride }), 403: errorBody, 404: errorBody },
+        body: templateBiometricOverride,
+        response: { 200: z.object({ templateId: z.string(), biometricPolicy: templateBiometricOverride }), 403: errorBody, 404: errorBody },
       },
     },
     async (request) => {

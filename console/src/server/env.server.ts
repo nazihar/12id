@@ -30,7 +30,7 @@ const schema = z
     SMTP_URL: z.preprocess((value) => (value === '' ? undefined : value), z.url().optional()),
     MAIL_FROM: z.string().min(3).default('12id Console <no-reply@localhost>'),
     /** Development and tests only: also append every outgoing mail as a JSON line to this file. */
-    MAIL_OUTBOX_FILE: z.string().min(1).optional(),
+    MAIL_OUTBOX_PATH: z.string().min(1).optional(),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === 'production' && !env.SMTP_URL) {
@@ -42,8 +42,8 @@ const schema = z
     if (env.BETTER_AUTH_SECRET_PREVIOUS && env.BETTER_AUTH_SECRET_PREVIOUS === env.BETTER_AUTH_SECRET) {
       ctx.addIssue({ code: 'custom', path: ['BETTER_AUTH_SECRET_PREVIOUS'], message: 'equals BETTER_AUTH_SECRET; generate a new current secret' })
     }
-    if (env.NODE_ENV === 'production' && env.MAIL_OUTBOX_FILE) {
-      ctx.addIssue({ code: 'custom', path: ['MAIL_OUTBOX_FILE'], message: 'not allowed in production: it would write sign-in codes to disk' })
+    if (env.NODE_ENV === 'production' && env.MAIL_OUTBOX_PATH) {
+      ctx.addIssue({ code: 'custom', path: ['MAIL_OUTBOX_PATH'], message: 'not allowed in production: it would write sign-in codes to disk' })
     }
   })
 

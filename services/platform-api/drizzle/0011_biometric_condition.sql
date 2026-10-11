@@ -1,0 +1,1 @@
+ALTER TABLE "proofs" ADD COLUMN "biometric_condition" jsonb;

@@ -6,7 +6,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
-import { biometricOverride, biometricProviderInput, biometricSettingsInput } from '@/features/portal/biometrics.schemas'
+import { biometricOverride, biometricProviderInput, biometricSettingsInput, templateBiometricOverride } from '@/features/portal/biometrics.schemas'
 import { publishSchemaInput } from '@/features/portal/catalogue.schemas'
 import { connectionInvitationInput } from '@/features/portal/exchanges.schemas'
 import { webhookEndpointInput } from '@/features/portal/webhook.schemas'
@@ -336,7 +336,7 @@ export const getPortalTemplatePolicy = createServerFn({ method: 'GET' })
 
 export const savePortalTemplatePolicy = createServerFn({ method: 'POST' })
   .middleware([tenantMiddleware({ biometrics: ['update'] })])
-  .validator(organizationInput.extend({ templateId: z.uuid(), policy: biometricOverride }))
+  .validator(organizationInput.extend({ templateId: z.uuid(), policy: templateBiometricOverride }))
   .handler(async ({ context, data }) => {
     assertSameOrganization(context.organization.id, data.organizationId)
     return unwrap(await platformFor(context.principal).PUT('/v1/proof-templates/{id}/biometric-policy', { params: { path: { id: data.templateId } }, body: data.policy }))

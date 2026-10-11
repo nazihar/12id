@@ -37,7 +37,10 @@ for (const t of catalogue.templates) {
 const policies = Object.entries(catalogue.facePolicies ?? {})
 if (policies.length > 0) {
   console.log('\nFace check (console, Biometrics) for the ids tenant.json uses:')
-  for (const [id, mode] of policies) console.log(`  ${id}  ${mode === 'inherit' ? "inherit (the organisation's default decides)" : mode}`)
+  for (const [id, mode] of policies) {
+    const rule = catalogue.faceRuleParams?.[id]
+    console.log(`  ${id}  ${mode === 'inherit' ? "inherit (the organisation's default decides)" : rule ? `conditional, decided from ${rule.join(', ')} (tenant.json "faceCheckParams")` : mode}`)
+  }
 }
 
 if (unreadable) console.log(`\n${file}: ${unreadable}`)

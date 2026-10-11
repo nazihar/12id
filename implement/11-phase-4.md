@@ -90,7 +90,7 @@ Evidence in [12-phase-4-findings.md](12-phase-4-findings.md).
 - **CSRF: TanStack Start's `createCsrfMiddleware`** in `src/start.ts` (server functions including GET, and all non-GET requests), with the public origin as matcher. Replaces the hand-written origin check.
 - **Every form: `method="post"` and submit disabled until `useHydrated()`**; a pre-hydration click otherwise submits the password as a GET query string.
 - **Routes as built:** `/login`, `/verify-2fa`, `/setup-2fa`, `/_authed`, `/_authed/ops`, `/_authed/account` (tenant portal placeholder).
-- **Tests:** Vitest for units (the `node --test` rule exists because of Credo, which the console never loads); Playwright `npm run e2e` against local Postgres and a local platform-api; outgoing mail can be appended to `MAIL_OUTBOX_FILE` outside production, so tests read real codes.
+- **Tests:** Vitest for units (the `node --test` rule exists because of Credo, which the console never loads); Playwright `npm run e2e` against local Postgres and a local platform-api; outgoing mail can be appended to `MAIL_OUTBOX_PATH` outside production (renamed from `MAIL_OUTBOX_FILE` on 2026-10-11: since Phase 9 W2 a `*_FILE` variable is read as a secret file, which stopped the local e2e server), so tests read real codes.
 - **Pins confirmed:** TanStack Table **v9** (shadcn's data-table targets it); Better Auth CLI is the `auth` package; shadcn preset `nova` on Base UI; `cn` package verified as shadcn's.
 
 ### C1 — platform-api: console scope, audit, new routes

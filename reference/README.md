@@ -83,6 +83,19 @@ app                         backend                          12iD
 - **Nothing else changes.** The decision is made by 12iD from the provider's result, not by the app: an app that skips the check gets no card and no approval.
 - A later sign-in does not issue again: the wallet already holds the card.
 
+### Only for some requests (for example large transfers)
+
+A proof template can require the face check only when a rule holds: console, **Proof templates**, the face-check button, "Require a face check when…", for example `amount ≥ 5000`. The rule lives in the console. The backend does not decide anything; it reports the facts with every request:
+
+```json
+"actions": { "transfer": { "proofTemplateId": "…", "faceCheckParams": ["amount"] } }
+```
+
+- `faceCheckParams` names the details of the action that the rule is decided from. The backend sends them as numbers in `biometric.params` (`startAction` in `server.ts`), together with the photo, for small and large amounts alike. 12iD applies the rule: a transfer of 1000 is approved without the camera, one of 5000 asks for the face check.
+- The parameter names are yours. A rule can use several (`amount ≥ 5000` or `riskScore > 70`); send a yes/no fact as 1 or 0.
+- 12iD refuses a request that lacks a number the rule names, so a mistake cannot quietly skip the check. The backend's start-up check (`npm run tenant`) says which names are missing from `faceCheckParams`.
+- To change the threshold, change the rule in the console. Nothing is deployed.
+
 ## What is a stand-in
 
 Replace these with your own:
@@ -128,6 +141,7 @@ It listens on `127.0.0.1:3700`. Put your HTTPS reverse proxy in front: the app a
 ```
 
 - `photoOnFile`: `true` when the organisation uses face checks (see "With a face check").
+- `actions.<name>.faceCheckParams` (optional): the details a conditional face-check rule is decided from, e.g. `["amount"]` (see "Only for some requests").
 - One attribute per schema attribute, except `expiresOn`, which is computed from `validDays`.
 - `{name}` and `{memberId}` come from the signed-in user; anything else is issued as written. A real backend takes every value from its own records.
 - **To point the backend at another organisation:** replace `tenant.json`, `PLATFORM_API_KEY` and `WEBHOOK_SECRET`, then `docker compose up -d --force-recreate`.

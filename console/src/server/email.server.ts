@@ -20,7 +20,7 @@ export async function sendMail(mail: Mail) {
   const env = serverEnv()
   if (!env.SMTP_URL) {
     if (env.NODE_ENV === 'production') throw new Error('SMTP_URL is not configured')
-    if (env.MAIL_OUTBOX_FILE) appendFileSync(env.MAIL_OUTBOX_FILE, `${JSON.stringify({ at: new Date().toISOString(), ...mail })}\n`)
+    if (env.MAIL_OUTBOX_PATH) appendFileSync(env.MAIL_OUTBOX_PATH, `${JSON.stringify({ at: new Date().toISOString(), ...mail })}\n`)
     console.info(`[mail:${env.NODE_ENV}] to=${mail.to} subject=${mail.subject}\n${mail.text}`)
     return
   }

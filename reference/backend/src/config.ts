@@ -20,8 +20,14 @@ export interface Tenant {
    * organisation's policy (console, Biometrics) requires a check, and ignores it elsewhere.
    */
   photoOnFile?: boolean
-  /** What the app may ask for, and the proof template that backs each. */
-  actions: Record<string, { proofTemplateId: string }>
+  /**
+   * What the app may ask for, and the proof template that backs each.
+   *
+   * `faceCheckParams`: when the template's face check is conditional (console, Proof templates:
+   * "Require a face check when…", e.g. amount ≥ 5000), the names of the action's details that its rule
+   * is decided from. They are sent as numbers with every request; 12id holds the rule and decides.
+   */
+  actions: Record<string, { proofTemplateId: string; faceCheckParams?: string[] }>
 }
 
 export interface Config {
@@ -66,6 +72,10 @@ export function loadTenant(file: string): Tenant {
   if (ids.some((id) => !id || id.startsWith('REPLACE'))) throw new Error(`${file}: fill in the credential definition id and each action's proof template id`)
   const unknown = Object.values(tenant.credential.attributes).flatMap((value) => value.match(/\{[^}]*\}/g) ?? []).filter((p) => p !== '{name}' && p !== '{memberId}')
   if (unknown.length > 0) throw new Error(`${file}: unknown placeholder ${unknown.join(', ')}; the user supplies {name} and {memberId}, anything else is issued as written`)
+  for (const [name, action] of Object.entries(tenant.actions)) {
+    const params = action.faceCheckParams
+    if (params !== undefined && !(Array.isArray(params) && params.every((p) => typeof p === 'string' && p !== ''))) throw new Error(`${file}: actions.${name}.faceCheckParams is a list of detail names, e.g. ["amount"]`)
+  }
   if ('expiresOn' in tenant.credential.attributes) throw new Error(`${file}: leave expiresOn out; it is computed from credential.validDays`)
   return tenant
 }

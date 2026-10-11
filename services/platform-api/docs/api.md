@@ -98,7 +98,7 @@ Optional per tenant: before a credential is issued or a proof result is released
 
 - **Default** for the organisation (console → Biometrics).
 - **Per credential definition** (console): `inherit`, `off` or `required`, with `minMatchScore`, `minLivenessScore` and `maxAttempts`. Scores are 0–100. Read it with `GET /v1/credential-definitions/{id}/biometric-policy`.
-- **Per proof template** (console). Read it with `GET /v1/proof-templates/{id}/biometric-policy`.
+- **Per proof template** (console): the same three, or `conditional` (below). Read it with `GET /v1/proof-templates/{id}/biometric-policy`.
 
 When a policy applies, send the reference image with the command:
 
@@ -118,6 +118,25 @@ What happens next:
 - `GET /v1/credentials/{id}` and `/v1/proofs/{id}` include `biometric` (status, attempts left, last scores); `GET /v1/credentials/{id}/biometric-log` (and `/v1/proofs/{id}/biometric-log`) returns every step with the vendor session id, for audit.
 
 You are the controller of the reference images and must have the user's consent for the check.
+
+### Conditional checks on a proof template
+
+A proof template can require the check only when a rule holds, for example only for transfers of 5000 or more. The rule is set in the console, on the template. Your backend sends the facts with every request and does not decide anything itself:
+
+```json
+POST /v1/proofs/request
+{ "connectionId": "…", "templateId": "…",
+  "biometric": { "params": { "amount": 7200, "riskScore": 20 }, "referenceImage": "<base64>" } }
+```
+
+- **The rule** is up to 5 conditions, each a parameter, a comparison (`gte`, `gt`, `lte`, `lt`) and a number, joined by one word: `any` (the check applies when at least one condition holds) or `all` (only when every condition holds).
+- **The parameters are yours.** You name them in the console and the platform attaches no meaning to them. Any number your backend knows when it asks for the proof works: an amount, a risk score from your fraud engine, days since the last check, an access level. Send a yes/no fact as `1` or `0` (`newDevice >= 1`).
+- **Every parameter the rule names is required**, also with `any`. A request without one answers **422 `biometric_param_required`** and nothing is sent to the wallet, so a backend that forgets a number cannot get an unchecked exchange. Parameters the rule does not name are ignored and not stored.
+- **Send the reference image with every request** if you do not want to look at the rule yourself. It is ignored when the rule does not hold; when it holds and the image is missing, the call answers 422 `biometric_reference_required`.
+- **The answer says what was decided.** `biometricCondition` on the proof holds the rule as it was and `required`; `biometric` is `null` when no check was required. From there the exchange behaves like any other, gated or not.
+- **For audit**, `GET /v1/proofs/{id}/biometric-log` returns `condition` with the number you sent for each condition, also for requests that needed no check. Those numbers are not in webhooks or lists, and they are erased with the exchange.
+- `params` on a template without a rule, or on an inline `request`, are ignored. Credential definitions do not take a rule.
+- The platform trusts the numbers you send: the rule guards against a forgotten or mistaken decision in your code, not against a backend that sends a false amount.
 
 ### `record.erased`
 

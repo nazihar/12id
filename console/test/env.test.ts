@@ -21,7 +21,7 @@ describe('serverEnv', () => {
 
   it('requires SMTP_URL in production and refuses the mail outbox file there', () => {
     expect(() => serverEnv({ ...base, NODE_ENV: 'production', SMTP_URL: '' })).toThrow(/SMTP_URL: required in production/)
-    expect(() => serverEnv({ ...base, NODE_ENV: 'production', SMTP_URL: 'smtps://u:p@mail.example:465', MAIL_OUTBOX_FILE: 'x' })).toThrow(/MAIL_OUTBOX_FILE/)
+    expect(() => serverEnv({ ...base, NODE_ENV: 'production', SMTP_URL: 'smtps://u:p@mail.example:465', MAIL_OUTBOX_PATH: 'x' })).toThrow(/MAIL_OUTBOX_PATH/)
     expect(serverEnv({ ...base, NODE_ENV: 'production', SMTP_URL: 'smtps://u:p@mail.example:465' }).SMTP_URL).toBe('smtps://u:p@mail.example:465')
   })
 })

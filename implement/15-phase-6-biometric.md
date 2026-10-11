@@ -2,6 +2,8 @@
 
 **Status (2026-09-21):** built and on staging. `smoke:biometric-credo` (mock) 18/18 and `smoke:sdk-biometric-android` (mock, phone) 12/12 passed. The AWS half waits for the owner's tenant role. As-built differences and evidence are in [`16-phase-6-biometric-findings.md`](16-phase-6-biometric-findings.md).
 
+**Update (2026-10-11):** a proof template can gate conditionally (only when a rule holds for numbers the tenant's backend sends). Built and tested locally, **not on staging yet**. See "Conditional gate on proof templates" at the end of this document.
+
 ## Context
 Phases 0–5 (Android) are done and on staging (`12id/implement/1…14`):
 - ledger, patched mediator, agent-service + endorser-service, platform-api (API keys, wallet tokens, webhooks, wake path), console (operator + tenant portal, dashboards), and the Android holder SDK (`com.12id:holder-sdk-android`, `com.onetwoid.sdk.OneTwoId`).
@@ -319,3 +321,86 @@ B0 spike → B1 (mock adapter first) → B2 → B3 → `smoke:biometric-credo` (
 - retention/deletion of the biometric log (Phase 7, H1); a scoped DB role or dedicated instance (H3). *The scoped role was done by H3 on 2026-09-22; the dedicated instance was declined by the owner;*
 - the stronger wallet ↔ connection binding through mediator routing keys;
 - credential-embedded photos.
+
+---
+
+## Conditional gate on proof templates (2026-10-11)
+
+**Status:** built and tested locally (platform-api, console, reference backend). **Not deployed to staging**; the staging smoke step is written and has not run. Results: [`16-phase-6-biometric-findings.md`](16-phase-6-biometric-findings.md) "Conditional gate".
+
+### Why
+A template's face check was all-or-nothing (`inherit` / `off` / `required`). A bank wants one "Approve transfer" template where the check applies only from an amount of 5000, or when its risk score is high. The platform never sees those numbers: they are the tenant's business data, not credential attributes.
+
+### Owner decisions
+| Item | Decision | Reason |
+|---|---|---|
+| Where the rule lives | **In the template**, set in the console | The threshold changes without a backend release, and the console shows what is enforced |
+| Who decides | **The platform.** The tenant's backend sends the numbers with every request and never branches on them | A per-request on/off flag was rejected: a backend that forgets it gets no check. Two templates chosen by the client were rejected: the rule would live in client code |
+| Rule shape | **Up to 5 conditions, joined by one word for the whole rule: `any` or `all`** | "Amount or risk score" is a real case; with one condition the client would combine them in its own code. No mixing, nesting or tiers: that is where a rule engine starts |
+| Parameters | **Generic.** The tenant names them; the platform attaches no meaning | The same mode serves an amount, a risk score, days since the last check, an access level, or a yes/no fact sent as 1/0 |
+| Missing parameter | **Refused (422)**, also with `any` | Fails closed: a forgotten number must not produce an unchecked exchange |
+| Audit | **The numbers sent are kept** with the exchange, also when no check followed | A disputed transfer can be traced to the number that was sent. They are scrubbed by erasure and retention |
+| Scope | Proof templates only | Credential definitions keep the three modes |
+
+The platform trusts the numbers the backend sends. The rule guards against a forgotten or mistaken decision in the tenant's code, not against a backend that sends a false amount. That holds for every design considered.
+
+### Design
+**Template policy** (new variant; `PUT /v1/proof-templates/{id}/biometric-policy`, console only):
+```json
+{ "mode": "conditional",
+  "when": { "match": "any",
+            "conditions": [ { "param": "amount",    "op": "gte", "value": 5000 },
+                            { "param": "riskScore", "op": "gt",  "value": 70 } ] },
+  "minMatchScore": 90, "minLivenessScore": 90, "maxAttempts": 3 }
+```
+- `match`: `any | all`. `conditions`: 1 to 5. `op`: `gte | gt | lte | lt`. `value`: a finite number.
+- `param`: `^[A-Za-z][A-Za-z0-9_]{0,39}$`. The same parameter may appear twice (a range with `all`).
+
+**Request:**
+```json
+POST /v1/proofs/request
+{ "connectionId": "…", "templateId": "…",
+  "biometric": { "params": { "amount": 7200, "riskScore": 20 }, "referenceImage": "<base64>" } }
+```
+
+| Case | Result |
+|---|---|
+| Tenant's biometrics off | not gated, nothing evaluated or recorded (as before) |
+| A parameter the rule names is missing | 422 `biometric_param_required` (names it); nothing is sent to the wallet |
+| Rule false | not gated; the image is ignored; the decision is recorded with `required: false` |
+| Rule true, image present | gated exactly like `required`, with the template's thresholds |
+| Rule true, no image | 422 `biometric_reference_required` (existing) |
+| `params` on another template or an inline `request`; parameters the rule does not name | ignored, not stored |
+
+**Stored:** `proofs.biometric_condition` (jsonb, migration `0011_biometric_condition`), a snapshot written for every request from a conditional template:
+```json
+{ "match": "any", "required": true,
+  "conditions": [ { "param": "amount", "op": "gte", "value": 5000, "input": 7200, "met": true },
+                  { "param": "riskScore", "op": "gt", "value": 70, "input": 20, "met": false } ] }
+```
+
+**Exposed:**
+- The proof view (API, lists, webhooks) has `biometricCondition`: the rule, each `met`, and `required`, **without `input`**. Webhook bodies therefore gain no business data.
+- `GET /v1/proofs/{id}/biometric-log` (an audited read) has `condition` with each `input`.
+- Operators see the inputs as `null` unless they reveal with a reason, like disclosed values.
+
+**Erasure and retention** set every `input` to null; the rule, `met` and `required` stay.
+
+### What changed
+- **platform-api:**
+  - `biometric/policy.ts`: `templateBiometricOverride`, `evaluateWhen`, `conditionOutcome`.
+  - `biometric/gating.ts`: `effectivePolicy` takes the request's `params` and returns the decision next to the policy. `runGated` and the gate engine (`gate.ts`) are untouched.
+  - `http/routes/exchanges.ts`: `biometric.params` on proof requests; the outcome is written with the mirror row; the proof log route returns `condition`.
+  - `http/routes/proof-templates.ts`: accepts the new mode. Credential definitions refuse it (400).
+  - `views.ts`, `erasure.ts`, `db/schema.ts`, migration `0011`, both OpenAPI files, `docs/api.md`, `docs/data-protection.md`.
+- **console:**
+  - The template's face-check dialog offers "Require a face check when…": an any/all selector and up to five lines of parameter, comparison and value.
+  - The templates list shows the rule (`when amount ≥ 5000 or riskScore > 70`).
+  - The exchanges list shows "not required" for a proof the rule decided against, and the log dialog lists each condition with the number sent.
+  - `NumberField` takes `decimal` (a risk score may be 0.7).
+- **reference backend:** an action in `tenant.json` may list `faceCheckParams` (e.g. `["amount"]`); `startAction` forwards those details as numbers. The start-up check refuses a tenant file that does not forward a parameter the template's rule names.
+- **Smoke:** `infra/smoke/biometric-credo.ts` step 5 (below both thresholds → released with no check; either condition true → held until the pass; a number missing → 422).
+- **Not changed:** the SDK, client apps, biometric-service, agent-service.
+
+### Out of scope
+Mixing or nesting any/all; comparing two parameters or arithmetic; tiers with different strictness; conditions on credential definitions; non-numeric parameters; showing the amount in the wallet's approval dialog.

@@ -534,6 +534,13 @@ Issuance is shown; a proof follows the same steps with `presentation-received` a
 
 Every step writes a row to the biometric log (`exchange_gate_events`), which the console shows next to the exchange. No step stores or sends an image outside biometric-service.
 
+**Conditional gate on a proof template (2026-10-11).** A template's policy may be `conditional`: the check applies only when a rule holds for numbers the customer backend sends with the request (`biometric.params`, e.g. `amount >= 5000`). Platform API evaluates the rule before step 1's check is created:
+- rule false → the proof runs ungated, and the decision is kept on the proof (`proofs.biometric_condition`);
+- rule true → the flow above, unchanged;
+- a parameter the rule names is missing → 422, nothing is sent to the wallet.
+
+Details: [`15-phase-6-biometric.md`](15-phase-6-biometric.md) "Conditional gate on proof templates".
+
 ---
 
 ## 5. Data and storage
@@ -949,6 +956,7 @@ Plan: [`15-phase-6-biometric.md`](15-phase-6-biometric.md); evidence: [`16-phase
 - [x] B6 infra: compose, secrets, backup + restore drill, runbook; probe + 5 biometric alerts; alert email to onetwoidadmin@gmail.com works (test alert delivered 2026-09-21)
 - [x] `smoke:biometric-credo` (mock) **PASSED 18/18**; `smoke:sdk-biometric-android` (mock, phone) **PASSED 12/12**; grep check clean
 - [x] `smoke:sdk-biometric-android PROVIDER=aws` on the phone with the owner's AWS account: real liveness 99+, same face match 99.9 → issued, different face 2.7 → refused (findings "AWS run"). A printed or on-screen photo was refused (liveness 0.13, match 99.99), and the AWS capture passed in an R8-shrunk build (`-PminifyDebug`)
+- [~] Conditional gate on proof templates (2026-10-11, §4.9, §12.17): built and tested locally (platform-api migration `0011_biometric_condition`, console, reference backend); **not deployed to staging yet**
 
 ### Phase 7 — Pre-production hardening (from the review; H2 + H3 done on staging)
 
@@ -1287,6 +1295,7 @@ An optional liveness + face-match gate on issuance and proof results (§2.8, §4
 | Enforcement | At the agent (per-record `autoAccept: Never`); the result is fetched from the vendor server-side. For proofs the tenant never receives `verified`/`disclosed` without a pass |
 | Audit | Biometric log per exchange (`exchange_gate_events`), shown in the console exchanges list for tenants and operators |
 | Log retention | No automatic deletion in Phase 6; part of Phase 7 H1 |
+| Conditional gate (2026-10-11) | A proof template may gate only when a rule holds: up to 5 conditions (a parameter the tenant names, `gte`/`gt`/`lte`/`lt`, a number) joined by `any` or `all`. The tenant's backend sends the numbers with every request and the platform decides; a missing parameter refuses the request. Rejected: a per-request on/off flag (a backend that forgets it gets no check), two templates chosen by the client (the rule would live in client code), nesting or mixed any/all, tiers |
 
 Rejected for Phase 6: hosted web capture (weaker against injection; revisit if app releases per vendor switch hurt), 12id-managed vendor accounts, stored per-subject reference images, credential-embedded photos.
 

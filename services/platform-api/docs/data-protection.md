@@ -16,7 +16,7 @@
 |---|---|---|
 | The Indy ledger (public, append-only) | Your organisation's DID, schemas (attribute *names*), credential definitions | **None.** No attribute value, connection or presentation is ever written to the ledger. That is why the "blockchain versus right to erasure" conflict does not arise. |
 | The user's phone | The wallet: keys, credentials, connections | Yes, and it is under the user's control. Removing the app, or the SDK's `reset()`, deletes it. |
-| 12iD platform database | For each connection, credential exchange and proof exchange: ids, state, dates, your external id; the attribute values offered; the values disclosed; the holder's label; copies of the webhooks sent to you | Yes: attribute values, disclosed values, holder label, webhook bodies |
+| 12iD platform database | For each connection, credential exchange and proof exchange: ids, state, dates, your external id; the attribute values offered; the values disclosed; the numbers you send for a conditional biometric rule (for example a transfer amount); the holder's label; copies of the webhooks sent to you | Yes: attribute values, disclosed values, the numbers sent for a conditional rule, holder label, webhook bodies |
 | 12iD agent (per-organisation encrypted storage) | The protocol records of each exchange, with the same attribute and disclosed values | Yes |
 | 12iD mediator | Encrypted messages waiting for a phone to collect them; which wallet connects when | Message contents are encrypted end to end and unreadable to 12iD. The mediator sees traffic metadata: which wallet, when, and message sizes. The app contacts the mediator when it opens, after a push, and while it waits for a reply it expects; it does not poll while idle. |
 | Biometric gate (optional) | The reference image you send, for the duration of the check only; then scores, decisions and the vendor's session id | Face images: **deleted when the check is decided or expires**, never logged, never sent in a webhook. Scores and vendor session ids: yes, until erased. |
@@ -29,6 +29,7 @@ Personal data of a finished exchange (state `done`, `abandoned` or `declined`) i
 
 - credential attribute values;
 - disclosed proof values;
+- the numbers sent for a conditional biometric rule (the rule and whether a check was required stay);
 - the bodies of the webhooks sent to you, older than the period;
 - biometric scores, vendor session ids, and 12iD's copy of the check;
 - the agent's protocol records and the messages stored with them.
@@ -96,7 +97,7 @@ What protects the data described above, in short:
 
 ## Access by 12iD staff
 
-- 12iD operators administer the platform across organisations. In the operator console, **attribute values, disclosed values, holder labels and webhook bodies are masked.**
+- 12iD operators administer the platform across organisations. In the operator console, **attribute values, disclosed values, the numbers sent for a conditional biometric rule, holder labels and webhook bodies are masked.**
 - An operator who needs to see them to answer a support request must give a reason. The reveal is recorded, with the reason, in the audit log.
 - Operators erase data only on your request. They must enter a reason, and you receive the `record.erased` webhook.
 - An API key created for you by an operator is marked *Created by operator* in your API keys list, and your owners are told by e-mail.
@@ -110,6 +111,7 @@ If you use the optional biometric gate, face images are **special-category data*
 - 12iD keeps the reference image only for the check window (30 minutes by default), encrypted with a key specific to your organisation. It is deleted at the decision.
 - The images are processed in **your** vendor account (bring your own AWS account). Your agreement with that vendor covers them.
 - Scores and vendor session ids are kept for the retention period, like the rest of the exchange's personal data. The pass or fail decision stays with the record.
+- With a conditional rule on a proof template, the numbers your backend sends (such as an amount or a risk score) are kept with the exchange so the decision can be audited. They appear only in the biometric log, never in a webhook, and are erased with the exchange.
 
 ## Backups
 

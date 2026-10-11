@@ -5,6 +5,7 @@
 import { z } from 'zod'
 
 import { type Gate, biometricView, toBiometricView } from './biometric/gate.ts'
+import { type ConditionOutcome, conditionOutcome } from './biometric/policy.ts'
 import type { connections, credentials, proofs, wallets } from './db/schema.ts'
 
 export const connectionView = z.object({
@@ -38,6 +39,14 @@ export const credentialView = z.object({
 })
 export type CredentialView = z.infer<typeof credentialView>
 
+/** A conditional rule's decision without the numbers the customer sent, so lists and webhooks carry no business data. */
+const conditionView = conditionOutcome.extend({ conditions: z.array(conditionOutcome.shape.conditions.element.omit({ input: true })) })
+
+function toConditionView(outcome: ConditionOutcome | null): z.infer<typeof conditionView> | null {
+  if (!outcome) return null
+  return { match: outcome.match, required: outcome.required, conditions: outcome.conditions.map(({ input: _input, ...rest }) => rest) }
+}
+
 export const proofView = z.object({
   id: z.string(),
   state: z.string(),
@@ -50,6 +59,11 @@ export const proofView = z.object({
   errorMessage: z.string().nullable(),
   /** null when not gated. While a gate has not passed, `verified` and `disclosed` stay null. */
   biometric: biometricView,
+  /**
+   * What the template's conditional rule decided: the rule and whether a check was required. null
+   * when the template has no rule. The numbers sent are only in the biometric log.
+   */
+  biometricCondition: conditionView.nullable(),
   /** When the personal data was erased, on request or by the retention period; null = not erased (Phase 7 H1). */
   erasedAt: z.iso.datetime().nullable(),
   createdAt: z.iso.datetime(),
@@ -106,6 +120,7 @@ export function toProofView(row: typeof proofs.$inferSelect, gate?: Gate | null)
     disclosed: withheld ? null : row.disclosed,
     errorMessage: row.errorMessage,
     biometric: toBiometricView(gate),
+    biometricCondition: toConditionView(row.biometricCondition),
     erasedAt: row.erasedAt ? iso(row.erasedAt) : null,
     createdAt: iso(row.createdAt),
     updatedAt: iso(row.updatedAt),

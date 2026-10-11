@@ -9,6 +9,8 @@
 import { sql } from 'drizzle-orm'
 import { bigint, bigserial, boolean, index, integer, jsonb, pgTable, primaryKey, real, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
 
+import type { ConditionOutcome } from '../biometric/policy.ts'
+
 export const TENANT_STATUSES = ['provisioning', 'ready', 'failed'] as const
 
 export const tenants = pgTable('tenants', {
@@ -153,6 +155,12 @@ export const proofs = pgTable('proofs', {
   verified: boolean('verified'),
   /** Revealed attributes by group, filled when the exchange reaches `done`. */
   disclosed: jsonb('disclosed').$type<Record<string, Record<string, string>>>(),
+  /**
+   * What the template's conditional face-check rule decided for this request (`ConditionOutcome`):
+   * the rule as it was, the number sent for each condition, and whether a check was required. Null
+   * when the template has no rule. The numbers sent are scrubbed with the exchange (Phase 7 H1).
+   */
+  biometricCondition: jsonb('biometric_condition').$type<ConditionOutcome>(),
   errorMessage: text('error_message'),
   /** Personal data scrubbed (Phase 7 H1): by request (`erased_by` names who) or by retention ('retention'). The row stays for history and dashboards. */
   erasedAt: timestamp('erased_at', { withTimezone: true }),

@@ -9,7 +9,9 @@
  *   2. hold before pass: the holder accepts first → NOT issued while held → check passes → issued
  *   3. three failed matches → locked → the exchange is abandoned
  *   4. gated proof: the holder presents before passing → verified/disclosed withheld → pass → released
- *   5. every biometric log has the expected sequence; biometric.check_completed webhooks arrive signed
+ *   5. conditional gate: a template rule ("amount >= 5000 or riskScore > 70") decides from the numbers
+ *      sent with each request → below: released with no check; above: held until the pass; a number missing: 422
+ *   6. every biometric log has the expected sequence; biometric.check_completed webhooks arrive signed
  *
  * Env as smoke:platform-credo: PLATFORM_API, PLATFORM_API_KEY, PLATFORM_TENANT_ID, WEBHOOK_URL, RECEIVER_PORT.
  */
@@ -179,12 +181,65 @@ try {
     check('4 accepted on the pass', types(log) === 'gate_created>hold_reached>session_started>attempt_completed>accepted', types(log))
   }
 
-  // 5. webhooks
+  // 5. conditional gate: the template's rule decides from the numbers sent with each request
+  {
+    const template = await setup.must<{ id: string }>('POST', '/v1/proof-templates', {
+      name: 'conditional proof',
+      groups: [{ key: 'employee', attributes: ['name'], credentials: [{ schemaName: 'smoke-biometric' }] }],
+      biometricPolicy: { mode: 'conditional', when: { match: 'any', conditions: [{ param: 'amount', op: 'gte', value: 5000 }, { param: 'riskScore', op: 'gt', value: 70 }] }, minMatchScore: 90 },
+    })
+    type Requested = { id: string; threadId: string; biometric: { status: string } | null; biometricCondition: { required: boolean } | null; error?: string }
+    type Proof = { state: string; verified: boolean | null }
+    // The same call every time: the image and the numbers. The platform decides.
+    const request = (label: string, params: Record<string, number>) =>
+      api.call<Requested>('POST', '/v1/proofs/request', { connectionId, templateId: template.id, externalId: `${runId}-${label}`, biometric: { referenceImage, params } })
+    const present = async (threadId: string) => {
+      const requestId = await waitForHolderProof(h, threadId, DidCommProofState.RequestReceived)
+      const { proofFormats } = await h.modules.didcomm.proofs.selectCredentialsForRequest({ proofExchangeRecordId: requestId })
+      await h.modules.didcomm.proofs.acceptRequest({ proofExchangeRecordId: requestId, proofFormats })
+    }
+    const proofState = (id: string, state: string) => receiver.waitFor(`5 proof ${state}`, (e) => e.type === 'proof.state_changed' && e.event.data.id === id && e.event.data.state === state, 60_000)
+
+    const missing = await request('cond-missing', { amount: 9000 })
+    check('5 a request without a number the rule names is refused', missing.status === 422 && missing.json.error === 'biometric_param_required', `${missing.status} ${missing.json.error}`)
+
+    // Neither condition holds: no check, released as soon as the holder presents.
+    const below = (await request('cond-below', { amount: 3000, riskScore: 20 })).json
+    check('5 rule false: no check required', below.biometric === null && below.biometricCondition?.required === false, JSON.stringify(below.biometricCondition))
+    const reqs = await sdk.must<{ requirements: unknown[] }>('GET', `/v1/wallet/biometric-requirements?threadId=${below.threadId}`)
+    check('5 rule false: the SDK sees no requirement', reqs.requirements.length === 0)
+    await present(below.threadId)
+    await proofState(below.id, 'done')
+    const released = await api.must<Proof>('GET', `/v1/proofs/${below.id}`)
+    check('5 rule false: released without a check', released.verified === true, `${released.state} verified=${released.verified}`)
+    const belowLog = await api.must<{ condition: { conditions: Array<{ input: number | null }> } | null; events: unknown[] }>('GET', `/v1/proofs/${below.id}/biometric-log`)
+    const sent = belowLog.condition?.conditions.map((c) => c.input).join(',')
+    check('5 rule false: the log keeps the numbers sent', sent === '3000,20' && belowLog.events.length === 0, `${sent}`)
+
+    // Either condition holds: held until the pass.
+    for (const [label, params] of [['cond-amount', { amount: 7200, riskScore: 20 }], ['cond-risk', { amount: 3000, riskScore: 85 }]] as const) {
+      const above = (await request(label, params)).json
+      check(`5 ${label}: check required`, above.biometric?.status === 'pending' && above.biometricCondition?.required === true, JSON.stringify(above.biometricCondition))
+      const holderDone = waitForHolderProof(h, above.threadId, DidCommProofState.Done)
+      await present(above.threadId)
+      await proofState(above.id, 'presentation-received')
+      const held = await api.must<Proof>('GET', `/v1/proofs/${above.id}`)
+      check(`5 ${label}: withheld before the pass`, held.verified === null, `${held.state} verified=${held.verified}`)
+      const outcome = await session(above.threadId, 'same')
+      await holderDone
+      await proofState(above.id, 'done')
+      const done = await api.must<Proof>('GET', `/v1/proofs/${above.id}`)
+      check(`5 ${label}: released after the pass`, outcome.outcome === 'passed' && done.verified === true, `${outcome.outcome} verified=${done.verified}`)
+    }
+  }
+
+  // 6. webhooks
   await sleep(3_000)
   const biometricEvents = receiver.events.filter((e) => e.type === 'biometric.check_completed')
-  check('5 biometric.check_completed webhooks (one per attempt)', biometricEvents.length >= 6, `${biometricEvents.length}`)
-  check('5 no image in any webhook', !receiver.events.some((e) => JSON.stringify(e.event).includes(referenceImage.slice(0, 40))))
-  check('5 all signatures valid', receiver.events.every((e) => e.signatureValid))
+  check('6 biometric.check_completed webhooks (one per attempt)', biometricEvents.length >= 8, `${biometricEvents.length}`)
+  check('6 no image in any webhook', !receiver.events.some((e) => JSON.stringify(e.event).includes(referenceImage.slice(0, 40))))
+  check('6 no number sent for a rule in any webhook', !receiver.events.some((e) => JSON.stringify(e.event).includes('"input"')))
+  check('6 all signatures valid', receiver.events.every((e) => e.signatureValid))
 
   passed = checks.every(([, ok]) => ok)
 } catch (error) {

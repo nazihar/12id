@@ -23,11 +23,22 @@ export interface FaceReference {
   referenceImage: string
 }
 
+/**
+ * What a proof request may carry for the face check. `params` are the numbers a template's
+ * conditional rule is decided from (e.g. `{ amount: 7200 }` for "amount ≥ 5000"). The rule is set in
+ * the console and 12id applies it: send the numbers with every request and do not decide here. A
+ * request that lacks one the rule names is refused with 422 `biometric_param_required`.
+ */
+export interface ProofFaceCheck {
+  referenceImage?: string
+  params?: Record<string, number>
+}
+
 export interface Platform {
   createWallet(externalId: string, idempotencyKey: string): Promise<{ id: string; walletToken: string }>
   createInvitation(externalId: string): Promise<{ invitationId: string; invitationUrl: string }>
   offerCredential(input: { connectionId: string; credentialDefinitionId: string; attributes: Record<string, string>; externalId: string; biometric?: FaceReference }, idempotencyKey: string): Promise<{ id: string; state: string }>
-  requestProof(input: { connectionId: string; templateId: string; externalId: string; biometric?: FaceReference }, idempotencyKey: string): Promise<{ id: string; state: string }>
+  requestProof(input: { connectionId: string; templateId: string; externalId: string; biometric?: ProofFaceCheck }, idempotencyKey: string): Promise<{ id: string; state: string }>
 }
 
 export function platformClient(baseUrl: string, apiKey: string): Platform {

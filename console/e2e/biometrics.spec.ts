@@ -6,6 +6,10 @@
  * An owner configures the provider, runs the connection test and switches the gate on; sets a
  * template's face-check policy; sees the Biometric column and the biometric log on a (seeded) gated
  * exchange. The operator sees the tenant's settings read-only and the same log.
+ *
+ * Conditional gate (2026-10-11): the owner gives a second template a rule ("when amount ≥ 5000 or
+ * riskScore > 70"); a (seeded) proof the rule decided against shows "not required" with the numbers
+ * sent in its log, and the operator sees those numbers hidden.
  */
 import { type Page, expect, test } from '@playwright/test'
 import pg from 'pg'
@@ -28,12 +32,23 @@ async function withPlatformDb<T>(fn: (client: pg.Client) => Promise<T>) {
   }
 }
 
-/** A ready tenant, a proof template and one gated credential exchange with its biometric log. */
+/** A ready tenant, two proof templates, one gated credential exchange with its biometric log, and one proof a template rule decided not to check. */
 async function seed(name: string) {
   return withPlatformDb(async (db) => {
     const tenantId = (await db.query<{ id: string }>("insert into tenants (name, agent_tenant_id, status) values ($1, $2, 'ready') returning id", [name, `e2e-${crypto.randomUUID()}`])).rows[0].id
     const definition = { name: 'Badge check', groups: [{ key: 'badge', attributes: ['name'], credentials: [{ schemaName: 'employee-badge', versions: 'all' }] }] }
     await db.query('insert into proof_templates (tenant_id, name, definition) values ($1, $2, $3)', [tenantId, 'Badge check', definition])
+    await db.query('insert into proof_templates (tenant_id, name, definition) values ($1, $2, $3)', [tenantId, 'Approve transfer', { ...definition, name: 'Approve transfer' }])
+    const condition = {
+      match: 'any',
+      required: false,
+      conditions: [
+        { param: 'amount', op: 'gte', value: 5000, input: 3000, met: false },
+        { param: 'riskScore', op: 'gt', value: 70, input: 20, met: false },
+      ],
+    }
+    const proofId = `proof-${crypto.randomUUID()}`
+    await db.query("insert into proofs (tenant_id, record_id, connection_id, state, thread_id, verified, biometric_condition) values ($1, $2, 'conn-1', 'done', $3, true, $4)", [tenantId, proofId, `thread-${proofId}`, condition])
     const recordId = `cred-${crypto.randomUUID()}`
     await db.query("insert into credentials (tenant_id, record_id, connection_id, state, thread_id, credential_definition_id, attributes) values ($1, $2, 'conn-1', 'done', $3, 'ABC:3:CL:12:default', '{}')", [tenantId, recordId, `thread-${recordId}`])
     const thresholds = { minLivenessScore: 90, minMatchScore: 90 }
@@ -129,6 +144,27 @@ test('owners configure the biometric gate and audit it per exchange; operators s
   await expect(owner.getByText('Face check policy saved.')).toBeVisible()
   await expect(owner.getByRole('row', { name: /Badge check/ })).toContainText('required')
 
+  // A second template: a face check only when a rule holds for numbers the backend sends.
+  await owner.getByRole('row', { name: /Approve transfer/ }).getByRole('button', { name: 'Face check' }).click()
+  const rule = owner.getByRole('dialog')
+  await rule.getByLabel('Face check').fill('when')
+  await owner.getByRole('option', { name: /Require a face check when/ }).click()
+  await rule.getByLabel('Parameter').fill('amount')
+  await rule.getByLabel('Value').fill('5000')
+  await rule.getByRole('button', { name: 'Add condition' }).click()
+  await rule.getByLabel('Parameter').nth(1).fill('riskScore')
+  await rule.getByLabel('Comparison').nth(1).fill('>')
+  await owner.getByRole('option', { name: '>', exact: true }).click()
+  await rule.getByLabel('Value').nth(1).fill('70')
+  await rule.getByRole('button', { name: 'Save' }).click()
+  await expect(owner.getByRole('row', { name: /Approve transfer/ })).toContainText('when amount ≥ 5000 or riskScore > 70')
+  // It is kept: the dialog opens with the rule filled in.
+  await owner.getByRole('row', { name: /Approve transfer/ }).getByRole('button', { name: 'Face check' }).click()
+  await expect(owner.getByRole('dialog').getByLabel('Parameter').nth(1)).toHaveValue('riskScore')
+  await expect(owner.getByRole('dialog').getByLabel('Value').nth(1)).toHaveValue('70')
+  await owner.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click()
+  await expect(owner.getByRole('dialog')).toBeHidden()
+
   // Exchanges: the Biometric column and the log, on the credential exchanges tab (C9).
   await tab(owner, 'Exchanges').click()
   await owner.getByRole('tab', { name: 'Credential exchanges' }).click()
@@ -143,6 +179,17 @@ test('owners configure the biometric gate and audit it per exchange; operators s
   await expect(log).toContainText('99.0 / 90')
   await expect(log).toContainText('mock-session-2')
   await expect(log).toContainText('Credential issued')
+  await owner.keyboard.press('Escape')
+  await expect(log).toBeHidden()
+
+  // A proof the template's rule decided not to check: said so in the list, with the numbers sent in the log.
+  await owner.getByRole('tab', { name: 'Proof exchanges' }).click()
+  await expect(owner.getByTestId('biometric-cell').first()).toContainText('not required')
+  await owner.getByRole('button', { name: 'Biometric log' }).first().click()
+  const decided = owner.getByTestId('biometric-condition')
+  await expect(decided).toContainText('face check not required')
+  await expect(decided).toContainText('amount ≥ 5000 · sent 3000 · not met')
+  await expect(decided).toContainText('riskScore > 70 · sent 20 · not met')
 
   // Operator: read-only settings and the same log.
   await page.goto(`/ops/tenants/${tenantId}/biometrics`)
@@ -152,4 +199,8 @@ test('owners configure the biometric gate and audit it per exchange; operators s
   await page.goto(`/ops/tenants/${tenantId}/exchanges?tab=credentials`)
   await page.getByRole('button', { name: 'Biometric log' }).first().click()
   await expect(page.getByTestId('biometric-log')).toContainText('mock-session-1')
+  // The numbers a customer sent for a rule are masked for operators, like disclosed values.
+  await page.goto(`/ops/tenants/${tenantId}/exchanges?tab=proofs`)
+  await page.getByRole('button', { name: 'Biometric log' }).first().click()
+  await expect(page.getByTestId('biometric-condition')).toContainText('amount ≥ 5000 · sent hidden · not met')
 })

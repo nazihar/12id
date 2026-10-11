@@ -16,6 +16,7 @@ import type { AgentClient } from '../../agent-client.ts'
 import type { BiometricClient } from '../../biometric-client.ts'
 import { type GateEngine, biometricLogView, gatesFor } from '../../biometric/gate.ts'
 import { effectivePolicy, runGated } from '../../biometric/gating.ts'
+import { conditionParam } from '../../biometric/policy.ts'
 import type { Database } from '../../db/client.ts'
 import { connections, credentials, proofTemplates, proofs } from '../../db/schema.ts'
 import { type ErasureDeps, type Requester, eraseConnection, eraseExchange } from '../../erasure.ts'
@@ -65,6 +66,21 @@ const biometricInput = z
   .object({ referenceImage: z.string().min(100).max(7_000_000).describe('Base64 JPEG or PNG, at most 5 MB decoded, one face.') })
   .optional()
   .describe('Required when the biometric policy for this credential definition or proof template applies; ignored otherwise.')
+/**
+ * Proof requests may also carry the numbers a template's conditional rule is decided from. The image
+ * is optional here: a request the rule does not gate needs none.
+ */
+const proofBiometricInput = z
+  .object({
+    referenceImage: z.string().min(100).max(7_000_000).optional().describe('Base64 JPEG or PNG, at most 5 MB decoded, one face. Required when the check applies.'),
+    params: z
+      .record(conditionParam, z.number())
+      .refine((params) => Object.keys(params).length <= 10, { message: 'at most 10 parameters' })
+      .optional()
+      .describe('Numbers the template\'s conditional biometric rule is decided from, by parameter name, e.g. `{ "amount": 7200 }`. Every parameter the rule names is required (422 `biometric_param_required` otherwise); others are ignored.'),
+  })
+  .optional()
+  .describe('`referenceImage` is required when the biometric policy of the proof template applies; `params` when that policy is conditional. Ignored otherwise.')
 // A 5 MB image is about 6.7 MB of base64.
 const GATED_BODY_LIMIT = 8 * 1024 * 1024
 
@@ -158,7 +174,7 @@ export const exchangeRoutes = (deps: ExchangeDeps): FastifyPluginAsyncZod => asy
     async (request, reply) => {
       const t = tenant(request)
       const credDef = await resolveCredentialDefinition(deps.agent, t, request.body.credentialDefinitionId)
-      const policy = deps.biometric ? await effectivePolicy(deps.db, t.id, { kind: 'credentialDefinition', id: credDef.id }) : null
+      const policy = deps.biometric ? (await effectivePolicy(deps.db, t.id, { kind: 'credentialDefinition', id: credDef.id })).policy : null
       const result = await runGated(deps, { tenantId: t.id, recordType: 'credential', policy, referenceImage: request.body.biometric?.referenceImage }, {
         send: (hold) =>
           deps.agent.offerCredential(t.agentTenantId, {
@@ -221,9 +237,9 @@ export const exchangeRoutes = (deps: ExchangeDeps): FastifyPluginAsyncZod => asy
       schema: {
         tags: ['proofs'],
         summary: 'Request a proof',
-        description: 'Asynchronous. Either a stored `templateId` or an inline `request` in the template shape. Every group automatically checks `expiresOn >= today` (UTC). When the exchange reaches `done`, `verified` and the `disclosed` attributes are available.',
+        description: 'Asynchronous. Either a stored `templateId` or an inline `request` in the template shape. Every group automatically checks `expiresOn >= today` (UTC). When the exchange reaches `done`, `verified` and the `disclosed` attributes are available. When the template\'s biometric policy is conditional, send the numbers its rule names in `biometric.params` with every request; `biometricCondition` in the answer says whether a check was required.',
         body: z
-          .object({ connectionId: recordId, templateId: z.uuid().optional(), request: templateDefinition.optional(), externalId, biometric: biometricInput })
+          .object({ connectionId: recordId, templateId: z.uuid().optional(), request: templateDefinition.optional(), externalId, biometric: proofBiometricInput })
           .refine((b) => (b.templateId ? 1 : 0) + (b.request ? 1 : 0) === 1, { message: 'provide exactly one of templateId or request' }),
         response: { 202: proofView, 400: errorBody, 404: errorBody, 409: errorBody, 422: errorBody },
       },
@@ -240,15 +256,15 @@ export const exchangeRoutes = (deps: ExchangeDeps): FastifyPluginAsyncZod => asy
       if (!definition) throw badRequest('provide exactly one of templateId or request')
       const catalogue = await deps.agent.listCatalogue(t.agentTenantId)
       const groups = expandTemplate(definition, catalogue)
-      const policy = deps.biometric ? await effectivePolicy(deps.db, t.id, { kind: 'template', id: request.body.templateId ?? null }) : null
+      const { policy, condition } = deps.biometric ? await effectivePolicy(deps.db, t.id, { kind: 'template', id: request.body.templateId ?? null }, request.body.biometric?.params) : { policy: null, condition: null }
       const result = await runGated(deps, { tenantId: t.id, recordType: 'proof', policy, referenceImage: request.body.biometric?.referenceImage }, {
         send: (hold) => deps.agent.requestProof(t.agentTenantId, { connectionId: request.body.connectionId, name: definition.name, groups, correlationId: request.body.externalId, ...(hold ? { hold } : {}) }),
         recordOf: (r) => ({ recordId: r.proofExchangeId, threadId: r.threadId }),
         mirror: async (tx, r) => {
           await tx
             .insert(proofs)
-            .values({ tenantId: t.id, recordId: r.proofExchangeId, connectionId: request.body.connectionId, state: r.state, threadId: r.threadId, externalId: request.body.externalId ?? null, templateId: request.body.templateId ?? null })
-            .onConflictDoUpdate({ target: [proofs.tenantId, proofs.recordId], set: { templateId: request.body.templateId ?? null } })
+            .values({ tenantId: t.id, recordId: r.proofExchangeId, connectionId: request.body.connectionId, state: r.state, threadId: r.threadId, externalId: request.body.externalId ?? null, templateId: request.body.templateId ?? null, biometricCondition: condition })
+            .onConflictDoUpdate({ target: [proofs.tenantId, proofs.recordId], set: { templateId: request.body.templateId ?? null, biometricCondition: condition } })
         },
       })
       const [row] = await deps.db.select().from(proofs).where(and(eq(proofs.tenantId, t.id), eq(proofs.recordId, result.proofExchangeId)))
@@ -350,18 +366,29 @@ export const exchangeRoutes = (deps: ExchangeDeps): FastifyPluginAsyncZod => asy
       const t = tenant(request)
       const [row] = await deps.db.select({ recordId: credentials.recordId }).from(credentials).where(and(eq(credentials.tenantId, t.id), eq(credentials.recordId, request.params.id)))
       if (!row) throw notFound('credential exchange')
-      return deps.gates ? deps.gates.log(t.id, 'credential', row.recordId) : { biometric: null, events: [] }
+      return { ...(deps.gates ? await deps.gates.log(t.id, 'credential', row.recordId) : { biometric: null, events: [] }), condition: null }
     }
   )
 
   app.get(
     '/v1/proofs/:id/biometric-log',
-    { schema: { tags: ['proofs'], summary: 'Biometric log of a proof exchange', description: logDescription, params: z.object({ id: recordId }), response: { 200: biometricLogView, 404: errorBody } }, config: { auditRead: true } },
+    {
+      schema: {
+        tags: ['proofs'],
+        summary: 'Biometric log of a proof exchange',
+        description: `${logDescription} \`condition\` is what the template's conditional rule decided, with the number sent for each condition (null once the exchange is erased); it is present whether or not a check followed, and null when the template has no rule.`,
+        params: z.object({ id: recordId }),
+        response: { 200: biometricLogView, 404: errorBody },
+      },
+      config: { auditRead: true },
+    },
     async (request) => {
       const t = tenant(request)
-      const [row] = await deps.db.select({ recordId: proofs.recordId }).from(proofs).where(and(eq(proofs.tenantId, t.id), eq(proofs.recordId, request.params.id)))
+      const [row] = await deps.db.select({ recordId: proofs.recordId, condition: proofs.biometricCondition }).from(proofs).where(and(eq(proofs.tenantId, t.id), eq(proofs.recordId, request.params.id)))
       if (!row) throw notFound('proof exchange')
-      return deps.gates ? deps.gates.log(t.id, 'proof', row.recordId) : { biometric: null, events: [] }
+      // The numbers sent are the customer's data about a person: masked for operators like disclosed values.
+      const condition = row.condition && masked(request) ? { ...row.condition, conditions: row.condition.conditions.map((c) => ({ ...c, input: null })) } : row.condition
+      return { ...(deps.gates ? await deps.gates.log(t.id, 'proof', row.recordId) : { biometric: null, events: [] }), condition }
     }
   )
 }

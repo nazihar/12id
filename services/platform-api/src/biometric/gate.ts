@@ -21,6 +21,7 @@ import type { Database } from '../db/client.ts'
 import { type GateEventType, exchangeGateEvents, exchangeGates, tenants, wallets } from '../db/schema.ts'
 import { PlatformError } from '../http/errors.ts'
 import { type EndpointLookup, enqueueEvent } from '../webhooks/events.ts'
+import { conditionOutcome } from './policy.ts'
 
 export type Gate = typeof exchangeGates.$inferSelect
 export type RecordType = Gate['recordType']
@@ -72,7 +73,8 @@ export const gateEventView = z.object({
   reason: z.string().nullable(),
 })
 
-export const biometricLogView = z.object({ biometric: biometricView, events: z.array(gateEventView) })
+/** `condition`: what a proof template's conditional rule decided, with the numbers sent; null without a rule (and for credentials). */
+export const biometricLogView = z.object({ biometric: biometricView, condition: conditionOutcome.nullable(), events: z.array(gateEventView) })
 
 /** Gates for a page of mirror rows, keyed by record id. */
 export async function gatesFor(db: Database, tenantId: string, recordType: RecordType, recordIds: string[]): Promise<Map<string, Gate>> {

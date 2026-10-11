@@ -9,22 +9,36 @@ import { BiometricError, type BiometricClient } from '../biometric-client.ts'
 import type { Database } from '../db/client.ts'
 import { biometricSettings, credentialDefinitionPolicies, exchangeGateEvents, exchangeGates, proofTemplates } from '../db/schema.ts'
 import { PlatformError } from '../http/errors.ts'
-import { type EffectivePolicy, resolvePolicy } from './policy.ts'
+import { type ConditionOutcome, type EffectivePolicy, evaluateWhen, resolvePolicy, templateBiometricOverride } from './policy.ts'
 
 export type PolicySource = { kind: 'credentialDefinition'; id: string } | { kind: 'template'; id: string | null }
 
-export async function effectivePolicy(db: Database, tenantId: string, source: PolicySource): Promise<EffectivePolicy | null> {
+export interface PolicyDecision {
+  /** The policy that applies, or null when the exchange is not gated. */
+  policy: EffectivePolicy | null
+  /** What the template's conditional rule decided; null when the template has none (or biometrics are off). */
+  condition: ConditionOutcome | null
+}
+
+/**
+ * The policy for one command. `params` are the numbers sent with a proof request; they matter only
+ * to a template whose policy is `conditional` (422 when one the rule names is missing).
+ */
+export async function effectivePolicy(db: Database, tenantId: string, source: PolicySource, params?: Record<string, number>): Promise<PolicyDecision> {
   const [settings] = await db.select().from(biometricSettings).where(eq(biometricSettings.tenantId, tenantId))
-  if (!settings?.enabled) return null
-  let override: unknown = null
+  if (!settings?.enabled) return { policy: null, condition: null }
   if (source.kind === 'credentialDefinition') {
     const [row] = await db.select().from(credentialDefinitionPolicies).where(and(eq(credentialDefinitionPolicies.tenantId, tenantId), eq(credentialDefinitionPolicies.credentialDefinitionId, source.id)))
-    override = row?.biometricPolicy ?? null
-  } else if (source.id) {
-    const [row] = await db.select({ policy: proofTemplates.biometricPolicy }).from(proofTemplates).where(and(eq(proofTemplates.tenantId, tenantId), eq(proofTemplates.id, source.id)))
-    override = row?.policy ?? null
+    return { policy: resolvePolicy(settings, row?.biometricPolicy ?? null), condition: null }
   }
-  return resolvePolicy(settings, override)
+  if (!source.id) return { policy: resolvePolicy(settings, null), condition: null }
+  const [row] = await db.select({ policy: proofTemplates.biometricPolicy }).from(proofTemplates).where(and(eq(proofTemplates.tenantId, tenantId), eq(proofTemplates.id, source.id)))
+  const override = row?.policy ? templateBiometricOverride.parse(row.policy) : null
+  if (override?.mode !== 'conditional') return { policy: resolvePolicy(settings, override), condition: null }
+  const { when, ...numbers } = override
+  const condition = evaluateWhen(when, params)
+  // A rule that holds gates exactly like `required` with the same numbers.
+  return { policy: condition.required ? resolvePolicy(settings, { ...numbers, mode: 'required' }) : null, condition }
 }
 
 export interface GatedCommand<T> {

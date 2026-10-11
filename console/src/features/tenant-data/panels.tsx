@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { describeRule } from '@/lib/face-check-rule'
 import { formatDateTime } from '@/lib/format'
 import { type Page, type PageSize, isFiltered, pagingFor, resetFor } from '@/lib/list-search'
 
@@ -72,8 +73,18 @@ type Biometric = CredentialRow['biometric']
 /** Loads one exchange's biometric log (Phase 6); each read is audited by platform-api. */
 export type BiometricLogLoader = (kind: ExchangeKind, id: string) => Promise<BiometricLog>
 
-/** Status badge plus the last match score; a dash when the exchange was not gated. */
-function BiometricCell({ biometric }: { biometric: Biometric }) {
+/**
+ * Status badge plus the last match score; a dash when the exchange was not gated. A proof whose
+ * template rule decided against a check says so (the rule and the numbers sent are in the log).
+ */
+function BiometricCell({ biometric, condition }: { biometric: Biometric; condition?: ProofRow['biometricCondition'] }) {
+  if (!biometric && condition) {
+    return (
+      <span className="text-xs text-muted-foreground" data-testid="biometric-cell" title={`Rule: ${describeRule(condition)}`}>
+        not required
+      </span>
+    )
+  }
   if (!biometric) return <span className="text-muted-foreground">—</span>
   return (
     <span className="flex items-center gap-2" data-testid="biometric-cell">
@@ -105,7 +116,7 @@ function proofColumnsWith(onLog?: (id: string) => void, eraser?: Eraser) {
   return proofColumn.columns([
     proofColumn.accessor('externalId', { header: 'External id', cell: ({ getValue }) => mono(getValue()) }),
     proofColumn.accessor('state', { header: 'State', cell: ({ row }) => <StateWithErasure state={row.original.state} erasedAt={row.original.erasedAt} /> }),
-    proofColumn.accessor('biometric', { header: 'Biometric', cell: ({ getValue }) => <BiometricCell biometric={getValue()} /> }),
+    proofColumn.accessor('biometric', { header: 'Biometric', cell: ({ getValue, row }) => <BiometricCell biometric={getValue()} condition={row.original.biometricCondition} /> }),
     proofColumn.accessor('verified', { header: 'Verified', cell: ({ getValue }) => (getValue() === null ? '—' : getValue() ? 'yes' : 'no') }),
     // Attribute names only: disclosed values are personal data.
     proofColumn.accessor((row) => Object.entries(row.disclosed ?? {}).map(([group, values]) => `${group}: ${Object.keys(values).join(', ')}`).join(' · '), { id: 'disclosed', header: 'Disclosed attributes' }),
@@ -118,9 +129,10 @@ function proofColumnsWith(onLog?: (id: string) => void, eraser?: Eraser) {
   ])
 }
 
-/** Biometric log (gated exchanges) and erasure (finished, not yet erased exchanges). */
+/** Biometric log (gated exchanges, and proofs a template rule decided on) and erasure (finished, not yet erased exchanges). */
 function ExchangeActions({ kind, row, onLog, eraser }: { kind: ExchangeKind; row: CredentialRow | ProofRow; onLog?: (id: string) => void; eraser?: Eraser }) {
-  const log = onLog && row.biometric ? onLog : undefined
+  const decided = 'biometricCondition' in row && row.biometricCondition !== null
+  const log = onLog && (row.biometric || decided) ? onLog : undefined
   const erase = eraser && !row.erasedAt && isFinished(row.state) ? eraser : undefined
   if (!log && !erase) return null
   return (
@@ -237,6 +249,7 @@ function BiometricLogDialog({ target, load, onClose }: { target: { kind: Exchang
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : (
           <div className="space-y-3" data-testid="biometric-log">
+            {log.data.condition && <ConditionSummary condition={log.data.condition} />}
             {log.data.biometric && (
               <p className="flex items-center gap-2 text-sm">
                 <StateBadge state={log.data.biometric.status} />
@@ -246,6 +259,7 @@ function BiometricLogDialog({ target, load, onClose }: { target: { kind: Exchang
                 </span>
               </p>
             )}
+            {log.data.events.length > 0 && (
             <div className="min-w-0 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="text-left text-muted-foreground">
@@ -274,10 +288,33 @@ function BiometricLogDialog({ target, load, onClose }: { target: { kind: Exchang
                 </tbody>
               </table>
             </div>
+            )}
           </div>
         )}
       </DialogContent>
     </Dialog>
+  )
+}
+
+/**
+ * What the template's rule decided for this proof request: each condition with the number the
+ * organisation's backend sent, then the outcome. The numbers are hidden once the exchange is erased,
+ * and from operators.
+ */
+function ConditionSummary({ condition }: { condition: NonNullable<BiometricLog['condition']> }) {
+  return (
+    <div className="space-y-1 text-sm" data-testid="biometric-condition">
+      <p>
+        Rule on the template ({condition.match === 'any' ? 'any of' : 'all of'}): <span className="font-medium">{condition.required ? 'face check required' : 'face check not required'}</span>
+      </p>
+      <ul className="space-y-0.5 font-mono text-xs">
+        {condition.conditions.map((row, index) => (
+          <li key={index}>
+            {describeRule({ match: condition.match, conditions: [row] })} · sent {row.input === null ? 'hidden' : row.input} · {row.met ? 'met' : 'not met'}
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }
 

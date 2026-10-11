@@ -10,6 +10,7 @@ import { PageHeader } from '@/components/page-header'
 import { RouteError } from '@/components/route-error'
 import { RowAction, RowActions } from '@/components/row-action'
 import { TemplatePolicyAction } from '@/features/portal/biometric-policy-dialog'
+import { describeRule } from '@/lib/face-check-rule'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { deletePortalTemplate } from '@/features/portal/portal-data.functions'
@@ -41,6 +42,12 @@ function summarize(definition: TemplateRow['definition']) {
     .join(' | ')
 }
 
+/** The template's face-check mode; a conditional one shows its rule, e.g. `when amount ≥ 5000 or riskScore > 70`. */
+function faceCheckLabel(policy: TemplateRow['biometricPolicy']) {
+  if (policy.mode === 'conditional') return `when ${describeRule(policy.when)}`
+  return policy.mode === 'inherit' ? 'default' : policy.mode === 'off' ? 'off' : 'required'
+}
+
 function PortalTemplatesPage() {
   const { orgSlug } = Route.useParams()
   const { organization } = Route.useRouteContext()
@@ -65,7 +72,7 @@ function PortalTemplatesPage() {
   const columns = column.columns([
     column.accessor('name', { header: 'Template' }),
     column.accessor((row) => summarize(row.definition), { id: 'summary', header: 'Requests', cell: ({ getValue }) => <span className="text-xs">{getValue()}</span> }),
-    column.accessor((row) => (row.biometricPolicy.mode === 'inherit' ? 'default' : row.biometricPolicy.mode === 'off' ? 'off' : 'required'), { id: 'biometric', header: 'Face check' }),
+    column.accessor((row) => faceCheckLabel(row.biometricPolicy), { id: 'biometric', header: 'Face check' }),
     column.accessor('updatedAt', { header: 'Updated', cell: ({ getValue }) => formatDateTime(getValue()) }),
     column.display({
       id: 'actions',

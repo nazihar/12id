@@ -78,6 +78,13 @@
       "when": 1790596530695,
       "tag": "0010_audit_changes",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791698762905,
+      "tag": "0011_biometric_condition",
+      "breakpoints": true
     }
   ]
 }

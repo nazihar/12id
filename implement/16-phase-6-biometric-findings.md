@@ -181,3 +181,51 @@ Found on the way, all pre-existing:
   - log entry liveness 97, match 99, vendor session `mock-…`.
 - **Grep check** on staging, after the smoke. The reference image's base64 prefix appears in 0 rows of `webhook_deliveries`, `idempotency_keys`, `exchange_gate_events`, `exchange_gates`, `credentials`, `proofs` and `agent_service.outbox`, and in 0 lines of the platform-api, biometric-service and agent-service logs. `biometric.checks`: 12 rows (passed 9, failed 3), **0 with an image**.
 - **Backup** `20260921T091641Z` includes `agent-biometric.dump.age` (15 KB). Restored into a scratch Postgres: 12 checks, 0 with an image, 1 provider config (ciphertext).
+
+---
+
+## Conditional gate on proof templates (2026-10-11)
+
+**Plan:** [15-phase-6-biometric.md](15-phase-6-biometric.md) "Conditional gate on proof templates". **Status: built and tested locally. Not deployed to staging; `smoke:biometric-credo` step 5 is written and has not run** (a staging deploy needs a release candidate and the owner's go-ahead).
+
+| Item | Result |
+|---|---|
+| platform-api | `tsc` clean; **111/111** tests against the local Postgres; migration `0011_biometric_condition` generated and applied to the test and e2e databases |
+| console | `tsc` clean; Vitest **44/44** (new `test/face-check-rule.test.ts`); Playwright local **6/6**, with `biometrics.spec.ts` extended |
+| reference backend | `tsc` clean; **17/17** tests |
+| `smoke:biometric-credo` step 5 (staging) | **not run** |
+| Phone | **not run** |
+
+### Evidence (*run*, local)
+- **Rule evaluation** (`test/biometric-policy.test.ts`): each operator at, below and above the value; `any` and `all`; the same parameter twice as a range; 1/0 for a yes/no fact; a missing parameter refused even when another condition already holds; 0 and 6 conditions, an unknown operator, a bad name and an infinite value refused; a credential definition cannot take the mode.
+- **Through the API** (`test/biometric.test.ts`, real Postgres, agent and biometric-service doubled):
+  - a missing parameter answers 422 and no proof request reaches the agent;
+  - 3000 / 20 → 202 with no gate row, no hold, `required: false`; the proof then completes and is released;
+  - 7200 / 20 and 3000 / 85 → gate created, held, check created with the template's threshold (match 95) and the tenant's default (liveness 85);
+  - rule true without an image → 422 `biometric_reference_required`;
+  - the numbers sent are in the log route and in no webhook body;
+  - a later change of the rule leaves an earlier outcome as it was;
+  - a template edit without `biometricPolicy` keeps the rule (the F11 case);
+  - `params` are ignored on `off` and on an inline request; with the tenant's biometrics off nothing is evaluated.
+- **Erasure and masking** (`test/data-protection.test.ts`): erasure on request and the retention job set the inputs to null and keep the rule and the decision; a proof without a rule stays without one; an operator sees the inputs as null, and sees them after a reveal with a reason.
+- **Console in a browser** (`e2e/biometrics.spec.ts`): an owner sets "any of: amount ≥ 5000, riskScore > 70" on a template; the list shows `when amount ≥ 5000 or riskScore > 70`; the dialog reopens with the rule filled in; a seeded proof the rule decided against shows "not required", and its log shows `amount ≥ 5000 · sent 3000 · not met`; the operator sees `sent hidden`.
+
+### Findings
+
+**F13 · Console · The local Playwright suite could not start since Phase 9 W2 (*run*, fixed).**
+- **What happened.** The dev server answered 500 on every request: `MAIL_OUTBOX_FILE: cannot read test-results/mail.jsonl: ENOENT`.
+- **Why.** W2 (review M11) reads every `NAME_FILE` variable as "a secret to load from this file" (`file-env.server.ts`). The e2e-only variable `MAIL_OUTBOX_FILE` matches that pattern. Had the file existed, its content would have been loaded into `MAIL_OUTBOX` and the outbox switched off.
+- **Fix.** The variable is now `MAIL_OUTBOX_PATH` (console `env.server.ts`, `email.server.ts`, `e2e/env.ts`, `test/env.test.ts`). It is not used on staging or in production.
+- **Consequence.** The local Playwright suite cannot have started between W2 and this fix; the staging specs were not affected.
+
+**F14 · Console · Escape does not close a dialog while a combobox in it has focus (*run*, cause inferred, not fixed).** In the new spec step, Escape left the policy dialog open; the dialog opens with its combobox focused, which presumably takes the key. The spec now uses Cancel. It would apply to every form dialog that opens on a combobox. Low priority.
+
+**F15 · Local e2e recipe (*run*).** The env files the recipe names (`%TEMP%/e2e-stack.env`, `e2e-bio.env`) were gone. They were rebuilt from `config.ts` of both services:
+- platform-api on 3510 with `DATABASE_URL=…/platform_api_console`, `BIOMETRIC_SERVICE_URL=http://127.0.0.1:3530` and a 40-character `BIOMETRIC_SERVICE_TOKEN` equal to biometric-service's `INTERNAL_TOKEN`;
+- biometric-service on 3530 with `BIOMETRIC_ENABLE_MOCK=true`, database `biometric_e2e`, and any 32-byte base64 `BIOMETRIC_MASTER_KEY`;
+- run both `provision.ts` first. Postgres is the container `12id-p2-postgres` (55432).
+
+### Still to do
+- Release candidate → staging (platform-api with migration `0011`, console) → `smoke:biometric-credo` including step 5.
+- On the phone with tenant MTB: set the `transaction` template to `amount ≥ 5000` and add `"faceCheckParams": ["amount"]` to the reference backend's `tenant.json`. A transfer of 1000 should be approved without the camera; one of 5000 should ask for the face check.
+- Redeploy the reference backend on staging **before** setting a rule on its template: the code running there sends no `params`, so a conditional template would refuse every request.

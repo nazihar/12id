@@ -2328,7 +2328,7 @@
         "tags": [
           "proofs"
         ],
-        "description": "Asynchronous. Either a stored `templateId` or an inline `request` in the template shape. Every group automatically checks `expiresOn >= today` (UTC). When the exchange reaches `done`, `verified` and the `disclosed` attributes are available.",
+        "description": "Asynchronous. Either a stored `templateId` or an inline `request` in the template shape. Every group automatically checks `expiresOn >= today` (UTC). When the exchange reaches `done`, `verified` and the `disclosed` attributes are available. When the template's biometric policy is conditional, send the numbers its rule names in `biometric.params` with every request; `biometricCondition` in the answer says whether a check was required.",
         "requestBody": {
           "required": true,
           "content": {
@@ -2468,19 +2468,27 @@
                     "maxLength": 200
                   },
                   "biometric": {
-                    "description": "Required when the biometric policy for this credential definition or proof template applies; ignored otherwise.",
+                    "description": "`referenceImage` is required when the biometric policy of the proof template applies; `params` when that policy is conditional. Ignored otherwise.",
                     "type": "object",
                     "properties": {
                       "referenceImage": {
+                        "description": "Base64 JPEG or PNG, at most 5 MB decoded, one face. Required when the check applies.",
                         "type": "string",
                         "minLength": 100,
-                        "maxLength": 7000000,
-                        "description": "Base64 JPEG or PNG, at most 5 MB decoded, one face."
+                        "maxLength": 7000000
+                      },
+                      "params": {
+                        "description": "Numbers the template's conditional biometric rule is decided from, by parameter name, e.g. `{ \"amount\": 7200 }`. Every parameter the rule names is required (422 `biometric_param_required` otherwise); others are ignored.",
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z][A-Za-z0-9_]{0,39}$"
+                        },
+                        "additionalProperties": {
+                          "type": "number"
+                        }
                       }
-                    },
-                    "required": [
-                      "referenceImage"
-                    ]
+                    }
                   }
                 },
                 "required": [
@@ -2647,6 +2655,69 @@
                         }
                       ]
                     },
+                    "biometricCondition": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "match": {
+                              "type": "string",
+                              "enum": [
+                                "any",
+                                "all"
+                              ],
+                              "description": "`any`: the check applies when at least one condition holds; `all`: only when every condition holds."
+                            },
+                            "required": {
+                              "type": "boolean"
+                            },
+                            "conditions": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "param": {
+                                    "type": "string",
+                                    "pattern": "^[A-Za-z][A-Za-z0-9_]{0,39}$"
+                                  },
+                                  "op": {
+                                    "type": "string",
+                                    "enum": [
+                                      "gte",
+                                      "gt",
+                                      "lte",
+                                      "lt"
+                                    ]
+                                  },
+                                  "value": {
+                                    "type": "number"
+                                  },
+                                  "met": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "param",
+                                  "op",
+                                  "value",
+                                  "met"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "match",
+                            "required",
+                            "conditions"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "erasedAt": {
                       "anyOf": [
                         {
@@ -2681,6 +2752,7 @@
                     "disclosed",
                     "errorMessage",
                     "biometric",
+                    "biometricCondition",
                     "erasedAt",
                     "createdAt",
                     "updatedAt"
@@ -3055,6 +3127,69 @@
                               }
                             ]
                           },
+                          "biometricCondition": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "match": {
+                                    "type": "string",
+                                    "enum": [
+                                      "any",
+                                      "all"
+                                    ],
+                                    "description": "`any`: the check applies when at least one condition holds; `all`: only when every condition holds."
+                                  },
+                                  "required": {
+                                    "type": "boolean"
+                                  },
+                                  "conditions": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "param": {
+                                          "type": "string",
+                                          "pattern": "^[A-Za-z][A-Za-z0-9_]{0,39}$"
+                                        },
+                                        "op": {
+                                          "type": "string",
+                                          "enum": [
+                                            "gte",
+                                            "gt",
+                                            "lte",
+                                            "lt"
+                                          ]
+                                        },
+                                        "value": {
+                                          "type": "number"
+                                        },
+                                        "met": {
+                                          "type": "boolean"
+                                        }
+                                      },
+                                      "required": [
+                                        "param",
+                                        "op",
+                                        "value",
+                                        "met"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "match",
+                                  "required",
+                                  "conditions"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
                           "erasedAt": {
                             "anyOf": [
                               {
@@ -3089,6 +3224,7 @@
                           "disclosed",
                           "errorMessage",
                           "biometric",
+                          "biometricCondition",
                           "erasedAt",
                           "createdAt",
                           "updatedAt"
@@ -3301,6 +3437,69 @@
                         }
                       ]
                     },
+                    "biometricCondition": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "match": {
+                              "type": "string",
+                              "enum": [
+                                "any",
+                                "all"
+                              ],
+                              "description": "`any`: the check applies when at least one condition holds; `all`: only when every condition holds."
+                            },
+                            "required": {
+                              "type": "boolean"
+                            },
+                            "conditions": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "param": {
+                                    "type": "string",
+                                    "pattern": "^[A-Za-z][A-Za-z0-9_]{0,39}$"
+                                  },
+                                  "op": {
+                                    "type": "string",
+                                    "enum": [
+                                      "gte",
+                                      "gt",
+                                      "lte",
+                                      "lt"
+                                    ]
+                                  },
+                                  "value": {
+                                    "type": "number"
+                                  },
+                                  "met": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "param",
+                                  "op",
+                                  "value",
+                                  "met"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "match",
+                            "required",
+                            "conditions"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "erasedAt": {
                       "anyOf": [
                         {
@@ -3335,6 +3534,7 @@
                     "disclosed",
                     "errorMessage",
                     "biometric",
+                    "biometricCondition",
                     "erasedAt",
                     "createdAt",
                     "updatedAt"
@@ -3895,6 +4095,69 @@
                         }
                       ]
                     },
+                    "biometricCondition": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "match": {
+                              "type": "string",
+                              "enum": [
+                                "any",
+                                "all"
+                              ],
+                              "description": "`any`: the check applies when at least one condition holds; `all`: only when every condition holds."
+                            },
+                            "required": {
+                              "type": "boolean"
+                            },
+                            "conditions": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "param": {
+                                    "type": "string",
+                                    "pattern": "^[A-Za-z][A-Za-z0-9_]{0,39}$"
+                                  },
+                                  "op": {
+                                    "type": "string",
+                                    "enum": [
+                                      "gte",
+                                      "gt",
+                                      "lte",
+                                      "lt"
+                                    ]
+                                  },
+                                  "value": {
+                                    "type": "number"
+                                  },
+                                  "met": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "param",
+                                  "op",
+                                  "value",
+                                  "met"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "match",
+                            "required",
+                            "conditions"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "erasedAt": {
                       "anyOf": [
                         {
@@ -3929,6 +4192,7 @@
                     "disclosed",
                     "errorMessage",
                     "biometric",
+                    "biometricCondition",
                     "erasedAt",
                     "createdAt",
                     "updatedAt"
@@ -4376,252 +4640,68 @@
                         }
                       ]
                     },
-                    "events": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "integer",
-                            "minimum": -9007199254740991,
-                            "maximum": 9007199254740991
-                          },
-                          "at": {
-                            "type": "string",
-                            "format": "date-time",
-                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
-                          },
-                          "type": {
-                            "type": "string"
-                          },
-                          "attempt": {
-                            "anyOf": [
-                              {
-                                "type": "integer",
-                                "minimum": -9007199254740991,
-                                "maximum": 9007199254740991
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "providerId": {
-                            "type": [
-                              "string",
-                              "null"
-                            ]
-                          },
-                          "vendorSessionId": {
-                            "type": [
-                              "string",
-                              "null"
-                            ]
-                          },
-                          "livenessScore": {
-                            "type": [
-                              "number",
-                              "null"
-                            ]
-                          },
-                          "matchScore": {
-                            "type": [
-                              "number",
-                              "null"
-                            ]
-                          },
-                          "thresholds": {
-                            "anyOf": [
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "minLivenessScore": {
-                                    "type": "number"
-                                  },
-                                  "minMatchScore": {
-                                    "type": "number"
-                                  }
-                                },
-                                "required": [
-                                  "minLivenessScore",
-                                  "minMatchScore"
-                                ],
-                                "additionalProperties": false
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "decision": {
-                            "type": [
-                              "string",
-                              "null"
-                            ]
-                          },
-                          "reason": {
-                            "type": [
-                              "string",
-                              "null"
-                            ]
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "at",
-                          "type",
-                          "attempt",
-                          "providerId",
-                          "vendorSessionId",
-                          "livenessScore",
-                          "matchScore",
-                          "thresholds",
-                          "decision",
-                          "reason"
-                        ],
-                        "additionalProperties": false
-                      }
-                    }
-                  },
-                  "required": [
-                    "biometric",
-                    "events"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "reason": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "reason"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/v1/proofs/{id}/biometric-log": {
-      "get": {
-        "summary": "Biometric log of a proof exchange",
-        "tags": [
-          "proofs"
-        ],
-        "description": "Every step of the biometric gate for this exchange, oldest first: attempts with liveness and match scores against the thresholds, decisions, and what the platform did with the exchange. Never contains images. `biometric` is null when the exchange was not gated.",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 100
-            },
-            "in": "path",
-            "name": "id",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "biometric": {
+                    "condition": {
                       "anyOf": [
                         {
                           "type": "object",
                           "properties": {
+                            "match": {
+                              "type": "string",
+                              "enum": [
+                                "any",
+                                "all"
+                              ],
+                              "description": "`any`: the check applies when at least one condition holds; `all`: only when every condition holds."
+                            },
                             "required": {
-                              "type": "boolean",
-                              "enum": [
-                                true
-                              ]
+                              "type": "boolean"
                             },
-                            "status": {
-                              "type": "string",
-                              "enum": [
-                                "pending",
-                                "passed",
-                                "failed",
-                                "expired",
-                                "cancelled"
-                              ]
-                            },
-                            "attempts": {
-                              "type": "integer",
-                              "minimum": -9007199254740991,
-                              "maximum": 9007199254740991
-                            },
-                            "attemptsRemaining": {
-                              "type": "integer",
-                              "minimum": -9007199254740991,
-                              "maximum": 9007199254740991
-                            },
-                            "livenessScore": {
-                              "type": [
-                                "number",
-                                "null"
-                              ]
-                            },
-                            "matchScore": {
-                              "type": [
-                                "number",
-                                "null"
-                              ]
-                            },
-                            "reason": {
-                              "type": [
-                                "string",
-                                "null"
-                              ]
-                            },
-                            "expiresAt": {
-                              "type": "string",
-                              "format": "date-time",
-                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
-                            },
-                            "decidedAt": {
-                              "anyOf": [
-                                {
-                                  "type": "string",
-                                  "format": "date-time",
-                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            "conditions": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "param": {
+                                    "type": "string",
+                                    "pattern": "^[A-Za-z][A-Za-z0-9_]{0,39}$"
+                                  },
+                                  "op": {
+                                    "type": "string",
+                                    "enum": [
+                                      "gte",
+                                      "gt",
+                                      "lte",
+                                      "lt"
+                                    ]
+                                  },
+                                  "value": {
+                                    "type": "number"
+                                  },
+                                  "input": {
+                                    "type": [
+                                      "number",
+                                      "null"
+                                    ]
+                                  },
+                                  "met": {
+                                    "type": "boolean"
+                                  }
                                 },
-                                {
-                                  "type": "null"
-                                }
-                              ]
+                                "required": [
+                                  "param",
+                                  "op",
+                                  "value",
+                                  "input",
+                                  "met"
+                                ],
+                                "additionalProperties": false
+                              }
                             }
                           },
                           "required": [
+                            "match",
                             "required",
-                            "status",
-                            "attempts",
-                            "attemptsRemaining",
-                            "livenessScore",
-                            "matchScore",
-                            "reason",
-                            "expiresAt",
-                            "decidedAt"
+                            "conditions"
                           ],
                           "additionalProperties": false
                         },
@@ -4739,6 +4819,332 @@
                   },
                   "required": [
                     "biometric",
+                    "condition",
+                    "events"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/proofs/{id}/biometric-log": {
+      "get": {
+        "summary": "Biometric log of a proof exchange",
+        "tags": [
+          "proofs"
+        ],
+        "description": "Every step of the biometric gate for this exchange, oldest first: attempts with liveness and match scores against the thresholds, decisions, and what the platform did with the exchange. Never contains images. `biometric` is null when the exchange was not gated. `condition` is what the template's conditional rule decided, with the number sent for each condition (null once the exchange is erased); it is present whether or not a check followed, and null when the template has no rule.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "biometric": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "required": {
+                              "type": "boolean",
+                              "enum": [
+                                true
+                              ]
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "pending",
+                                "passed",
+                                "failed",
+                                "expired",
+                                "cancelled"
+                              ]
+                            },
+                            "attempts": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "attemptsRemaining": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "livenessScore": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "matchScore": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "reason": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "expiresAt": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            },
+                            "decidedAt": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "required",
+                            "status",
+                            "attempts",
+                            "attemptsRemaining",
+                            "livenessScore",
+                            "matchScore",
+                            "reason",
+                            "expiresAt",
+                            "decidedAt"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "condition": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "match": {
+                              "type": "string",
+                              "enum": [
+                                "any",
+                                "all"
+                              ],
+                              "description": "`any`: the check applies when at least one condition holds; `all`: only when every condition holds."
+                            },
+                            "required": {
+                              "type": "boolean"
+                            },
+                            "conditions": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "param": {
+                                    "type": "string",
+                                    "pattern": "^[A-Za-z][A-Za-z0-9_]{0,39}$"
+                                  },
+                                  "op": {
+                                    "type": "string",
+                                    "enum": [
+                                      "gte",
+                                      "gt",
+                                      "lte",
+                                      "lt"
+                                    ]
+                                  },
+                                  "value": {
+                                    "type": "number"
+                                  },
+                                  "input": {
+                                    "type": [
+                                      "number",
+                                      "null"
+                                    ]
+                                  },
+                                  "met": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "param",
+                                  "op",
+                                  "value",
+                                  "input",
+                                  "met"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "match",
+                            "required",
+                            "conditions"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "events": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                          },
+                          "type": {
+                            "type": "string"
+                          },
+                          "attempt": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "providerId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "vendorSessionId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "livenessScore": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "matchScore": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "thresholds": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "minLivenessScore": {
+                                    "type": "number"
+                                  },
+                                  "minMatchScore": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "minLivenessScore",
+                                  "minMatchScore"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "decision": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "reason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "at",
+                          "type",
+                          "attempt",
+                          "providerId",
+                          "vendorSessionId",
+                          "livenessScore",
+                          "matchScore",
+                          "thresholds",
+                          "decision",
+                          "reason"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "biometric",
+                    "condition",
                     "events"
                   ],
                   "additionalProperties": false
@@ -6393,6 +6799,89 @@
                         "required": [
                           "mode"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "mode": {
+                            "type": "string",
+                            "enum": [
+                              "conditional"
+                            ]
+                          },
+                          "when": {
+                            "type": "object",
+                            "properties": {
+                              "match": {
+                                "type": "string",
+                                "enum": [
+                                  "any",
+                                  "all"
+                                ],
+                                "description": "`any`: the check applies when at least one condition holds; `all`: only when every condition holds."
+                              },
+                              "conditions": {
+                                "minItems": 1,
+                                "maxItems": 5,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "param": {
+                                      "type": "string",
+                                      "pattern": "^[A-Za-z][A-Za-z0-9_]{0,39}$"
+                                    },
+                                    "op": {
+                                      "type": "string",
+                                      "enum": [
+                                        "gte",
+                                        "gt",
+                                        "lte",
+                                        "lt"
+                                      ]
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    }
+                                  },
+                                  "required": [
+                                    "param",
+                                    "op",
+                                    "value"
+                                  ]
+                                }
+                              }
+                            },
+                            "required": [
+                              "match",
+                              "conditions"
+                            ]
+                          },
+                          "minMatchScore": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 100
+                          },
+                          "minLivenessScore": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 100
+                          },
+                          "maxAttempts": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 5
+                          },
+                          "ttlMinutes": {
+                            "type": "integer",
+                            "minimum": 5,
+                            "maximum": 1440
+                          }
+                        },
+                        "required": [
+                          "mode",
+                          "when"
+                        ]
                       }
                     ]
                   }
@@ -6606,6 +7095,92 @@
                           },
                           "required": [
                             "mode"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "conditional"
+                              ]
+                            },
+                            "when": {
+                              "type": "object",
+                              "properties": {
+                                "match": {
+                                  "type": "string",
+                                  "enum": [
+                                    "any",
+                                    "all"
+                                  ],
+                                  "description": "`any`: the check applies when at least one condition holds; `all`: only when every condition holds."
+                                },
+                                "conditions": {
+                                  "minItems": 1,
+                                  "maxItems": 5,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "param": {
+                                        "type": "string",
+                                        "pattern": "^[A-Za-z][A-Za-z0-9_]{0,39}$"
+                                      },
+                                      "op": {
+                                        "type": "string",
+                                        "enum": [
+                                          "gte",
+                                          "gt",
+                                          "lte",
+                                          "lt"
+                                        ]
+                                      },
+                                      "value": {
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": [
+                                      "param",
+                                      "op",
+                                      "value"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "required": [
+                                "match",
+                                "conditions"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "minMatchScore": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 100
+                            },
+                            "minLivenessScore": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 100
+                            },
+                            "maxAttempts": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 5
+                            },
+                            "ttlMinutes": {
+                              "type": "integer",
+                              "minimum": 5,
+                              "maximum": 1440
+                            }
+                          },
+                          "required": [
+                            "mode",
+                            "when"
                           ],
                           "additionalProperties": false
                         }
@@ -6933,6 +7508,92 @@
                                   "mode"
                                 ],
                                 "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "mode": {
+                                    "type": "string",
+                                    "enum": [
+                                      "conditional"
+                                    ]
+                                  },
+                                  "when": {
+                                    "type": "object",
+                                    "properties": {
+                                      "match": {
+                                        "type": "string",
+                                        "enum": [
+                                          "any",
+                                          "all"
+                                        ],
+                                        "description": "`any`: the check applies when at least one condition holds; `all`: only when every condition holds."
+                                      },
+                                      "conditions": {
+                                        "minItems": 1,
+                                        "maxItems": 5,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "param": {
+                                              "type": "string",
+                                              "pattern": "^[A-Za-z][A-Za-z0-9_]{0,39}$"
+                                            },
+                                            "op": {
+                                              "type": "string",
+                                              "enum": [
+                                                "gte",
+                                                "gt",
+                                                "lte",
+                                                "lt"
+                                              ]
+                                            },
+                                            "value": {
+                                              "type": "number"
+                                            }
+                                          },
+                                          "required": [
+                                            "param",
+                                            "op",
+                                            "value"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "match",
+                                      "conditions"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "minMatchScore": {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "maximum": 100
+                                  },
+                                  "minLivenessScore": {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "maximum": 100
+                                  },
+                                  "maxAttempts": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 5
+                                  },
+                                  "ttlMinutes": {
+                                    "type": "integer",
+                                    "minimum": 5,
+                                    "maximum": 1440
+                                  }
+                                },
+                                "required": [
+                                  "mode",
+                                  "when"
+                                ],
+                                "additionalProperties": false
                               }
                             ]
                           },
@@ -7209,6 +7870,92 @@
                             "mode"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "conditional"
+                              ]
+                            },
+                            "when": {
+                              "type": "object",
+                              "properties": {
+                                "match": {
+                                  "type": "string",
+                                  "enum": [
+                                    "any",
+                                    "all"
+                                  ],
+                                  "description": "`any`: the check applies when at least one condition holds; `all`: only when every condition holds."
+                                },
+                                "conditions": {
+                                  "minItems": 1,
+                                  "maxItems": 5,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "param": {
+                                        "type": "string",
+                                        "pattern": "^[A-Za-z][A-Za-z0-9_]{0,39}$"
+                                      },
+                                      "op": {
+                                        "type": "string",
+                                        "enum": [
+                                          "gte",
+                                          "gt",
+                                          "lte",
+                                          "lt"
+                                        ]
+                                      },
+                                      "value": {
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": [
+                                      "param",
+                                      "op",
+                                      "value"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "required": [
+                                "match",
+                                "conditions"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "minMatchScore": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 100
+                            },
+                            "minLivenessScore": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 100
+                            },
+                            "maxAttempts": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 5
+                            },
+                            "ttlMinutes": {
+                              "type": "integer",
+                              "minimum": 5,
+                              "maximum": 1440
+                            }
+                          },
+                          "required": [
+                            "mode",
+                            "when"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -7444,6 +8191,89 @@
                         "required": [
                           "mode"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "mode": {
+                            "type": "string",
+                            "enum": [
+                              "conditional"
+                            ]
+                          },
+                          "when": {
+                            "type": "object",
+                            "properties": {
+                              "match": {
+                                "type": "string",
+                                "enum": [
+                                  "any",
+                                  "all"
+                                ],
+                                "description": "`any`: the check applies when at least one condition holds; `all`: only when every condition holds."
+                              },
+                              "conditions": {
+                                "minItems": 1,
+                                "maxItems": 5,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "param": {
+                                      "type": "string",
+                                      "pattern": "^[A-Za-z][A-Za-z0-9_]{0,39}$"
+                                    },
+                                    "op": {
+                                      "type": "string",
+                                      "enum": [
+                                        "gte",
+                                        "gt",
+                                        "lte",
+                                        "lt"
+                                      ]
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    }
+                                  },
+                                  "required": [
+                                    "param",
+                                    "op",
+                                    "value"
+                                  ]
+                                }
+                              }
+                            },
+                            "required": [
+                              "match",
+                              "conditions"
+                            ]
+                          },
+                          "minMatchScore": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 100
+                          },
+                          "minLivenessScore": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 100
+                          },
+                          "maxAttempts": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 5
+                          },
+                          "ttlMinutes": {
+                            "type": "integer",
+                            "minimum": 5,
+                            "maximum": 1440
+                          }
+                        },
+                        "required": [
+                          "mode",
+                          "when"
+                        ]
                       }
                     ]
                   }
@@ -7669,6 +8499,92 @@
                           },
                           "required": [
                             "mode"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "conditional"
+                              ]
+                            },
+                            "when": {
+                              "type": "object",
+                              "properties": {
+                                "match": {
+                                  "type": "string",
+                                  "enum": [
+                                    "any",
+                                    "all"
+                                  ],
+                                  "description": "`any`: the check applies when at least one condition holds; `all`: only when every condition holds."
+                                },
+                                "conditions": {
+                                  "minItems": 1,
+                                  "maxItems": 5,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "param": {
+                                        "type": "string",
+                                        "pattern": "^[A-Za-z][A-Za-z0-9_]{0,39}$"
+                                      },
+                                      "op": {
+                                        "type": "string",
+                                        "enum": [
+                                          "gte",
+                                          "gt",
+                                          "lte",
+                                          "lt"
+                                        ]
+                                      },
+                                      "value": {
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": [
+                                      "param",
+                                      "op",
+                                      "value"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "required": [
+                                "match",
+                                "conditions"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "minMatchScore": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 100
+                            },
+                            "minLivenessScore": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 100
+                            },
+                            "maxAttempts": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 5
+                            },
+                            "ttlMinutes": {
+                              "type": "integer",
+                              "minimum": 5,
+                              "maximum": 1440
+                            }
+                          },
+                          "required": [
+                            "mode",
+                            "when"
                           ],
                           "additionalProperties": false
                         }
@@ -7951,6 +8867,92 @@
                             "mode"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "conditional"
+                              ]
+                            },
+                            "when": {
+                              "type": "object",
+                              "properties": {
+                                "match": {
+                                  "type": "string",
+                                  "enum": [
+                                    "any",
+                                    "all"
+                                  ],
+                                  "description": "`any`: the check applies when at least one condition holds; `all`: only when every condition holds."
+                                },
+                                "conditions": {
+                                  "minItems": 1,
+                                  "maxItems": 5,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "param": {
+                                        "type": "string",
+                                        "pattern": "^[A-Za-z][A-Za-z0-9_]{0,39}$"
+                                      },
+                                      "op": {
+                                        "type": "string",
+                                        "enum": [
+                                          "gte",
+                                          "gt",
+                                          "lte",
+                                          "lt"
+                                        ]
+                                      },
+                                      "value": {
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": [
+                                      "param",
+                                      "op",
+                                      "value"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "required": [
+                                "match",
+                                "conditions"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "minMatchScore": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 100
+                            },
+                            "minLivenessScore": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 100
+                            },
+                            "maxAttempts": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 5
+                            },
+                            "ttlMinutes": {
+                              "type": "integer",
+                              "minimum": 5,
+                              "maximum": 1440
+                            }
+                          },
+                          "required": [
+                            "mode",
+                            "when"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     }
@@ -7995,7 +8997,7 @@
           "proofs",
           "console-only"
         ],
-        "description": "`inherit` follows the tenant default, `off` never gates, `required` gates with the given thresholds. Applies to proof requests made from this template after the change.",
+        "description": "`inherit` follows the tenant default, `off` never gates, `required` gates with the given thresholds. `conditional` gates when its rule holds for the numbers sent with the proof request (`biometric.params`): up to 5 conditions, each a parameter name of your choosing, a comparison (`gte`, `gt`, `lte`, `lt`) and a number, joined by `match` (`any` or `all`). A request that lacks a parameter the rule names is refused. Applies to proof requests made from this template after the change.",
         "requestBody": {
           "required": true,
           "content": {
@@ -8062,6 +9064,89 @@
                     },
                     "required": [
                       "mode"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "enum": [
+                          "conditional"
+                        ]
+                      },
+                      "when": {
+                        "type": "object",
+                        "properties": {
+                          "match": {
+                            "type": "string",
+                            "enum": [
+                              "any",
+                              "all"
+                            ],
+                            "description": "`any`: the check applies when at least one condition holds; `all`: only when every condition holds."
+                          },
+                          "conditions": {
+                            "minItems": 1,
+                            "maxItems": 5,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "param": {
+                                  "type": "string",
+                                  "pattern": "^[A-Za-z][A-Za-z0-9_]{0,39}$"
+                                },
+                                "op": {
+                                  "type": "string",
+                                  "enum": [
+                                    "gte",
+                                    "gt",
+                                    "lte",
+                                    "lt"
+                                  ]
+                                },
+                                "value": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "param",
+                                "op",
+                                "value"
+                              ]
+                            }
+                          }
+                        },
+                        "required": [
+                          "match",
+                          "conditions"
+                        ]
+                      },
+                      "minMatchScore": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 100
+                      },
+                      "minLivenessScore": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 100
+                      },
+                      "maxAttempts": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 5
+                      },
+                      "ttlMinutes": {
+                        "type": "integer",
+                        "minimum": 5,
+                        "maximum": 1440
+                      }
+                    },
+                    "required": [
+                      "mode",
+                      "when"
                     ]
                   }
                 ]
@@ -8156,6 +9241,92 @@
                           },
                           "required": [
                             "mode"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "conditional"
+                              ]
+                            },
+                            "when": {
+                              "type": "object",
+                              "properties": {
+                                "match": {
+                                  "type": "string",
+                                  "enum": [
+                                    "any",
+                                    "all"
+                                  ],
+                                  "description": "`any`: the check applies when at least one condition holds; `all`: only when every condition holds."
+                                },
+                                "conditions": {
+                                  "minItems": 1,
+                                  "maxItems": 5,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "param": {
+                                        "type": "string",
+                                        "pattern": "^[A-Za-z][A-Za-z0-9_]{0,39}$"
+                                      },
+                                      "op": {
+                                        "type": "string",
+                                        "enum": [
+                                          "gte",
+                                          "gt",
+                                          "lte",
+                                          "lt"
+                                        ]
+                                      },
+                                      "value": {
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": [
+                                      "param",
+                                      "op",
+                                      "value"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "required": [
+                                "match",
+                                "conditions"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "minMatchScore": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 100
+                            },
+                            "minLivenessScore": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 100
+                            },
+                            "maxAttempts": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 5
+                            },
+                            "ttlMinutes": {
+                              "type": "integer",
+                              "minimum": 5,
+                              "maximum": 1440
+                            }
+                          },
+                          "required": [
+                            "mode",
+                            "when"
                           ],
                           "additionalProperties": false
                         }

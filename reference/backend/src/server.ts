@@ -129,9 +129,18 @@ export function createApp(deps: AppDeps): Server {
     const details: Record<string, string> = {}
     for (const [key, value] of Object.entries((body.details ?? {}) as Record<string, unknown>).slice(0, 10)) details[key.slice(0, 50)] = String(value).slice(0, 200)
 
+    // The facts the template's face-check rule is decided from. Whether a check follows is 12id's decision, not ours.
+    const params: Record<string, number> = {}
+    for (const name of template.faceCheckParams ?? []) {
+      const value = Number(details[name])
+      if (!details[name]?.trim() || !Number.isFinite(value)) throw new HttpError(400, 'invalid_details')
+      params[name] = value
+    }
+    const biometric = { ...faceReference(store, user).biometric, ...(template.faceCheckParams?.length ? { params } : {}) }
+
     const action = store.saveAction({ id: randomUUID(), userId: user.id, type, details, state: 'pending', proofId: null, disclosed: null, createdAt: new Date().toISOString() })
     try {
-      const proof = await platform.requestProof({ connectionId: user.connectionId, templateId: template.proofTemplateId, externalId: action.id, ...faceReference(store, user) }, `action:${action.id}`)
+      const proof = await platform.requestProof({ connectionId: user.connectionId, templateId: template.proofTemplateId, externalId: action.id, ...(Object.keys(biometric).length > 0 ? { biometric } : {}) }, `action:${action.id}`)
       return publicAction(store.saveAction({ ...store.action(action.id)!, proofId: proof.id }))
     } catch (error) {
       store.saveAction({ ...store.action(action.id)!, state: 'failed' })

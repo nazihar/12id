@@ -242,6 +242,94 @@ describe('biometric gate', { skip: db ? false : 'no test database' }, () => {
     assert.equal((await logOf('proofs', created.id)).events.at(-1).type, 'accepted')
   })
 
+  it('a conditional template gates only when its rule holds for the numbers sent', async () => {
+    const groups = [{ key: 'badge', attributes: ['name'], credentials: [{ schemaName: 'employee-badge' }] }]
+    const rule = { mode: 'conditional', when: { match: 'any', conditions: [{ param: 'amount', op: 'gte', value: 5000 }, { param: 'riskScore', op: 'gt', value: 70 }] }, minMatchScore: 95 }
+    const template = await app.inject({ method: 'POST', url: '/v1/proof-templates', headers: consoleHeaders, payload: { name: 'approve transfer', groups, biometricPolicy: rule } })
+    assert.equal(template.statusCode, 201, template.body)
+    assert.deepEqual(template.json().biometricPolicy, rule)
+    const templateId = template.json().id
+    const request = (biometric?: Record<string, unknown>, extra: Record<string, unknown> = { templateId }) => app.inject({ method: 'POST', url: '/v1/proofs/request', headers: api(), payload: { connectionId: 'conn-1', ...extra, ...(biometric ? { biometric } : {}) } })
+    const hold = () => (callsTo('requestProof').at(-1)!.args[1] as { hold?: boolean }).hold
+
+    // Only proof templates take a rule, and only well-formed ones.
+    const onCredDef = await app.inject({ method: 'PUT', url: '/v1/credential-definitions/cd-2/biometric-policy', headers: consoleHeaders, payload: rule })
+    assert.equal(onCredDef.statusCode, 400, onCredDef.body)
+    const empty = await app.inject({ method: 'PUT', url: `/v1/proof-templates/${templateId}/biometric-policy`, headers: consoleHeaders, payload: { mode: 'conditional', when: { match: 'any', conditions: [] } } })
+    assert.equal(empty.statusCode, 400, empty.body)
+
+    // A parameter the rule names is missing: refused before anything reaches the wallet, even when the other condition holds.
+    const sentBefore = callsTo('requestProof').length
+    for (const biometric of [undefined, { referenceImage }, { params: { amount: 9000 }, referenceImage }]) {
+      const refused = await request(biometric)
+      assert.deepEqual([refused.statusCode, refused.json().error], [422, 'biometric_param_required'], refused.body)
+      assert.match(refused.json().reason, /riskScore/)
+    }
+    assert.equal((await request({ params: { amount: 'a lot', riskScore: 20 } })).statusCode, 400)
+    assert.equal((await request({ params: { 'amount!': 1, riskScore: 20 } })).statusCode, 400)
+    assert.equal(callsTo('requestProof').length, sentBefore)
+
+    // The rule does not hold: no check, no image needed, and the exchange runs like an ungated one.
+    const below = await request({ params: { amount: 3000, riskScore: 20, unrelated: 1 } })
+    assert.equal(below.statusCode, 202, below.body)
+    assert.equal(below.json().biometric, null)
+    assert.deepEqual(below.json().biometricCondition, { match: 'any', required: false, conditions: [{ param: 'amount', op: 'gte', value: 5000, met: false }, { param: 'riskScore', op: 'gt', value: 70, met: false }] })
+    assert.equal(hold(), undefined)
+    assert.equal((await db!.db.select().from(exchangeGates).where(eq(exchangeGates.recordId, below.json().id))).length, 0)
+    outbox({ recordType: 'proof', recordId: below.json().id, threadId: below.json().threadId, state: 'done', payload: { connectionId: 'conn-1', isVerified: true } })
+    await consumer.runOnce()
+    const released = (await app.inject({ url: `/v1/proofs/${below.json().id}`, headers: api() })).json()
+    assert.deepEqual([released.verified, released.disclosed, released.biometricCondition.required], [true, { badge: { name: 'Ada' } }, false])
+
+    // The numbers sent are in the audited log only: not in the view, and so not in a webhook.
+    const belowLog = await logOf('proofs', below.json().id)
+    assert.deepEqual([belowLog.biometric, belowLog.events], [null, []])
+    assert.deepEqual(belowLog.condition.conditions.map((c: { param: string; input: number; met: boolean }) => [c.param, c.input, c.met]), [['amount', 3000, false], ['riskScore', 20, false]])
+    const bodies = await db!.db.execute(sql`select body from webhook_deliveries where record_id = ${below.json().id}`)
+    assert.ok(bodies.rows.length > 0)
+    for (const { body } of bodies.rows as Array<{ body: string }>) {
+      assert.deepEqual(JSON.parse(body).data.biometricCondition.conditions.map((c: Record<string, unknown>) => Object.keys(c).sort()), [['met', 'op', 'param', 'value'], ['met', 'op', 'param', 'value']])
+    }
+
+    // The rule holds (either condition): gated exactly like `required`, with the template's thresholds.
+    const noImage = await request({ params: { amount: 7200, riskScore: 20 } })
+    assert.deepEqual([noImage.statusCode, noImage.json().error], [422, 'biometric_reference_required'])
+    for (const params of [{ amount: 7200, riskScore: 20 }, { amount: 3000, riskScore: 85 }]) {
+      const above = await request({ params, referenceImage })
+      assert.equal(above.statusCode, 202, above.body)
+      assert.deepEqual([above.json().biometric.status, above.json().biometricCondition.required, hold()], ['pending', true, true])
+      const check = bio.calls.filter((c) => c.method === 'createCheck').at(-1)!.args[0] as { thresholds: unknown; purpose: string }
+      assert.deepEqual([check.purpose, check.thresholds], ['proof', { minLivenessScore: 85, minMatchScore: 95 }])
+      const log = await logOf('proofs', above.json().id)
+      assert.deepEqual([log.condition.required, log.condition.conditions.map((c: { input: number }) => c.input), log.events.map((e: { type: string }) => e.type)], [true, [params.amount, params.riskScore], ['gate_created']])
+    }
+
+    // Editing the template (the builder sends no policy) keeps the rule; changing the rule leaves earlier outcomes as they were.
+    const edited = await app.inject({ method: 'PUT', url: `/v1/proof-templates/${templateId}`, headers: consoleHeaders, payload: { name: 'approve transfer v2', groups } })
+    assert.deepEqual(edited.json().biometricPolicy, rule)
+    const stricter = await app.inject({ method: 'PUT', url: `/v1/proof-templates/${templateId}/biometric-policy`, headers: consoleHeaders, payload: { mode: 'conditional', when: { match: 'all', conditions: [{ param: 'amount', op: 'gte', value: 1000 }] } } })
+    assert.equal(stricter.statusCode, 200, stricter.body)
+    assert.deepEqual((await logOf('proofs', below.json().id)).condition.conditions.map((c: { value: number }) => c.value), [5000, 70])
+    const now = await request({ params: { amount: 3000 }, referenceImage })
+    assert.deepEqual([now.json().biometric.status, now.json().biometricCondition], ['pending', { match: 'all', required: true, conditions: [{ param: 'amount', op: 'gte', value: 1000, met: true }] }])
+
+    // Numbers are ignored where no rule asks for them: other modes and inline requests.
+    await app.inject({ method: 'PUT', url: `/v1/proof-templates/${templateId}/biometric-policy`, headers: consoleHeaders, payload: { mode: 'off' } })
+    const off = await request({ params: { amount: 9000 } })
+    assert.deepEqual([off.statusCode, off.json().biometric, off.json().biometricCondition], [202, null, null])
+    const inline = await request({ params: { amount: 1 }, referenceImage }, { request: { name: 'inline', groups } })
+    assert.deepEqual([inline.statusCode, inline.json().biometric.status, inline.json().biometricCondition], [202, 'pending', null], 'the organisation default still decides')
+    assert.equal((await logOf('credentials', 'cred-1')).condition, null)
+
+    // With the organisation's biometrics off nothing is evaluated: no numbers needed, nothing recorded.
+    await app.inject({ method: 'PUT', url: `/v1/proof-templates/${templateId}/biometric-policy`, headers: consoleHeaders, payload: rule })
+    const settings = (await app.inject({ url: '/v1/biometrics', headers: consoleHeaders })).json()
+    await app.inject({ method: 'PUT', url: '/v1/biometrics/settings', headers: consoleHeaders, payload: { enabled: false, defaultPolicy: settings.defaultPolicy } })
+    const switchedOff = await request()
+    assert.deepEqual([switchedOff.statusCode, switchedOff.json().biometric, switchedOff.json().biometricCondition], [202, null, null])
+    await app.inject({ method: 'PUT', url: '/v1/biometrics/settings', headers: consoleHeaders, payload: { enabled: true, defaultPolicy: settings.defaultPolicy } })
+  })
+
   it('adoption counts the capture add-ons wallets reported', async () => {
     const res = await app.inject({ url: '/v1/biometrics/adoption', headers: consoleHeaders })
     assert.equal(res.statusCode, 200, res.body)

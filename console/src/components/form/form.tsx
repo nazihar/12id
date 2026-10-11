@@ -138,10 +138,10 @@ export function TextareaField(props: FieldChromeProps & Pick<ComponentProps<'tex
   )
 }
 
-/** Whole numbers. The field holds a number; an empty or partial input is `NaN` until it parses, which the schema reports. */
-export function NumberField(props: FieldChromeProps & Pick<ComponentProps<'input'>, 'placeholder' | 'disabled' | 'min' | 'max'>) {
+/** Whole numbers, or any number with `decimal`. The field holds a number; an empty or partial input is `NaN` until it parses, which the schema reports. */
+export function NumberField(props: FieldChromeProps & Pick<ComponentProps<'input'>, 'placeholder' | 'disabled' | 'min' | 'max'> & { decimal?: boolean }) {
   const field = useFieldContext<number>()
-  const { label, description, className, ...input } = props
+  const { label, description, className, decimal, ...input } = props
   return (
     <FieldShell label={label} description={description} className={className}>
       {({ id, invalid, describedBy, hydrated }) => (
@@ -150,11 +150,11 @@ export function NumberField(props: FieldChromeProps & Pick<ComponentProps<'input
           name={field.name}
           type="number"
           readOnly={!hydrated}
-          step={1}
-          inputMode="numeric"
+          step={decimal ? 'any' : 1}
+          inputMode={decimal ? 'decimal' : 'numeric'}
           value={Number.isFinite(field.state.value) ? field.state.value : ''}
           onBlur={field.handleBlur}
-          onChange={(event) => field.handleChange(event.target.value === '' ? Number.NaN : Number.parseInt(event.target.value, 10))}
+          onChange={(event) => field.handleChange(event.target.value === '' ? Number.NaN : decimal ? Number.parseFloat(event.target.value) : Number.parseInt(event.target.value, 10))}
           aria-invalid={invalid || undefined}
           aria-describedby={describedBy}
           {...input}

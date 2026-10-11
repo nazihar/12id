@@ -2,7 +2,8 @@
  * Personal-data erasure (Phase 7 H1). Scrubs, never deletes: the exchange row stays with its ids,
  * state, external id and timestamps, so lists, dashboards, the audit log and the biometric log keep
  * adding up. What goes, everywhere the platform holds it:
- *   - the mirror row's personal data: credential `attributes`, proof `disclosed`, connection `their_label`
+ *   - the mirror row's personal data: credential `attributes`, proof `disclosed` and the numbers sent for a
+ *     conditional face-check rule (`biometric_condition` inputs), connection `their_label`
  *     (the credential's `expires_at` stays: it is a validity date the dashboard counts);
  *   - the same values inside webhook delivery bodies (pending ones are never sent afterwards);
  *   - the biometric gate's scores and vendor session ids, and biometric-service's copy of the check;
@@ -18,7 +19,7 @@
  * It does not touch the credential in the holder's wallet: without revocation (§12.3) it stays
  * usable until its expiry attribute passes.
  */
-import { and, eq, inArray, isNull, lt, or } from 'drizzle-orm'
+import { and, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm'
 import type { Logger as PinoLogger } from 'pino'
 
 import type { AgentClient } from './agent-client.ts'
@@ -83,6 +84,9 @@ export function maskValue(value: unknown, mask: string): unknown {
   return typeof value === 'number' ? null : mask
 }
 
+/** A proof's conditional-rule outcome with the numbers the customer sent set to null; the rule and the decision stay. */
+const CONDITION_WITHOUT_INPUTS = sql`case when ${proofs.biometricCondition} is null then null else jsonb_set(${proofs.biometricCondition}, '{conditions}', (select coalesce(jsonb_agg(c.item || '{"input": null}'::jsonb order by c.position), '[]'::jsonb) from jsonb_array_elements(${proofs.biometricCondition} -> 'conditions') with ordinality as c(item, position))) end`
+
 /** Scrubs the stored bodies of these deliveries; pending ones become dead so they are never sent. */
 async function scrubDeliveries(db: Database | Tx, tenantId: string, recordIds: string[], now: Date) {
   if (recordIds.length === 0) return 0
@@ -121,7 +125,7 @@ export async function scrubExchanges(deps: ErasureDeps, tenant: ErasureTenant, k
   for (const gate of gates) await deps.biometric!.eraseCheck(gate.checkId)
 
   await deps.db.transaction(async (tx) => {
-    const personal = kind === 'credential' ? { attributes: null } : { disclosed: null }
+    const personal = kind === 'credential' ? { attributes: null } : { disclosed: null, biometricCondition: CONDITION_WITHOUT_INPUTS }
     await tx.update(table).set({ ...personal, erasedAt: now, erasedBy }).where(and(eq(table.tenantId, tenant.id), inArray(table.recordId, recordIds), isNull(table.erasedAt)))
     if (gates.length > 0) {
       const gateIds = gates.map((g) => g.id)

@@ -11,6 +11,7 @@ import { and, eq } from 'drizzle-orm'
 
 import { API_KEY_PREFIX, generateSecret, hashSecret, lookupPrefix } from '../src/auth/tokens.ts'
 import { createGateEngine } from '../src/biometric/gate.ts'
+import type { ConditionOutcome } from '../src/biometric/policy.ts'
 import { apiKeys, connections, consoleAudit, credentials, erasures, exchangeGateEvents, exchangeGates, proofs, tenants, webhookDeliveries, webhookEndpoints } from '../src/db/schema.ts'
 import { applyRow, tenantResolver } from '../src/outbox-consumer.ts'
 import { buildApp } from '../src/http/app.ts'
@@ -51,6 +52,15 @@ describe('data protection', { skip: database ? false : 'no test database' }, () 
     const attributes = { name: 'Ada Lovelace', expiresOn }
     await db.insert(credentials).values({ tenantId, recordId, connectionId: 'conn-1', state, attributes, expiresAt: new Date(validUntil), credentialDefinitionId: 'ABC:3:CL:12:default', ...extra })
     await enqueueEvent(db, endpoints, tenantId, 'credential.state_changed', { id: recordId, state, attributes })
+  }
+  /** What a conditional face-check rule decided for a proof, with the numbers the customer sent. */
+  const condition: ConditionOutcome = {
+    match: 'any',
+    required: true,
+    conditions: [
+      { param: 'amount', op: 'gte', value: 5000, input: 7200, met: true },
+      { param: 'riskScore', op: 'gt', value: 70, input: 20, met: false },
+    ],
   }
 
   before(async () => {
@@ -119,11 +129,20 @@ describe('data protection', { skip: database ? false : 'no test database' }, () 
     assert.equal(running.json().error, 'exchange_in_progress')
     assert.equal((await app.inject({ method: 'POST', url: '/v1/credentials/nope/erase', headers: apiKey(), payload: {} })).statusCode, 404)
 
-    await db.insert(proofs).values({ tenantId, recordId: 'proof-1', connectionId: 'conn-1', state: 'done', verified: true, disclosed: { g: { name: 'Ada' } } })
+    await db.insert(proofs).values({ tenantId, recordId: 'proof-1', connectionId: 'conn-1', state: 'done', verified: true, disclosed: { g: { name: 'Ada' } }, biometricCondition: condition })
+    await db.insert(proofs).values({ tenantId, recordId: 'proof-2', connectionId: 'conn-1', state: 'done', verified: true, disclosed: { g: { name: 'Ada' } } })
     const proof = await app.inject({ method: 'POST', url: '/v1/proofs/proof-1/erase', headers: apiKey() })
     assert.equal(proof.statusCode, 200, proof.body)
     assert.equal(proof.json().disclosed, null)
     assert.equal(proof.json().verified, true, 'the verification result stays')
+
+    // The numbers sent for a conditional face-check rule go; the rule and the decision stay, in order.
+    const [erased] = await db.select().from(proofs).where(eq(proofs.recordId, 'proof-1'))
+    assert.deepEqual(erased!.biometricCondition, { ...condition, conditions: condition.conditions.map((c) => ({ ...c, input: null })) })
+    assert.deepEqual((await app.inject({ url: '/v1/proofs/proof-1/biometric-log', headers: apiKey() })).json().condition.conditions.map((c: { param: string; input: number | null }) => [c.param, c.input]), [['amount', null], ['riskScore', null]])
+    assert.equal((await app.inject({ method: 'POST', url: '/v1/proofs/proof-2/erase', headers: apiKey() })).statusCode, 200)
+    const [plain] = await db.select().from(proofs).where(eq(proofs.recordId, 'proof-2'))
+    assert.equal(plain!.biometricCondition, null, 'a proof without a rule stays without one')
   })
 
   it('erasing a connection erases every exchange on it, and waits for running ones', async () => {
@@ -184,6 +203,13 @@ describe('data protection', { skip: database ? false : 'no test database' }, () 
 
     assert.equal((await app.inject({ method: 'GET', url: '/v1/credentials/cred-m', headers: consoleAs('owner') })).json().attributes.name, 'Ada Lovelace')
     assert.equal((await app.inject({ method: 'GET', url: '/v1/credentials/cred-m', headers: apiKey() })).json().attributes.name, 'Ada Lovelace')
+
+    // The numbers sent for a conditional face-check rule are masked the same way; the rule is not.
+    await db.insert(proofs).values({ tenantId, recordId: 'proof-m', connectionId: 'conn-1', state: 'done', verified: true, biometricCondition: condition })
+    const inputs = async (headers: Record<string, string>) => (await app.inject({ url: '/v1/proofs/proof-m/biometric-log', headers })).json().condition.conditions.map((c: { input: number | null; value: number }) => [c.value, c.input])
+    assert.deepEqual(await inputs(consoleAs('operator')), [[5000, null], [70, null]])
+    assert.deepEqual(await inputs({ ...consoleAs('operator'), 'x-console-reveal-reason': 'support ticket 78' }), [[5000, 7200], [70, 20]])
+    assert.deepEqual(await inputs(consoleAs('owner')), [[5000, 7200], [70, 20]])
   })
 
   it('retention scrubs finished exchanges past the period and old delivery bodies; 0 keeps them', async () => {
@@ -191,6 +217,8 @@ describe('data protection', { skip: database ? false : 'no test database' }, () 
     await seedCredential('cred-old', 'done', { updatedAt: old })
     await seedCredential('cred-new', 'done')
     await seedCredential('cred-running', 'offer-sent', { updatedAt: old })
+    await db.insert(proofs).values({ tenantId, recordId: 'proof-old', connectionId: 'conn-1', state: 'done', verified: true, biometricCondition: condition, updatedAt: old })
+    await db.insert(proofs).values({ tenantId, recordId: 'proof-new', connectionId: 'conn-1', state: 'done', verified: true, biometricCondition: condition })
     await db.update(webhookDeliveries).set({ status: 'delivered', createdAt: old }).where(eq(webhookDeliveries.tenantId, tenantId))
     await enqueueEvent(db, endpoints, tenantId, 'wallet.sync_requested', { walletId: 'w1', externalId: 'user-42' })
 
@@ -201,6 +229,8 @@ describe('data protection', { skip: database ? false : 'no test database' }, () 
     assert.equal(rows['cred-old']!.erasedBy, 'retention')
     assert.equal(rows['cred-new']!.attributes?.name, 'Ada Lovelace', 'inside the period')
     assert.equal(rows['cred-running']!.attributes?.name, 'Ada Lovelace', 'running exchanges are never scrubbed')
+    const sent = Object.fromEntries((await db.select().from(proofs).where(eq(proofs.tenantId, tenantId))).map((r) => [r.recordId, r.biometricCondition!.conditions.map((c) => c.input)]))
+    assert.deepEqual(sent, { 'proof-old': [null, null], 'proof-new': [7200, 20] }, 'the numbers sent for a conditional rule go with the exchange')
     const deliveries = await db.select().from(webhookDeliveries).where(eq(webhookDeliveries.tenantId, tenantId))
     assert.ok(deliveries.filter((d) => d.status === 'delivered').every((d) => d.erasedAt && !d.body.includes('Ada')))
     assert.equal((await db.select().from(erasures)).length, 0, 'retention is not an erasure request')

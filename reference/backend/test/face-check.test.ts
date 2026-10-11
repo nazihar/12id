@@ -26,7 +26,8 @@ const config: Config = {
     credentialDefinitionId: 'cred-def-1',
     credential: { validDays: 365, attributes: { memberId: '{memberId}' } },
     photoOnFile: true,
-    actions: { transfer: { proofTemplateId: 'template-1' } },
+    // The second action's template has a conditional rule in the console ("when amount ≥ 5000").
+    actions: { transfer: { proofTemplateId: 'template-1' }, checkedTransfer: { proofTemplateId: 'template-2', faceCheckParams: ['amount'] } },
   },
 }
 
@@ -111,7 +112,22 @@ test('a photo is needed before enrolling, and it travels with the offer and the 
   state.requireReference = true
   const action = await call('POST', '/actions', { type: 'transfer', details: { amount: '900000' } }, token)
   assert.equal(action.status, 200)
-  assert.equal(proofs.at(-1)!.input.biometric.referenceImage, jpeg.toString('base64'))
+  assert.deepEqual(proofs.at(-1)!.input.biometric, { referenceImage: jpeg.toString('base64') })
+
+  // Where the template's rule is decided from the amount, the amount goes along as a number, small or
+  // large: 12id holds the rule and decides whether a check follows.
+  for (const amount of ['3000', '7200.50']) {
+    const checked = await call('POST', '/actions', { type: 'checkedTransfer', details: { amount, payee: 'Rahim' } }, token)
+    assert.equal(checked.status, 200)
+    assert.deepEqual(proofs.at(-1)!.input, { connectionId: 'connection-1', templateId: 'template-2', externalId: checked.json.id, biometric: { referenceImage: jpeg.toString('base64'), params: { amount: Number(amount) } } })
+  }
+  // Without the number nothing is asked of the platform (it would refuse the request).
+  const asked = proofs.length
+  for (const details of [{}, { amount: ' ' }, { amount: 'a lot' }]) {
+    const refused = await call('POST', '/actions', { type: 'checkedTransfer', details }, token)
+    assert.deepEqual([refused.status, refused.json], [400, { error: 'invalid_details' }])
+  }
+  assert.equal(proofs.length, asked)
 
   // The photo is in no answer to the app and in no log line.
   assert.ok(!JSON.stringify([session.json, saved.json, action.json, (await call('GET', '/me', undefined, token)).json]).includes(jpeg.toString('base64').slice(0, 40)))
@@ -132,10 +148,33 @@ test('tenant.json must say photoOnFile where the console requires a face check',
   const catalogue: Catalogue = {
     definitions: [{ id: 'cred-def-1', credentialDefinitionId: 'L:3:CL:9:default', schemaId: 'schema-1', schemaName: 'customer', schemaVersion: '3.0', tag: 'default', status: 'published' }],
     schemas: [{ id: 'schema-1', name: 'customer', version: '3.0', attributes: ['memberId', 'expiresOn'] }],
-    templates: [{ id: 'template-1', name: 'transaction', definition: { groups: [{ attributes: ['memberId'] }] } }],
+    templates: [
+      { id: 'template-1', name: 'transaction', definition: { groups: [{ attributes: ['memberId'] }] } },
+      { id: 'template-2', name: 'checked transaction', definition: { groups: [{ attributes: ['memberId'] }] } },
+    ],
     facePolicies: { 'cred-def-1': 'inherit', 'template-1': 'required' },
   }
   assert.deepEqual(tenantProblems(config.tenant, catalogue), [])
   assert.deepEqual(tenantProblems({ ...config.tenant, photoOnFile: false }, catalogue), ['a face check is required for template-1 (console, Biometrics): set "photoOnFile": true'])
   assert.deepEqual(tenantProblems({ ...config.tenant, photoOnFile: undefined }, { ...catalogue, facePolicies: { 'cred-def-1': 'inherit', 'template-1': 'off' } }), [])
+})
+
+test('tenant.json must forward every number a conditional face-check rule is decided from', () => {
+  const catalogue: Catalogue = {
+    definitions: [{ id: 'cred-def-1', credentialDefinitionId: 'L:3:CL:9:default', schemaId: 'schema-1', schemaName: 'customer', schemaVersion: '3.0', tag: 'default', status: 'published' }],
+    schemas: [{ id: 'schema-1', name: 'customer', version: '3.0', attributes: ['memberId', 'expiresOn'] }],
+    templates: [
+      { id: 'template-1', name: 'transaction', definition: { groups: [{ attributes: ['memberId'] }] } },
+      { id: 'template-2', name: 'checked transaction', definition: { groups: [{ attributes: ['memberId'] }] } },
+    ],
+    // As the console set it: "when amount ≥ 5000 or riskScore > 70".
+    facePolicies: { 'cred-def-1': 'off', 'template-1': 'off', 'template-2': 'conditional' },
+    faceRuleParams: { 'template-2': ['amount', 'riskScore'] },
+  }
+  const withParams = (faceCheckParams?: string[]) => ({ ...config.tenant, actions: { ...config.tenant.actions, checkedTransfer: { proofTemplateId: 'template-2', faceCheckParams } } })
+  assert.deepEqual(tenantProblems(withParams(['amount', 'riskScore']), catalogue), [])
+  assert.deepEqual(tenantProblems(withParams(['amount']), catalogue), ["the face-check rule of actions.checkedTransfer's template is decided from riskScore (console, Proof templates): add it to actions.checkedTransfer.faceCheckParams"])
+  assert.deepEqual(tenantProblems(withParams(undefined), catalogue), ["the face-check rule of actions.checkedTransfer's template is decided from amount, riskScore (console, Proof templates): add them to actions.checkedTransfer.faceCheckParams"])
+  // A rule may ask for a check on any request, so the photo is needed as for "always".
+  assert.deepEqual(tenantProblems({ ...withParams(['amount', 'riskScore']), photoOnFile: false }, catalogue), ['a face check is required for template-2 (console, Biometrics): set "photoOnFile": true'])
 })

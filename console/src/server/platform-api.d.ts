@@ -1007,7 +1007,7 @@ export interface paths {
         put?: never;
         /**
          * Request a proof
-         * @description Asynchronous. Either a stored `templateId` or an inline `request` in the template shape. Every group automatically checks `expiresOn >= today` (UTC). When the exchange reaches `done`, `verified` and the `disclosed` attributes are available.
+         * @description Asynchronous. Either a stored `templateId` or an inline `request` in the template shape. Every group automatically checks `expiresOn >= today` (UTC). When the exchange reaches `done`, `verified` and the `disclosed` attributes are available. When the template's biometric policy is conditional, send the numbers its rule names in `biometric.params` with every request; `biometricCondition` in the answer says whether a check was required.
          */
         post: {
             parameters: {
@@ -1047,10 +1047,14 @@ export interface paths {
                             }[];
                         };
                         externalId?: string;
-                        /** @description Required when the biometric policy for this credential definition or proof template applies; ignored otherwise. */
+                        /** @description `referenceImage` is required when the biometric policy of the proof template applies; `params` when that policy is conditional. Ignored otherwise. */
                         biometric?: {
-                            /** @description Base64 JPEG or PNG, at most 5 MB decoded, one face. */
-                            referenceImage: string;
+                            /** @description Base64 JPEG or PNG, at most 5 MB decoded, one face. Required when the check applies. */
+                            referenceImage?: string;
+                            /** @description Numbers the template's conditional biometric rule is decided from, by parameter name, e.g. `{ "amount": 7200 }`. Every parameter the rule names is required (422 `biometric_param_required` otherwise); others are ignored. */
+                            params?: {
+                                [key: string]: number;
+                            };
                         };
                     };
                 };
@@ -1089,6 +1093,21 @@ export interface paths {
                                 /** Format: date-time */
                                 expiresAt: string;
                                 decidedAt: string | null;
+                            } | null;
+                            biometricCondition: {
+                                /**
+                                 * @description `any`: the check applies when at least one condition holds; `all`: only when every condition holds.
+                                 * @enum {string}
+                                 */
+                                match: "any" | "all";
+                                required: boolean;
+                                conditions: {
+                                    param: string;
+                                    /** @enum {string} */
+                                    op: "gte" | "gt" | "lte" | "lt";
+                                    value: number;
+                                    met: boolean;
+                                }[];
                             } | null;
                             erasedAt: string | null;
                             /** Format: date-time */
@@ -1224,6 +1243,21 @@ export interface paths {
                                     expiresAt: string;
                                     decidedAt: string | null;
                                 } | null;
+                                biometricCondition: {
+                                    /**
+                                     * @description `any`: the check applies when at least one condition holds; `all`: only when every condition holds.
+                                     * @enum {string}
+                                     */
+                                    match: "any" | "all";
+                                    required: boolean;
+                                    conditions: {
+                                        param: string;
+                                        /** @enum {string} */
+                                        op: "gte" | "gt" | "lte" | "lt";
+                                        value: number;
+                                        met: boolean;
+                                    }[];
+                                } | null;
                                 erasedAt: string | null;
                                 /** Format: date-time */
                                 createdAt: string;
@@ -1298,6 +1332,21 @@ export interface paths {
                                 /** Format: date-time */
                                 expiresAt: string;
                                 decidedAt: string | null;
+                            } | null;
+                            biometricCondition: {
+                                /**
+                                 * @description `any`: the check applies when at least one condition holds; `all`: only when every condition holds.
+                                 * @enum {string}
+                                 */
+                                match: "any" | "all";
+                                required: boolean;
+                                conditions: {
+                                    param: string;
+                                    /** @enum {string} */
+                                    op: "gte" | "gt" | "lte" | "lt";
+                                    value: number;
+                                    met: boolean;
+                                }[];
                             } | null;
                             erasedAt: string | null;
                             /** Format: date-time */
@@ -1520,6 +1569,21 @@ export interface paths {
                                 expiresAt: string;
                                 decidedAt: string | null;
                             } | null;
+                            biometricCondition: {
+                                /**
+                                 * @description `any`: the check applies when at least one condition holds; `all`: only when every condition holds.
+                                 * @enum {string}
+                                 */
+                                match: "any" | "all";
+                                required: boolean;
+                                conditions: {
+                                    param: string;
+                                    /** @enum {string} */
+                                    op: "gte" | "gt" | "lte" | "lt";
+                                    value: number;
+                                    met: boolean;
+                                }[];
+                            } | null;
                             erasedAt: string | null;
                             /** Format: date-time */
                             createdAt: string;
@@ -1738,6 +1802,22 @@ export interface paths {
                                 expiresAt: string;
                                 decidedAt: string | null;
                             } | null;
+                            condition: {
+                                /**
+                                 * @description `any`: the check applies when at least one condition holds; `all`: only when every condition holds.
+                                 * @enum {string}
+                                 */
+                                match: "any" | "all";
+                                required: boolean;
+                                conditions: {
+                                    param: string;
+                                    /** @enum {string} */
+                                    op: "gte" | "gt" | "lte" | "lt";
+                                    value: number;
+                                    input: number | null;
+                                    met: boolean;
+                                }[];
+                            } | null;
                             events: {
                                 id: number;
                                 /** Format: date-time */
@@ -1789,7 +1869,7 @@ export interface paths {
         };
         /**
          * Biometric log of a proof exchange
-         * @description Every step of the biometric gate for this exchange, oldest first: attempts with liveness and match scores against the thresholds, decisions, and what the platform did with the exchange. Never contains images. `biometric` is null when the exchange was not gated.
+         * @description Every step of the biometric gate for this exchange, oldest first: attempts with liveness and match scores against the thresholds, decisions, and what the platform did with the exchange. Never contains images. `biometric` is null when the exchange was not gated. `condition` is what the template's conditional rule decided, with the number sent for each condition (null once the exchange is erased); it is present whether or not a check followed, and null when the template has no rule.
          */
         get: {
             parameters: {
@@ -1822,6 +1902,22 @@ export interface paths {
                                 /** Format: date-time */
                                 expiresAt: string;
                                 decidedAt: string | null;
+                            } | null;
+                            condition: {
+                                /**
+                                 * @description `any`: the check applies when at least one condition holds; `all`: only when every condition holds.
+                                 * @enum {string}
+                                 */
+                                match: "any" | "all";
+                                required: boolean;
+                                conditions: {
+                                    param: string;
+                                    /** @enum {string} */
+                                    op: "gte" | "gt" | "lte" | "lt";
+                                    value: number;
+                                    input: number | null;
+                                    met: boolean;
+                                }[];
                             } | null;
                             events: {
                                 id: number;
@@ -2633,6 +2729,26 @@ export interface paths {
                                     minLivenessScore?: number;
                                     maxAttempts?: number;
                                     ttlMinutes?: number;
+                                } | {
+                                    /** @enum {string} */
+                                    mode: "conditional";
+                                    when: {
+                                        /**
+                                         * @description `any`: the check applies when at least one condition holds; `all`: only when every condition holds.
+                                         * @enum {string}
+                                         */
+                                        match: "any" | "all";
+                                        conditions: {
+                                            param: string;
+                                            /** @enum {string} */
+                                            op: "gte" | "gt" | "lte" | "lt";
+                                            value: number;
+                                        }[];
+                                    };
+                                    minMatchScore?: number;
+                                    minLivenessScore?: number;
+                                    maxAttempts?: number;
+                                    ttlMinutes?: number;
                                 };
                                 /** Format: date-time */
                                 createdAt: string;
@@ -2697,6 +2813,26 @@ export interface paths {
                             minLivenessScore?: number;
                             maxAttempts?: number;
                             ttlMinutes?: number;
+                        } | {
+                            /** @enum {string} */
+                            mode: "conditional";
+                            when: {
+                                /**
+                                 * @description `any`: the check applies when at least one condition holds; `all`: only when every condition holds.
+                                 * @enum {string}
+                                 */
+                                match: "any" | "all";
+                                conditions: {
+                                    param: string;
+                                    /** @enum {string} */
+                                    op: "gte" | "gt" | "lte" | "lt";
+                                    value: number;
+                                }[];
+                            };
+                            minMatchScore?: number;
+                            minLivenessScore?: number;
+                            maxAttempts?: number;
+                            ttlMinutes?: number;
                         };
                     };
                 };
@@ -2744,6 +2880,26 @@ export interface paths {
                             } | {
                                 /** @enum {string} */
                                 mode: "required";
+                                minMatchScore?: number;
+                                minLivenessScore?: number;
+                                maxAttempts?: number;
+                                ttlMinutes?: number;
+                            } | {
+                                /** @enum {string} */
+                                mode: "conditional";
+                                when: {
+                                    /**
+                                     * @description `any`: the check applies when at least one condition holds; `all`: only when every condition holds.
+                                     * @enum {string}
+                                     */
+                                    match: "any" | "all";
+                                    conditions: {
+                                        param: string;
+                                        /** @enum {string} */
+                                        op: "gte" | "gt" | "lte" | "lt";
+                                        value: number;
+                                    }[];
+                                };
                                 minMatchScore?: number;
                                 minLivenessScore?: number;
                                 maxAttempts?: number;
@@ -2853,6 +3009,26 @@ export interface paths {
                                 minLivenessScore?: number;
                                 maxAttempts?: number;
                                 ttlMinutes?: number;
+                            } | {
+                                /** @enum {string} */
+                                mode: "conditional";
+                                when: {
+                                    /**
+                                     * @description `any`: the check applies when at least one condition holds; `all`: only when every condition holds.
+                                     * @enum {string}
+                                     */
+                                    match: "any" | "all";
+                                    conditions: {
+                                        param: string;
+                                        /** @enum {string} */
+                                        op: "gte" | "gt" | "lte" | "lt";
+                                        value: number;
+                                    }[];
+                                };
+                                minMatchScore?: number;
+                                minLivenessScore?: number;
+                                maxAttempts?: number;
+                                ttlMinutes?: number;
                             };
                             /** Format: date-time */
                             createdAt: string;
@@ -2923,6 +3099,26 @@ export interface paths {
                             minLivenessScore?: number;
                             maxAttempts?: number;
                             ttlMinutes?: number;
+                        } | {
+                            /** @enum {string} */
+                            mode: "conditional";
+                            when: {
+                                /**
+                                 * @description `any`: the check applies when at least one condition holds; `all`: only when every condition holds.
+                                 * @enum {string}
+                                 */
+                                match: "any" | "all";
+                                conditions: {
+                                    param: string;
+                                    /** @enum {string} */
+                                    op: "gte" | "gt" | "lte" | "lt";
+                                    value: number;
+                                }[];
+                            };
+                            minMatchScore?: number;
+                            minLivenessScore?: number;
+                            maxAttempts?: number;
+                            ttlMinutes?: number;
                         };
                     };
                 };
@@ -2970,6 +3166,26 @@ export interface paths {
                             } | {
                                 /** @enum {string} */
                                 mode: "required";
+                                minMatchScore?: number;
+                                minLivenessScore?: number;
+                                maxAttempts?: number;
+                                ttlMinutes?: number;
+                            } | {
+                                /** @enum {string} */
+                                mode: "conditional";
+                                when: {
+                                    /**
+                                     * @description `any`: the check applies when at least one condition holds; `all`: only when every condition holds.
+                                     * @enum {string}
+                                     */
+                                    match: "any" | "all";
+                                    conditions: {
+                                        param: string;
+                                        /** @enum {string} */
+                                        op: "gte" | "gt" | "lte" | "lt";
+                                        value: number;
+                                    }[];
+                                };
                                 minMatchScore?: number;
                                 minLivenessScore?: number;
                                 maxAttempts?: number;
@@ -3115,6 +3331,26 @@ export interface paths {
                                 minLivenessScore?: number;
                                 maxAttempts?: number;
                                 ttlMinutes?: number;
+                            } | {
+                                /** @enum {string} */
+                                mode: "conditional";
+                                when: {
+                                    /**
+                                     * @description `any`: the check applies when at least one condition holds; `all`: only when every condition holds.
+                                     * @enum {string}
+                                     */
+                                    match: "any" | "all";
+                                    conditions: {
+                                        param: string;
+                                        /** @enum {string} */
+                                        op: "gte" | "gt" | "lte" | "lt";
+                                        value: number;
+                                    }[];
+                                };
+                                minMatchScore?: number;
+                                minLivenessScore?: number;
+                                maxAttempts?: number;
+                                ttlMinutes?: number;
                             };
                         };
                     };
@@ -3135,7 +3371,7 @@ export interface paths {
         };
         /**
          * Set the biometric policy of a proof template
-         * @description `inherit` follows the tenant default, `off` never gates, `required` gates with the given thresholds. Applies to proof requests made from this template after the change.
+         * @description `inherit` follows the tenant default, `off` never gates, `required` gates with the given thresholds. `conditional` gates when its rule holds for the numbers sent with the proof request (`biometric.params`): up to 5 conditions, each a parameter name of your choosing, a comparison (`gte`, `gt`, `lte`, `lt`) and a number, joined by `match` (`any` or `all`). A request that lacks a parameter the rule names is refused. Applies to proof requests made from this template after the change.
          */
         put: {
             parameters: {
@@ -3161,6 +3397,26 @@ export interface paths {
                         minLivenessScore?: number;
                         maxAttempts?: number;
                         ttlMinutes?: number;
+                    } | {
+                        /** @enum {string} */
+                        mode: "conditional";
+                        when: {
+                            /**
+                             * @description `any`: the check applies when at least one condition holds; `all`: only when every condition holds.
+                             * @enum {string}
+                             */
+                            match: "any" | "all";
+                            conditions: {
+                                param: string;
+                                /** @enum {string} */
+                                op: "gte" | "gt" | "lte" | "lt";
+                                value: number;
+                            }[];
+                        };
+                        minMatchScore?: number;
+                        minLivenessScore?: number;
+                        maxAttempts?: number;
+                        ttlMinutes?: number;
                     };
                 };
             };
@@ -3182,6 +3438,26 @@ export interface paths {
                             } | {
                                 /** @enum {string} */
                                 mode: "required";
+                                minMatchScore?: number;
+                                minLivenessScore?: number;
+                                maxAttempts?: number;
+                                ttlMinutes?: number;
+                            } | {
+                                /** @enum {string} */
+                                mode: "conditional";
+                                when: {
+                                    /**
+                                     * @description `any`: the check applies when at least one condition holds; `all`: only when every condition holds.
+                                     * @enum {string}
+                                     */
+                                    match: "any" | "all";
+                                    conditions: {
+                                        param: string;
+                                        /** @enum {string} */
+                                        op: "gte" | "gt" | "lte" | "lt";
+                                        value: number;
+                                    }[];
+                                };
                                 minMatchScore?: number;
                                 minLivenessScore?: number;
                                 maxAttempts?: number;
