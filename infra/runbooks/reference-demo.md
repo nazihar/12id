@@ -72,6 +72,13 @@ It lists each credential definition with its schema's attributes and each templa
 
 User photos are in `data/photos/` on the VM (mode 600). Delete a file to make that user take a new one.
 
+**Only for some transfers.** To show a face check that depends on the amount:
+1. In `tenant.json`, add `"faceCheckParams": ["amount"]` to the `transfer` action, then `docker compose up -d --force-recreate`. Do this first: once the template has a rule, a request without the number is refused.
+2. In the console, on the proof template: the face-check button → "Require a face check when…" → `amount ≥ 5000`.
+3. `docker compose run --rm backend node src/tenant-info.ts` prints "conditional, decided from amount" and "fits this catalogue".
+
+A transfer under 5000 is then approved without the camera, and the console's Exchanges list shows "not required" for it. Since 2026-10-11 the demo tenant is set up this way; to go back, set the template to "Always require a face check".
+
 ## Releasing the app
 
 One-time: a signing keystore, kept offline, and two Actions secrets in `nazihar/12id`.

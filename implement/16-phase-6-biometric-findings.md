@@ -186,7 +186,7 @@ Found on the way, all pre-existing:
 
 ## Conditional gate on proof templates (2026-10-11)
 
-**Plan:** [15-phase-6-biometric.md](15-phase-6-biometric.md) "Conditional gate on proof templates". **Status: built and tested locally. Not deployed to staging; `smoke:biometric-credo` step 5 is written and has not run** (a staging deploy needs a release candidate and the owner's go-ahead).
+**Plan:** [15-phase-6-biometric.md](15-phase-6-biometric.md) "Conditional gate on proof templates". **Status: on staging since 2026-10-11 as `v0.3.0-rc.1`; the checks that need no holder passed. `smoke:biometric-credo` step 5 and the phone check have not run** (see "On staging" below).
 
 | Item | Result |
 |---|---|
@@ -225,7 +225,34 @@ Found on the way, all pre-existing:
 - biometric-service on 3530 with `BIOMETRIC_ENABLE_MOCK=true`, database `biometric_e2e`, and any 32-byte base64 `BIOMETRIC_MASTER_KEY`;
 - run both `provision.ts` first. Postgres is the container `12id-p2-postgres` (55432).
 
+### On staging (2026-10-11, `v0.3.0-rc.1`)
+
+Commit `d0213ae`; `v0.3.0-rc.1` was built by CI in about 12 minutes and deployed the same day (owner: "deploy to staging and do the rest").
+
+| Check on `0.3.0-rc.1` | Result |
+|---|---|
+| Bundle against the VM's tree | two files differed, `caddy/Caddyfile` and `compose.edge.yml`: the `EDGE_API_LIMIT` setting from 2026-10-08, default 600 a minute as before |
+| Deploy (seven stacks) | no step failed; every migration and provision job exited 0; every container with a health check is healthy; `proofs.biometric_condition` exists |
+| Secrets in `docker inspect` | 0 of 32 |
+| Monitoring | 22/22 targets up, no alert firing |
+| `conditional-gate-check` (new, `infra/smoke/conditional-gate-check.ts`; creates no exchange) | **PASSED 7/7**: the console scope stores a rule and an API key reads it back; an API key cannot change it (403); a credential definition refuses one (400); a request with no numbers, and one with one of the two, answer 422 `biometric_param_required` naming what is missing; no proof exchange was created |
+| `e2e:staging` | **3/3** |
+| `smoke:biometric-credo` (with the new step 5) | **not run**: it needs the reverse tunnel for its webhook receiver, which the owner opens |
+| Phone | **not run**: no phone was attached |
+
+**The demo (`demo.`, tenant MTB) now uses the rule.**
+- The reference backend runs the tagged code, and its `transfer` action has `"faceCheckParams": ["amount"]`.
+- The `transaction` template went from `required` to `conditional` with `amount ≥ 5000`, with its thresholds unchanged (match 90, liveness 90, 3 attempts). The backend's tenant check prints "conditional, decided from amount" and "fits this catalogue".
+- Order used: the code and `tenant.json` first, the rule second. The numbers are ignored while the template has no rule, and the old code would have had every request refused once it had one.
+- Not shown yet: an actual transfer under and over 5000 from the app.
+
+**Kept on the VM for a rollback:** `infra/compose/release.env.prev-0.2.2-rc.1`, the previous edge files in `/opt/12id/infra.prev-20261011-edge/`, `/opt/12id-reference/backend-src.prev-20261011.tgz` and `backend/tenant.json.prev-20261011`. Migration `0011` only adds a nullable column, so `0.2.2` runs on the migrated database. To undo the demo's rule, set the `transaction` template back to "always" in the console.
+
+**Small things found.**
+- The 422's wording read "send it as numbers" for a single missing parameter. Fixed in the source after the rc; the rc on staging still has the old wording.
+- The public docs site rebuilt on the push to `master`, so `api.md` describes the conditional mode before production runs it.
+
 ### Still to do
-- Release candidate → staging (platform-api with migration `0011`, console) → `smoke:biometric-credo` including step 5.
-- On the phone with tenant MTB: set the `transaction` template to `amount ≥ 5000` and add `"faceCheckParams": ["amount"]` to the reference backend's `tenant.json`. A transfer of 1000 should be approved without the camera; one of 5000 should ask for the face check.
-- Redeploy the reference backend on staging **before** setting a rule on its template: the code running there sends no `params`, so a conditional template would refuse every request.
+- `smoke:biometric-credo` on staging, including step 5, once the tunnel is open.
+- On the phone, with the demo app: a transfer of 1000 should be approved without the camera; one of 5000 should ask for the face check. The console's Exchanges list should show "not required" for the first and the check's result for the second.
+- `v0.3.0` (the release tag on the rc's commit) after those two.

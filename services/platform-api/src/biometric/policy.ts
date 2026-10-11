@@ -98,7 +98,7 @@ export function evaluateWhen(when: BiometricWhen, params: Record<string, number>
   const sent = params ?? {}
   const missing = [...new Set(when.conditions.map((c) => c.param).filter((param) => !Object.hasOwn(sent, param)))]
   if (missing.length > 0) {
-    throw new PlatformError(422, 'biometric_param_required', `this template decides the biometric check from ${missing.join(', ')}: send ${missing.length === 1 ? 'it' : 'them'} as numbers in biometric.params`)
+    throw new PlatformError(422, 'biometric_param_required', `this template decides the biometric check from ${missing.join(', ')}: send ${missing.length === 1 ? 'it as a number' : 'them as numbers'} in biometric.params`)
   }
   const conditions = when.conditions.map((c) => ({ ...c, input: sent[c.param]!, met: COMPARE[c.op](sent[c.param]!, c.value) }))
   const required = when.match === 'any' ? conditions.some((c) => c.met) : conditions.every((c) => c.met)

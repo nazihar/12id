@@ -956,7 +956,7 @@ Plan: [`15-phase-6-biometric.md`](15-phase-6-biometric.md); evidence: [`16-phase
 - [x] B6 infra: compose, secrets, backup + restore drill, runbook; probe + 5 biometric alerts; alert email to onetwoidadmin@gmail.com works (test alert delivered 2026-09-21)
 - [x] `smoke:biometric-credo` (mock) **PASSED 18/18**; `smoke:sdk-biometric-android` (mock, phone) **PASSED 12/12**; grep check clean
 - [x] `smoke:sdk-biometric-android PROVIDER=aws` on the phone with the owner's AWS account: real liveness 99+, same face match 99.9 → issued, different face 2.7 → refused (findings "AWS run"). A printed or on-screen photo was refused (liveness 0.13, match 99.99), and the AWS capture passed in an R8-shrunk build (`-PminifyDebug`)
-- [~] Conditional gate on proof templates (2026-10-11, §4.9, §12.17): built and tested locally (platform-api migration `0011_biometric_condition`, console, reference backend); **not deployed to staging yet**
+- [~] Conditional gate on proof templates (2026-10-11, §4.9, §12.17): on staging as `v0.3.0-rc.1` (platform-api migration `0011_biometric_condition`, console, reference backend; tenant MTB's `transaction` template uses `amount ≥ 5000`); `smoke:biometric-credo` step 5 and the phone check not run yet
 
 ### Phase 7 — Pre-production hardening (from the review; H2 + H3 done on staging)
 
