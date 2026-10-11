@@ -2,7 +2,7 @@
 
 **Status (2026-09-21):** built and on staging. `smoke:biometric-credo` (mock) 18/18 and `smoke:sdk-biometric-android` (mock, phone) 12/12 passed. The AWS half waits for the owner's tenant role. As-built differences and evidence are in [`16-phase-6-biometric-findings.md`](16-phase-6-biometric-findings.md).
 
-**Update (2026-10-11):** a proof template can gate conditionally (only when a rule holds for numbers the tenant's backend sends). On staging since 2026-10-11 as `v0.3.0-rc.1`; the staging smoke step and the phone check have not run. See "Conditional gate on proof templates" at the end of this document.
+**Update (2026-10-11):** a proof template can gate conditionally (only when a rule holds for numbers the tenant's backend sends). On staging since 2026-10-11 as `v0.3.0-rc.1`; `smoke:biometric-credo` passed 30/30 and the demo app showed it on the phone. See "Conditional gate on proof templates" at the end of this document.
 
 ## Context
 Phases 0–5 (Android) are done and on staging (`12id/implement/1…14`):
@@ -326,7 +326,7 @@ B0 spike → B1 (mock adapter first) → B2 → B3 → `smoke:biometric-credo` (
 
 ## Conditional gate on proof templates (2026-10-11)
 
-**Status:** on staging since 2026-10-11 as `v0.3.0-rc.1` (platform-api, console, and the reference backend on `demo.`). The staging smoke step (5) and the phone check have not run. Results: [`16-phase-6-biometric-findings.md`](16-phase-6-biometric-findings.md) "Conditional gate".
+**Status:** on staging since 2026-10-11 as `v0.3.0-rc.1` (platform-api, console, and the reference backend on `demo.`). `smoke:biometric-credo` passed 30/30 with step 5, and on the phone a transfer of 1000 needed no camera while one of 5000 required the face check. Results: [`16-phase-6-biometric-findings.md`](16-phase-6-biometric-findings.md) "Conditional gate".
 
 ### Why
 A template's face check was all-or-nothing (`inherit` / `off` / `required`). A bank wants one "Approve transfer" template where the check applies only from an amount of 5000, or when its risk score is high. The platform never sees those numbers: they are the tenant's business data, not credential attributes.
