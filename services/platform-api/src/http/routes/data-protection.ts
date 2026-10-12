@@ -2,13 +2,16 @@
  * Data protection settings and log (Phase 7 H1):
  *   - the tenant's retention period: read by anyone of the tenant, changed from the console only, by an
  *     owner, admin or operator (review K1: setup is the console's);
- *   - the erasure log: every erasure made on request, with who and why, never the data.
+ *   - the erasure log: every erasure made on request, with who and why, never the data;
+ *   - the audit log's own period (implement/22 C15): console only, read and changed by the same roles.
+ *     It is a separate setting, and a longer one, because the audit outlasts the data it describes.
  */
 import { eq } from 'drizzle-orm'
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { z } from 'zod'
 
 import type { Database } from '../../db/client.ts'
+import { AUDIT_RETENTION_MAX_DAYS, AUDIT_RETENTION_MIN_DAYS, effectiveAuditRetentionDays, validAuditRetentionDays } from '../../audit-retention.ts'
 import { ERASURE_RECORD_TYPES, erasures, tenants } from '../../db/schema.ts'
 import { effectiveRetentionDays } from '../../retention.ts'
 import { type TenantContext, requireConsolePrincipal } from '../auth.ts'
@@ -25,6 +28,13 @@ const retentionView = z.object({
   platformDefault: z.number().int(),
 })
 
+const auditRetentionView = z.object({
+  auditRetentionDays: z.number().int().describe('The period in force, in days; 0 = audit rows are kept.'),
+  tenantSetting: z.number().int().nullable().describe('The tenant\'s own setting; null = the deployment default applies.'),
+  platformDefault: z.number().int(),
+  minimumDays: z.number().int().describe('The shortest period that can be set (other than 0).'),
+})
+
 const erasureView = z.object({
   id: z.number().int(),
   recordType: z.enum(ERASURE_RECORD_TYPES),
@@ -36,7 +46,7 @@ const erasureView = z.object({
   at: z.iso.datetime(),
 })
 
-export const dataProtectionRoutes = (deps: { db: Database; defaultRetentionDays: number }): FastifyPluginAsyncZod => async (app) => {
+export const dataProtectionRoutes = (deps: { db: Database; defaultRetentionDays: number; defaultAuditRetentionDays: number }): FastifyPluginAsyncZod => async (app) => {
   const tenant = (request: { tenant?: TenantContext }) => request.tenant as TenantContext
   const view = (tenantSetting: number | null) => ({ retentionDays: effectiveRetentionDays(tenantSetting, deps.defaultRetentionDays), tenantSetting, platformDefault: deps.defaultRetentionDays })
 
@@ -71,6 +81,57 @@ export const dataProtectionRoutes = (deps: { db: Database; defaultRetentionDays:
       if (t.principal.kind === 'console' && t.principal.role === 'member') throw new PlatformError(403, 'forbidden', 'members cannot change the retention period')
       await deps.db.update(tenants).set({ retentionDays: request.body.retentionDays, updatedAt: new Date() }).where(eq(tenants.id, t.id))
       return view(request.body.retentionDays)
+    }
+  )
+
+  // --- the audit log's period (console only) ---------------------------------------------------
+  const auditView = (tenantSetting: number | null) => ({
+    auditRetentionDays: effectiveAuditRetentionDays(tenantSetting, deps.defaultAuditRetentionDays),
+    tenantSetting,
+    platformDefault: deps.defaultAuditRetentionDays,
+    minimumDays: AUDIT_RETENTION_MIN_DAYS,
+  })
+  const auditTags = ['data protection', CONSOLE_ONLY_TAG]
+
+  app.get(
+    '/v1/audit-retention',
+    {
+      schema: {
+        tags: auditTags,
+        summary: 'Get the audit log period',
+        description: 'How long an audit row of this tenant is kept before it is deleted. Sign-ins and rows that belong to no tenant follow the deployment default.',
+        response: { 200: auditRetentionView, 403: errorBody },
+      },
+    },
+    async (request) => {
+      const t = requireConsolePrincipal(tenant(request), 'the audit log period is read in the console')
+      const [row] = await deps.db.select({ auditRetentionDays: tenants.auditRetentionDays }).from(tenants).where(eq(tenants.id, t.id))
+      return auditView(row?.auditRetentionDays ?? null)
+    }
+  )
+
+  app.put(
+    '/v1/audit-retention',
+    {
+      schema: {
+        tags: auditTags,
+        summary: 'Set the audit log period',
+        body: z.object({
+          auditRetentionDays: z
+            .number()
+            .int()
+            .refine(validAuditRetentionDays, `must be 0 (keep) or ${AUDIT_RETENTION_MIN_DAYS} to ${AUDIT_RETENTION_MAX_DAYS}`)
+            .nullable()
+            .describe('Days, a year to ten years; 0 = keep everything; null = the deployment default.'),
+        }),
+        response: { 200: auditRetentionView, 400: errorBody, 403: errorBody },
+      },
+    },
+    async (request) => {
+      const t = requireConsolePrincipal(tenant(request), 'the audit log period is set in the console')
+      if (t.principal.kind === 'console' && t.principal.role === 'member') throw new PlatformError(403, 'forbidden', 'members cannot change the audit log period')
+      await deps.db.update(tenants).set({ auditRetentionDays: request.body.auditRetentionDays, updatedAt: new Date() }).where(eq(tenants.id, t.id))
+      return auditView(request.body.auditRetentionDays)
     }
   )
 

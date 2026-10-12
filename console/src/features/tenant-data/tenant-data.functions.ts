@@ -13,6 +13,7 @@ import { PlatformCallError, platformFor, unwrap } from '@/server/platform.server
 
 import { catalogueSearch, exchangeSearch, templateSearch, walletSearch, deliverySearch } from './list.schemas'
 import { catalogueQueryParams, deliveryQueryParams, exchangeQueryParams, walletQueryParams } from './list.params'
+import { auditRetentionDaysInput } from './retention.schemas'
 import { DELIVERY_STATUSES } from './types'
 
 export { DELIVERY_STATUSES }
@@ -135,6 +136,17 @@ export const setTenantRetention = createServerFn({ method: 'POST' })
   .middleware([operatorMiddleware])
   .validator(tenantInput.extend({ retentionDays: z.number().int().min(0).max(3650).nullable() }))
   .handler(async ({ context, data }) => unwrap(await platformFor(context.principal, { tenantId: data.tenantId }).PUT('/v1/data-retention', { body: { retentionDays: data.retentionDays } })))
+
+/** The audit log's own period for this tenant's entries (implement/22 C15). */
+export const getTenantAuditRetention = createServerFn({ method: 'GET' })
+  .middleware([operatorReadMiddleware])
+  .validator(tenantInput)
+  .handler(async ({ context, data }) => unwrap(await platformFor(context.principal, { tenantId: data.tenantId }).GET('/v1/audit-retention')))
+
+export const setTenantAuditRetention = createServerFn({ method: 'POST' })
+  .middleware([operatorMiddleware])
+  .validator(tenantInput.extend({ auditRetentionDays: auditRetentionDaysInput }))
+  .handler(async ({ context, data }) => unwrap(await platformFor(context.principal, { tenantId: data.tenantId }).PUT('/v1/audit-retention', { body: { auditRetentionDays: data.auditRetentionDays } })))
 
 export const listTenantErasures = createServerFn({ method: 'GET' })
   .middleware([operatorReadMiddleware])

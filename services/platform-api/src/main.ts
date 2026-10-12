@@ -67,9 +67,9 @@ const stopSweep = config.SWEEP_INTERVAL_MS > 0
   : async () => undefined
 const expiry = setInterval(() => void expireIdempotencyKeys(db, config.IDEMPOTENCY_TTL_MS).catch((error: unknown) => logger.warn({ err: error }, 'idempotency expiry failed')), 10 * 60 * 1000)
 // Biometric gates past their TTL are expired and their exchanges abandoned; unsettled gates are retried.
-// Retention (Phase 7 H1) runs on the sweep's schedule; SWEEP_INTERVAL_MS 0 turns both off.
+// Retention (Phase 7 H1) and the audit log's period (implement/22 C15) run on the sweep's schedule; SWEEP_INTERVAL_MS 0 turns both off.
 const stopRetention = config.SWEEP_INTERVAL_MS > 0
-  ? startRetention({ db, agent, biometric: biometricClient, endpoints, logger, defaultDays: config.RETENTION_DAYS }, config.SWEEP_INTERVAL_MS)
+  ? startRetention({ db, agent, biometric: biometricClient, endpoints, logger, defaultDays: config.RETENTION_DAYS, auditDefaultDays: config.AUDIT_RETENTION_DAYS }, config.SWEEP_INTERVAL_MS)
   : async () => undefined
 const gateExpiry = gates ? setInterval(() => void gates.expireDue().catch((error: unknown) => logger.warn({ err: error }, 'biometric gate expiry failed')), config.BIOMETRIC_EXPIRY_POLL_MS) : undefined
 

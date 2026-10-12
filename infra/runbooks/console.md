@@ -105,9 +105,27 @@ set-password link; the link works once and expires in one hour).
   remains; if the last one is lost anyway, create one with console-tools (First operator, above).
 - **The audit log is append-only** (platform-api migration `0012`). A trigger refuses `UPDATE`,
   `DELETE` and `TRUNCATE` on `console_audit` and `erasures`. It also holds sign-ins, failed sign-ins,
-  account changes and exports, which the console reports to platform-api. There is no retention job:
-  pruning it is a deliberate act by the database owner (drop the trigger, delete, recreate it), to be
-  decided and recorded, not a routine step. Removing a tenant row that has erasure entries needs the same.
+  account changes and exports, which the console reports to platform-api. Removing a tenant row that
+  has erasure entries is a deliberate act by the database owner (drop the trigger, delete, recreate
+  it), to be decided and recorded.
+- **The audit log's period** (implement/22 C15, migration `0014`). Audit rows are deleted when they
+  are older than a period: `AUDIT_RETENTION_DAYS` for the deployment (default 730; 365 to 3650, or 0
+  to keep everything; platform-api refuses to start on another value), or an organisation's own
+  period, set on its Data protection page. The pass runs with the sweep (`SWEEP_INTERVAL_MS`) and
+  leaves one audit row ("Old audit entries deleted") per organisation it deleted from. Sign-ins and
+  rows of no organisation follow the deployment's period. The erasure log is never deleted.
+- **System health** (implement/22 C16). Operators and auditors open it from the sidebar. It shows
+  what platform-api can reach, the alerts monitoring reports, and the non-secret settings the
+  deployment runs with. Alertmanager pushes its notifications to platform-api
+  (`POST http://127.0.0.1:3500/internal/alerts`); the console never talks to Prometheus or
+  Alertmanager. It needs one secret, once:
+  `infra/scripts/set-secret.sh monitoring ALERT_WEBHOOK_SECRET --generate`, then `deploy.sh platform`
+  and `deploy.sh monitoring` (the platform stack mounts the monitoring stack's file). Without the
+  secret the page says "monitoring is not connected". If it says "monitoring has stopped reporting",
+  the heartbeat (`Watchdog`, every five minutes) is not arriving: check that Prometheus and
+  Alertmanager are up (`deploy.sh monitoring ps`) and Alertmanager's log for a refused notification.
+  To rotate the secret, generate it again and deploy both stacks; alerts sent between the two
+  deploys are refused and repeated by Alertmanager within the hour.
 - **Lost authenticator.** Backup codes were shown at enrollment. Without them, an operator disables
   2FA for the account directly in the `console` database (`update "user" set two_factor_enabled=false;
   delete from two_factor where user_id=…`) and the user re-enrolls at next sign-in. Record it in

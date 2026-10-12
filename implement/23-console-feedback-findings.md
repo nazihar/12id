@@ -1,6 +1,6 @@
 # Console feedback, set 1 — findings
 
-**Plan:** [22-console-feedback.md](22-console-feedback.md). **Status (2026-10-12): set 1 (C10–C14) is released as platform `v0.4.0`** (commit `7cb5f44`, the release candidate's digests). Staging runs `0.4.0-rc.1`; every check and both Credo smokes passed there (see "On staging" and "Released as `v0.4.0`" below).
+**Plan:** [22-console-feedback.md](22-console-feedback.md). **Set 2 is at the end of this file ("Set 2 — findings"): C15 and C16 are built and pass locally, uncommitted.** **Status (2026-10-12): set 1 (C10–C14) is released as platform `v0.4.0`** (commit `7cb5f44`, the release candidate's digests). Staging runs `0.4.0-rc.1`; every check and both Credo smokes passed there (see "On staging" and "Released as `v0.4.0`" below).
 
 | Item | State |
 |---|---|
@@ -269,3 +269,70 @@ Commit `7cb5f44` on `master` (owner: "Commit and release"); CI green (`ci-servic
 - Migrations: platform-api `0012_audit_events`, `0013_verification_indexes`; console `0001_last_sign_in`. All additive. `0012` creates a function and four triggers: the service role owns its tables (H3), so no superuser step is expected; check it on staging as `pg_trgm` was checked in C9.
 - After the deploy, check from outside that `POST https://api.<domain>/admin/audit/events` answers 404, with and without `X-Console-Token`.
 - The first sign-in after the deploy sets `last_sign_in_at`; before that the lists say "never".
+
+---
+
+# Set 2 — findings
+
+**Plan:** [22-console-feedback.md](22-console-feedback.md), "Set 2". **Status (2026-10-12): C15 and C16 are built and pass locally. Nothing of set 2 is committed or deployed. C17–C19 (approval by a second person) are not started.**
+
+| Item | State |
+|---|---|
+| C15 audit log period | **done, local.** Migration `0014_audit_retention` |
+| C16 system health page | **done, local.** Migration `0015_platform_alerts`; one new secret, `ALERT_WEBHOOK_SECRET` |
+| C17–C19 approval by a second person | not started; planned for `v0.6.0` |
+| Local run, 2026-10-12 | platform-api: `tsc` clean, `npm test` **144/144** (131 before set 2), `openapi.json` 34 paths (unchanged), `openapi.console.json` 59 → 61. Console: `tsc` clean, Vitest **80/80** (75 before), `vite build` and `check:client` clean. Playwright against a local platform-api, one run: **11/11** (the nine of set 1 and the two of `health-retention.spec.ts`). An earlier run was 10/11: the local database container's clock stepped back 23 seconds between two audit rows (ids 473 and 474 carry it), so the export spec found the two exports in the wrong order; alone it passed, and so did the next full run. Monitoring config: `promtool check rules` 27 rules, `amtool check-config` clean, and a real Alertmanager 0.34.0 delivered to the local platform-api. Not run: `biometrics.spec.ts`, anything on staging |
+
+Every claim in this part comes from a local run on 2026-10-12.
+
+## C15 — Audit log period (done, local)
+
+### What was built
+- **Setting.** `tenants.audit_retention_days` (null = the deployment's `AUDIT_RETENTION_DAYS`, default 730). Both accept 365 to 3650, or 0 to keep everything. platform-api refuses to start on any other deployment value.
+- **The pass** (`services/platform-api/src/audit-retention.ts`) runs after the data retention pass on the same timer. Per tenant it deletes that tenant's rows older than its period, oldest first, 5,000 at a time. Then it deletes, on the deployment's period, the rows that belong to no tenant and the rows whose tenant id names no tenant (a refused call on an unknown tenant).
+- **The trigger** (`0014`): `refuse_audit_change()` returns the row for a `DELETE` on `console_audit` when the transaction set `app.audit_purge`, and raises for everything else. The setting is made with `set_config(…, true)`, so it ends with the transaction of one batch.
+- **One row is left behind** by each scope that deleted something: `audit.purged`, actor `system`, with the count, the cut-off and the period. The audit viewer shows it as "Old audit entries deleted".
+- **Console:** an "Audit log period" card under the retention card on the Data protection page, for the organisation and for the operator's view of a tenant. The two cards are now one component with two wrappers.
+
+### Findings
+1. **A route of its own, not two more fields on `/v1/data-retention` (differs from the plan).** `GET /v1/data-retention` is a customer route: an API key reads it and it is in the customer `openapi.json`. Adding the audit period there would have changed the customer document and shown a console matter to the backend. `GET/PUT /v1/audit-retention` is console-only, so the customer document still has 34 paths. It also gives approvals (C17) one type per setting.
+2. **Sign-ins follow the deployment's period, not an organisation's.** A sign-in row has no tenant, because an account can belong to several organisations. The card says so.
+3. **The erasure log is not touched.** It is the proof that a request was honoured, and the trigger still refuses every change to it, with or without the setting (tested).
+4. **What the trigger does and does not do** is unchanged from C13: it stops the application from deleting by mistake, and it does not stop the tables' owner.
+5. **Organisation members cannot read the audit log today** (it is an operator page), yet their owner sets its period. For a self-hosting customer the same people are operators. An audit view for organisations is not planned; it would come up with approvals, whose own pages show what was asked and decided.
+
+### Evidence (run, local)
+- `test/audit-retention.test.ts`, 7 tests: older rows go and newer stay; the row left behind; a second pass does nothing; a tenant's own period; 0 keeps everything, for a tenant and for the deployment; rows without a tenant and with an unknown tenant id; more rows than a batch; a plain `DELETE` refused after the pass; with the setting on, `UPDATE`, `TRUNCATE` and a `DELETE` on `erasures` still refused; the route (member, auditor and API key refused; 364 and 3651 refused; 365, 0 and null accepted; audited); the deployment value (90 and 4000 refused at start).
+- Playwright, `health-retention.spec.ts`: the card shows "730 days (2 years)" as the platform default, 90 cannot be saved, 365 is saved and shown as the organisation's setting, the data period stays 90 days, and the change is in the audit log.
+
+## C16 — System health page (done, local)
+
+### What was built
+- **Alertmanager pushes, platform-api keeps** (`services/platform-api/src/alerts.ts`, table `platform_alerts`). `POST /internal/alerts` takes Alertmanager's webhook payload with a bearer secret; without `ALERT_WEBHOOK_SECRET` it answers 404.
+- **`GET /admin/health`** (operators and auditors): the readiness checks, the alerts firing now, those resolved in the last 7 days, when monitoring last reported, the version and environment, and an allow-list of settings written out value by value. `/admin/stats` carries the number of firing alerts for the dashboard.
+- **Monitoring** (`infra/compose/compose.monitoring.yml`, `monitoring/alerts.yml`): a `console` webhook receiver, and a `Watchdog` rule that always fires. Routing: the Watchdog goes to the console only, every 5 minutes; every other alert goes to the console (repeated hourly while it fires) and then by mail with the timing it had.
+- **Console:** `/ops/health` with a one-line summary (the worst thing first), the services, the alerts, and "What is running"; "System health" in the operator sidebar; the dashboard's health strip links to it and shows the count of firing alerts.
+
+### Findings
+1. **The console cannot ask monitoring anything, and should not be able to.** Prometheus and Alertmanager listen on the host's `127.0.0.1`; the console is on a Docker network. Opening them to containers would open Alertmanager's unauthenticated API, which can silence alerts. Pushing needs no new network path: Alertmanager is on the host network and platform-api already publishes `127.0.0.1:3500`, and the edge already answers 404 for `/internal/*`.
+2. **One secret, in one file.** `ALERT_WEBHOOK_SECRET` lives in the monitoring stack's secrets; the platform stack mounts the same file (as it already does with the biometric token). Alertmanager reads it itself (`credentials_file`).
+3. **A child route with `continue` does not fall back to the parent's receiver.** With only "everything → console, continue", mail would have stopped. A third route sends everything to mail. Checked with `amtool config routes test`: `Watchdog` → `console`; `EndpointDown` → `console,email`.
+4. **Found by the browser run and fixed: a resolve that names a slightly different start left the alert firing.** Rows are keyed by fingerprint and start. A resolve now ends whatever is firing under its fingerprint, whether or not the start matches; only a resolve for an alert never seen firing becomes a row of its own.
+5. **An alert whose resolve is missed** (platform-api down at that moment) is closed after three missed hourly repeats. The Watchdog is never closed that way.
+6. **The page says when it cannot know.** No secret: "monitoring is not connected". Nothing for 15 minutes: "monitoring has stopped reporting, the alerts may be out of date". Both are worded as a warning, not as "all clear".
+7. **Durations are measured between two timestamps of the same response**, never against the browser's clock, so the server render and the browser show the same text.
+8. **Services platform-api does not call** (the mediators, the edge, the ledger nodes, the console itself) have no row under "Services". They appear as alerts (`TargetDown`, `EndpointDown`, the ledger rules). The page says so.
+
+### Evidence (run, local)
+- `test/health.test.ts`, 6 tests: the webhook without a secret (404), with a wrong one or the console token (401), with a malformed body (400); a repeat updates its row; a resolve ends it, and so does a repeated resolve and one with a different start; a new start is a new occurrence; the Watchdog is the heartbeat and is never listed or closed; stale and old rows; the route for operator, auditor, owner (403) and nobody (401); the dashboard's count; no secret value in the settings (every secret set to a marker and searched for).
+- `test/health-format.test.ts` (console): durations, severities, and which line leads the summary.
+- Playwright, `health-retention.spec.ts`: the local platform-api has no agent-service, so the page leads with "Agent service is not answering"; the settings hold neither the console token nor the alert secret; before any report "Monitoring has not reported yet"; after a report one critical alert with its summary and "2 h 5 min", the Watchdog not listed, a resolved alert with how long it lasted; the dashboard shows "1 alert firing" and links to the page; after the resolve nothing fires. No Content-Security-Policy refusal.
+- **A real Alertmanager** (the pinned 0.34.0 image, the new routing, the secret from a file) delivered a Watchdog and a test alert to the local platform-api; both were stored with Alertmanager's own fingerprints.
+- Looked at on desktop, dark and phone width: no overflow; the alert tables scroll inside their own box on a phone.
+
+## Deploy notes for `v0.5.0`
+- **Before the deploy, the owner sets one secret:** `infra/scripts/set-secret.sh monitoring ALERT_WEBHOOK_SECRET --generate`. Without it everything still deploys; the page says monitoring is not connected and Alertmanager logs a refused notification every five minutes.
+- **Stacks that change:** `platform` (two migrations, three new environment values, the mounted secret), `console`, `monitoring` (Alertmanager's routing and receiver, the Watchdog rule). Deploy `platform` before `monitoring`, so the webhook exists when Alertmanager starts sending.
+- **Migrations:** platform-api `0014_audit_retention` (one column; replaces the trigger function) and `0015_platform_alerts` (one table). The service role owns the function it replaces (checked on staging for `0012`).
+- **The first audit pass** runs with the sweep, two minutes after platform-api starts. The console has existed on staging since September 2026, so on the default of 730 days it deletes nothing there.
+- **To check on staging:** the Watchdog signal is fresh; a test alert sent to Alertmanager (`amtool alert add`) appears on the page and by mail, and clears; `POST https://api.<domain>/internal/alerts` answers 404 from outside; the audit period set on a smoke tenant; `console-feedback-check`, `e2e:staging`, both Credo smokes.

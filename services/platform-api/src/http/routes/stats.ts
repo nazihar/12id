@@ -11,6 +11,7 @@ import { count, desc, eq, sql } from 'drizzle-orm'
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { z } from 'zod'
 
+import { firingAlertCount } from '../../alerts.ts'
 import type { Database } from '../../db/client.ts'
 import { DELIVERY_STATUSES, tenants, webhookEndpoints } from '../../db/schema.ts'
 import type { ReadinessReport } from '../app.ts'
@@ -89,7 +90,8 @@ export const platformStatsView = z.object({
   /** Proof and face-check outcomes of the window, across tenants (implement/22 C10). */
   verification: verificationTotalsView,
   topTenants: z.array(z.object({ tenantId: z.string(), name: z.string(), exchanges: z.number().int() })),
-  health: z.object({ ready: z.boolean(), draining: z.boolean(), checks: z.record(z.string(), z.boolean()) }),
+  /** The readiness checks, and how many alerts monitoring reports as firing (implement/22 C16; the list is GET /admin/health). */
+  health: z.object({ ready: z.boolean(), draining: z.boolean(), checks: z.record(z.string(), z.boolean()), alertsFiring: z.number().int() }),
 })
 
 // --- shared aggregates (also used by /admin/overview) -------------------------------------------
@@ -274,7 +276,7 @@ export const platformStatsRoutes = (deps: { db: Database; readiness: () => Promi
     },
     async (request) => {
       const { days } = request.query
-      const [tenantRows, activity, wallets, keys, dead, stuckCredentials, stuckProofs, walletsNeverConnected, withWebhook, series, verification, health] = await Promise.all([
+      const [tenantRows, activity, wallets, keys, dead, stuckCredentials, stuckProofs, walletsNeverConnected, withWebhook, series, verification, health, alertsFiring] = await Promise.all([
         deps.db.select().from(tenants).orderBy(desc(tenants.createdAt)),
         exchangeActivityByTenant(deps.db),
         activeRevokedByTenant(deps.db, 'wallets'),
@@ -287,6 +289,7 @@ export const platformStatsRoutes = (deps: { db: Database; readiness: () => Promi
         activitySeries(deps.db, days),
         verificationTotals(deps.db, days),
         deps.readiness().catch(() => ({ ready: false, draining: false, checks: {} })),
+        firingAlertCount(deps.db),
       ])
       const windowCounts = await deps.db.execute<{ tenant_id: string; n: number }>(sql`
         select tenant_id, count(*)::int as n from (
@@ -329,7 +332,7 @@ export const platformStatsRoutes = (deps: { db: Database; readiness: () => Promi
         series,
         verification,
         topTenants: windowCounts.rows.map((row) => ({ tenantId: row.tenant_id, name: names.get(row.tenant_id) ?? row.tenant_id, exchanges: Number(row.n) })),
-        health,
+        health: { ...health, alertsFiring },
       }
     }
   )

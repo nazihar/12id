@@ -33,6 +33,15 @@ const configSchema = z.object({
   /** Console scope (Phase 4): the console's server acts for a tenant or as an operator. Unset disables it. */
   CONSOLE_TOKEN: secret.optional(),
 
+  /**
+   * Bearer secret of POST /internal/alerts, where Alertmanager's webhook receiver reports
+   * (implement/22 C16). Unset: the route answers 404 and the health page says monitoring is not connected.
+   */
+  ALERT_WEBHOOK_SECRET: secret.optional(),
+  /** Shown on the operators' health page: the release this deployment runs, and which environment it is. */
+  PLATFORM_VERSION: z.string().min(1).max(100).optional(),
+  PLATFORM_ENVIRONMENT: z.string().min(1).max(50).optional(),
+
   // Ledger configuration served to SDKs by GET /v1/ledger (public data; the file itself lives on
   // the genesis host, versioned and minisign-signed since Phase 1).
   INDY_NAMESPACE: z.string().regex(/^[a-z][_a-z0-9-]*(:[a-z][_a-z0-9-]*)?$/, 'invalid did:indy namespace'),
@@ -80,6 +89,10 @@ const configSchema = z.object({
   // Personal data of finished exchanges is scrubbed this many days after they finish (Phase 7 H1);
   // a tenant may set its own period; 0 keeps it until erased on request.
   RETENTION_DAYS: z.coerce.number().int().min(0).max(3650).default(90),
+  // Audit rows are deleted this many days after they were written (implement/22 C15): one to ten
+  // years, or 0 to keep everything. A tenant may set its own period for its rows; rows that belong to
+  // no tenant (sign-ins, operator and platform changes) always follow this one.
+  AUDIT_RETENTION_DAYS: z.coerce.number().int().refine((days) => days === 0 || (days >= 365 && days <= 3650), 'must be 0 (keep) or 365 to 3650').default(730),
   IDEMPOTENCY_TTL_MS: z.coerce.number().int().positive().default(24 * 3600 * 1000),
   /** Graceful shutdown: stop taking work, finish in-flight deliveries, then close (< stop_grace_period). */
   DRAIN_DEADLINE_MS: z.coerce.number().int().positive().default(15_000),

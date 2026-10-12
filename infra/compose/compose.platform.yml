@@ -8,6 +8,8 @@
 # platform_api role, infra/scripts/pg-roles.sh), PLATFORM_AGENT_TOKEN (same value as agent.sops.env).
 # Phase 6: BIOMETRIC_INTERNAL_TOKEN comes from secrets/biometric.sops.env; deploy the biometric stack
 # first (platform-api joins its 12id-biometric network).
+# ALERT_WEBHOOK_SECRET comes from secrets/monitoring.sops.env (implement/22 C16): Alertmanager presents
+# it to POST /internal/alerts. Optional: unset, the route answers 404.
 # Phase 7 H2/H3: platform-api holds neither the agent-postgres superuser password nor the
 # agent→endorser token, and cannot resolve endorser-service.
 # Phase 9 W2 (review M11): every secret is a file under /run/secrets (NAME_FILE, NAME_URL_PASSWORD_FILE);
@@ -62,6 +64,11 @@ x-platform-env: &platform-env
 
   DRAIN_DEADLINE_MS: "15000"
 
+  # The operators' System health page (implement/22 C16): the alerts Alertmanager posts, and what is running.
+  ALERT_WEBHOOK_SECRET_FILE: /run/secrets/ALERT_WEBHOOK_SECRET
+  PLATFORM_VERSION: ${VERSION}
+  PLATFORM_ENVIRONMENT: ${ENVIRONMENT:?env file}
+
 x-platform-secrets: &platform-secrets
   - PLATFORM_DB_PASSWORD
   - PLATFORM_AGENT_TOKEN
@@ -71,6 +78,7 @@ x-platform-secrets: &platform-secrets
   - PLATFORM_ADMIN_TOKEN
   - CONSOLE_TOKEN
   - BIOMETRIC_INTERNAL_TOKEN
+  - ALERT_WEBHOOK_SECRET
 
 services:
   # One-shot: creates the platform_api database on the agent stack's Postgres and applies migrations.
@@ -123,6 +131,8 @@ secrets:
     file: ${RUN_SECRETS}/platform/CONSOLE_TOKEN
   BIOMETRIC_INTERNAL_TOKEN:
     file: ${RUN_SECRETS}/biometric/BIOMETRIC_INTERNAL_TOKEN
+  ALERT_WEBHOOK_SECRET:
+    file: ${RUN_SECRETS}/monitoring/ALERT_WEBHOOK_SECRET
 
 networks:
   agent:

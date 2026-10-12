@@ -10,6 +10,7 @@ import { biometricOverride, biometricProviderInput, biometricSettingsInput, temp
 import { publishSchemaInput } from '@/features/portal/catalogue.schemas'
 import { connectionInvitationInput } from '@/features/portal/exchanges.schemas'
 import { webhookEndpointInput } from '@/features/portal/webhook.schemas'
+import { auditRetentionDaysInput } from '@/features/tenant-data/retention.schemas'
 import { apiKeyQueryParams, catalogueQueryParams, deliveryQueryParams, exchangeQueryParams, walletQueryParams } from '@/features/tenant-data/list.params'
 import { apiKeySearch, catalogueSearch, deliverySearch, exchangeSearch, templateSearch, walletSearch } from '@/features/tenant-data/list.schemas'
 import { allPages, pageParams } from '@/lib/list-search'
@@ -367,6 +368,19 @@ export const setPortalRetention = createServerFn({ method: 'POST' })
   .handler(async ({ context, data }) => {
     assertSameOrganization(context.organization.id, data.organizationId)
     return unwrap(await platformFor(context.principal).PUT('/v1/data-retention', { body: { retentionDays: data.retentionDays } }))
+  })
+
+/** The audit log's own period (implement/22 C15): longer than the one above, because the log outlasts the data it describes. */
+export const getPortalAuditRetention = createServerFn({ method: 'GET' })
+  .middleware([tenantMiddleware()])
+  .handler(async ({ context }) => unwrap(await platformFor(context.principal).GET('/v1/audit-retention')))
+
+export const setPortalAuditRetention = createServerFn({ method: 'POST' })
+  .middleware([tenantMiddleware({ retention: ['update'] })])
+  .validator(organizationInput.extend({ auditRetentionDays: auditRetentionDaysInput }))
+  .handler(async ({ context, data }) => {
+    assertSameOrganization(context.organization.id, data.organizationId)
+    return unwrap(await platformFor(context.principal).PUT('/v1/audit-retention', { body: { auditRetentionDays: data.auditRetentionDays } }))
   })
 
 export const listPortalErasures = createServerFn({ method: 'GET' })

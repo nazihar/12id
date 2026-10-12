@@ -99,6 +99,20 @@
       "when": 1791714746568,
       "tag": "0013_verification_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1791797228100,
+      "tag": "0014_audit_retention",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1791797726742,
+      "tag": "0015_platform_alerts",
+      "breakpoints": true
     }
   ]
 }

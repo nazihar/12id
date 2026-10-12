@@ -22,6 +22,7 @@ import { Route as InviteInvitationIdRouteImport } from './routes/invite.$invitat
 import { Route as AuthedOpsIndexRouteImport } from './routes/_authed/ops/index'
 import { Route as AuthedOpsAuditRouteImport } from './routes/_authed/ops/audit'
 import { Route as AuthedOpsDeliveriesRouteImport } from './routes/_authed/ops/deliveries'
+import { Route as AuthedOpsHealthRouteImport } from './routes/_authed/ops/health'
 import { Route as AuthedOpsOperatorsRouteImport } from './routes/_authed/ops/operators'
 import { Route as AuthedTOrgSlugRouteImport } from './routes/_authed/t/$orgSlug'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
@@ -115,6 +116,11 @@ const AuthedOpsAuditRoute = AuthedOpsAuditRouteImport.update({
 const AuthedOpsDeliveriesRoute = AuthedOpsDeliveriesRouteImport.update({
   id: '/deliveries',
   path: '/deliveries',
+  getParentRoute: () => AuthedOpsRoute,
+} as any)
+const AuthedOpsHealthRoute = AuthedOpsHealthRouteImport.update({
+  id: '/health',
+  path: '/health',
   getParentRoute: () => AuthedOpsRoute,
 } as any)
 const AuthedOpsOperatorsRoute = AuthedOpsOperatorsRouteImport.update({
@@ -299,6 +305,7 @@ export interface FileRoutesByFullPath {
   '/invite/$invitationId': typeof InviteInvitationIdRoute
   '/ops/audit': typeof AuthedOpsAuditRoute
   '/ops/deliveries': typeof AuthedOpsDeliveriesRoute
+  '/ops/health': typeof AuthedOpsHealthRoute
   '/ops/operators': typeof AuthedOpsOperatorsRoute
   '/t/$orgSlug': typeof AuthedTOrgSlugRouteWithChildren
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -342,6 +349,7 @@ export interface FileRoutesByTo {
   '/invite/$invitationId': typeof InviteInvitationIdRoute
   '/ops/audit': typeof AuthedOpsAuditRoute
   '/ops/deliveries': typeof AuthedOpsDeliveriesRoute
+  '/ops/health': typeof AuthedOpsHealthRoute
   '/ops/operators': typeof AuthedOpsOperatorsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/ops': typeof AuthedOpsIndexRoute
@@ -386,6 +394,7 @@ export interface FileRoutesById {
   '/invite/$invitationId': typeof InviteInvitationIdRoute
   '/_authed/ops/audit': typeof AuthedOpsAuditRoute
   '/_authed/ops/deliveries': typeof AuthedOpsDeliveriesRoute
+  '/_authed/ops/health': typeof AuthedOpsHealthRoute
   '/_authed/ops/operators': typeof AuthedOpsOperatorsRoute
   '/_authed/t/$orgSlug': typeof AuthedTOrgSlugRouteWithChildren
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -432,6 +441,7 @@ export interface FileRouteTypes {
     | '/invite/$invitationId'
     | '/ops/audit'
     | '/ops/deliveries'
+    | '/ops/health'
     | '/ops/operators'
     | '/t/$orgSlug'
     | '/api/auth/$'
@@ -475,6 +485,7 @@ export interface FileRouteTypes {
     | '/invite/$invitationId'
     | '/ops/audit'
     | '/ops/deliveries'
+    | '/ops/health'
     | '/ops/operators'
     | '/api/auth/$'
     | '/ops'
@@ -518,6 +529,7 @@ export interface FileRouteTypes {
     | '/invite/$invitationId'
     | '/_authed/ops/audit'
     | '/_authed/ops/deliveries'
+    | '/_authed/ops/health'
     | '/_authed/ops/operators'
     | '/_authed/t/$orgSlug'
     | '/api/auth/$'
@@ -654,6 +666,13 @@ declare module '@tanstack/react-router' {
       path: '/deliveries'
       fullPath: '/ops/deliveries'
       preLoaderRoute: typeof AuthedOpsDeliveriesRouteImport
+      parentRoute: typeof AuthedOpsRoute
+    }
+    '/_authed/ops/health': {
+      id: '/_authed/ops/health'
+      path: '/health'
+      fullPath: '/ops/health'
+      preLoaderRoute: typeof AuthedOpsHealthRouteImport
       parentRoute: typeof AuthedOpsRoute
     }
     '/_authed/ops/operators': {
@@ -914,6 +933,7 @@ const AuthedOpsTenantsTenantIdRouteWithChildren =
 interface AuthedOpsRouteChildren {
   AuthedOpsAuditRoute: typeof AuthedOpsAuditRoute
   AuthedOpsDeliveriesRoute: typeof AuthedOpsDeliveriesRoute
+  AuthedOpsHealthRoute: typeof AuthedOpsHealthRoute
   AuthedOpsOperatorsRoute: typeof AuthedOpsOperatorsRoute
   AuthedOpsIndexRoute: typeof AuthedOpsIndexRoute
   AuthedOpsTenantsTenantIdRoute: typeof AuthedOpsTenantsTenantIdRouteWithChildren
@@ -923,6 +943,7 @@ interface AuthedOpsRouteChildren {
 const AuthedOpsRouteChildren: AuthedOpsRouteChildren = {
   AuthedOpsAuditRoute: AuthedOpsAuditRoute,
   AuthedOpsDeliveriesRoute: AuthedOpsDeliveriesRoute,
+  AuthedOpsHealthRoute: AuthedOpsHealthRoute,
   AuthedOpsOperatorsRoute: AuthedOpsOperatorsRoute,
   AuthedOpsIndexRoute: AuthedOpsIndexRoute,
   AuthedOpsTenantsTenantIdRoute: AuthedOpsTenantsTenantIdRouteWithChildren,

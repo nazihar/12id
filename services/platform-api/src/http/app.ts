@@ -9,6 +9,7 @@
  *   operator      /admin/* (console token + operator role, or the break-glass admin token)
  *   console only  POST /admin/audit/events (the console token alone: events it reports about itself)
  *   none          /internal/mediator/:secret, /healthz, /readyz (never proxied by the edge)
+ *   monitoring    POST /internal/alerts (Alertmanager's webhook, its own bearer secret; never proxied)
  *
  * Response schemas are enforced by the serializer, so a handler cannot leak fields that are not
  * in its schema (same rule as agent-service). Console and break-glass calls are audited (audit.ts).
@@ -39,6 +40,7 @@ import { catalogueRoutes } from './routes/catalogue.ts'
 import { dataProtectionRoutes } from './routes/data-protection.ts'
 import { CONSOLE_ONLY_TAG, consoleRoutes } from './routes/console.ts'
 import { exchangeRoutes } from './routes/exchanges.ts'
+import { healthRoutes } from './routes/health.ts'
 import { internalRoutes } from './routes/internal.ts'
 import { proofTemplateRoutes } from './routes/proof-templates.ts'
 import { publicRoutes } from './routes/public.ts'
@@ -137,7 +139,7 @@ export function buildApp(deps: AppDeps, options: BuildOptions = {}) {
   app.get('/openapi.json', { schema: { hide: true } }, async () => app.swagger())
 
   app.register(publicRoutes({ config: deps.config, readiness: deps.readiness }))
-  app.register(internalRoutes({ webhookSecret: deps.config.MEDIATOR_WEBHOOK_SECRET, wake: deps.wake, readiness: deps.readiness }))
+  app.register(internalRoutes({ webhookSecret: deps.config.MEDIATOR_WEBHOOK_SECRET, wake: deps.wake, readiness: deps.readiness, alerts: { db: deps.db, secret: deps.config.ALERT_WEBHOOK_SECRET } }))
 
   // Per-principal limits (review M4), one in-process store for the whole app.
   const limits = rateLimiter({ apiKeyPerMin: deps.config.RATE_LIMIT_API_KEY_PER_MIN, walletPerMin: deps.config.RATE_LIMIT_WALLET_PER_MIN, invitationsPer10Min: deps.config.RATE_LIMIT_INVITATION_PER_10MIN })
@@ -150,7 +152,7 @@ export function buildApp(deps: AppDeps, options: BuildOptions = {}) {
     await scope.register(catalogueRoutes({ agent: deps.agent }))
     const erasure = { db: deps.db, agent: deps.agent, biometric: deps.biometric?.client, endpoints: endpointLookup(deps.db), logger: deps.logger }
     await scope.register(exchangeRoutes({ db: deps.db, agent: deps.agent, biometric: deps.biometric?.client, gates: deps.biometric?.gates, erasure }))
-    await scope.register(dataProtectionRoutes({ db: deps.db, defaultRetentionDays: deps.config.RETENTION_DAYS }))
+    await scope.register(dataProtectionRoutes({ db: deps.db, defaultRetentionDays: deps.config.RETENTION_DAYS, defaultAuditRetentionDays: deps.config.AUDIT_RETENTION_DAYS }))
     if (deps.biometric) await scope.register(biometricRoutes({ db: deps.db, agent: deps.agent, biometric: deps.biometric.client }))
     await scope.register(proofTemplateRoutes({ db: deps.db }))
     await scope.register(walletCustomerRoutes({ db: deps.db }))
@@ -174,6 +176,7 @@ export function buildApp(deps: AppDeps, options: BuildOptions = {}) {
   app.register(async (scope) => {
     scope.addHook('onRequest', requireOperator(deps.config.PLATFORM_ADMIN_TOKEN, deps.config.CONSOLE_TOKEN))
     await scope.register(platformStatsRoutes({ db: deps.db, readiness: deps.readiness }))
+    await scope.register(healthRoutes({ db: deps.db, config: deps.config, readiness: deps.readiness }))
   })
   // What the console reports about itself (sign-ins, account changes, exports): console token only.
   app.register(auditEventRoutes({ db: deps.db, consoleToken: deps.config.CONSOLE_TOKEN }))

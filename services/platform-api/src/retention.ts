@@ -8,18 +8,21 @@
  * data until it is erased on request. Retention sends no `record.erased` webhook and writes no
  * `erasures` row: the tenant chose the period, and the row itself says when and why.
  *
- * Runs on a timer in main.ts. Idempotent; a failure for one tenant (agent unreachable) is logged and
+ * Runs on a timer in main.ts, followed by the audit log's own period (audit-retention.ts). Idempotent; a failure for one tenant (agent unreachable) is logged and
  * the next tenant goes on; the rows it could not finish are picked up by the next pass.
  */
 import { asc, gt } from 'drizzle-orm'
 import type { Logger as PinoLogger } from 'pino'
 
+import { auditRetentionOnce } from './audit-retention.ts'
 import { tenants } from './db/schema.ts'
 import { type ErasureDeps, dueForRetention, scrubExchanges, scrubOldDeliveries } from './erasure.ts'
 
 export interface RetentionDeps extends ErasureDeps {
   /** Platform default in days; 0 = keep. */
   defaultDays: number
+  /** Deployment period for audit rows in days; 0 = keep. Absent: the audit log is left alone. */
+  auditDefaultDays?: number
   now?: () => Date
   batch?: number
 }
@@ -86,13 +89,16 @@ export async function retentionOnce(deps: RetentionDeps): Promise<RetentionRepor
   return report
 }
 
-/** Runs `retentionOnce` every `intervalMs` (first pass after two minutes). Returns a stop function. */
+/** Runs `retentionOnce`, then the audit log's pass, every `intervalMs` (first pass after two minutes). Returns a stop function. */
 export function startRetention(deps: RetentionDeps, intervalMs: number) {
   let stopped = false
   let running: Promise<unknown> = Promise.resolve()
   const tick = () => {
     if (stopped) return
-    running = retentionOnce(deps).catch((error: unknown) => deps.logger.error({ err: error, component: 'retention' }, 'retention pass failed'))
+    running = retentionOnce(deps)
+      .catch((error: unknown) => deps.logger.error({ err: error, component: 'retention' }, 'retention pass failed'))
+      .then(() => (deps.auditDefaultDays === undefined ? undefined : auditRetentionOnce({ db: deps.db, logger: deps.logger, defaultDays: deps.auditDefaultDays, now: deps.now })))
+      .catch((error: unknown) => deps.logger.error({ err: error, component: 'audit-retention' }, 'audit retention pass failed'))
   }
   const first = setTimeout(tick, Math.min(120_000, intervalMs))
   const timer = setInterval(tick, intervalMs)

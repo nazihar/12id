@@ -139,7 +139,7 @@ describe('dashboard stats', { skip: db ? false : 'no test database' }, () => {
       { tenantId: acme, name: 'Acme', exchanges: 12 },
       { tenantId: globex, name: 'Globex', exchanges: 1 },
     ])
-    assert.deepEqual(stats.health, { ready: true, draining: false, checks: { database: true, agent: true, mediatorDatabase: false } })
+    assert.deepEqual(stats.health, { ready: true, draining: false, checks: { database: true, agent: true, mediatorDatabase: false }, alertsFiring: 0 })
     // The break-glass token works too.
     assert.equal((await app.inject({ method: 'GET', url: '/admin/stats', headers: { 'x-admin-token': testConfig.PLATFORM_ADMIN_TOKEN } })).statusCode, 200)
   })

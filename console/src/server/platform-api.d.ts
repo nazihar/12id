@@ -2051,6 +2051,124 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/audit-retention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the audit log period
+         * @description How long an audit row of this tenant is kept before it is deleted. Sign-ins and rows that belong to no tenant follow the deployment default.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @description The period in force, in days; 0 = audit rows are kept. */
+                            auditRetentionDays: number;
+                            /** @description The tenant's own setting; null = the deployment default applies. */
+                            tenantSetting: number | null;
+                            platformDefault: number;
+                            /** @description The shortest period that can be set (other than 0). */
+                            minimumDays: number;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
+        /** Set the audit log period */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @description Days, a year to ten years; 0 = keep everything; null = the deployment default. */
+                        auditRetentionDays: number | null;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @description The period in force, in days; 0 = audit rows are kept. */
+                            auditRetentionDays: number;
+                            /** @description The tenant's own setting; null = the deployment default applies. */
+                            tenantSetting: number | null;
+                            platformDefault: number;
+                            /** @description The shortest period that can be set (other than 0). */
+                            minimumDays: number;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/erasures": {
         parameters: {
             query?: never;
@@ -5889,7 +6007,101 @@ export interface paths {
                                 checks: {
                                     [key: string]: boolean;
                                 };
+                                alertsFiring: number;
                             };
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * System health
+         * @description The readiness checks, the alerts monitoring reported (firing now, and resolved in the last 7 days), when monitoring last reported, and the non-secret settings this deployment runs with.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** Format: date-time */
+                            checkedAt: string;
+                            version: string | null;
+                            environment: string | null;
+                            ready: boolean;
+                            draining: boolean;
+                            checks: {
+                                [key: string]: boolean;
+                            };
+                            monitoring: {
+                                connected: boolean;
+                                lastSignalAt: string | null;
+                                silent: boolean;
+                            };
+                            alerts: {
+                                firing: {
+                                    name: string;
+                                    severity: string | null;
+                                    /** @enum {string} */
+                                    status: "firing" | "resolved";
+                                    summary: string | null;
+                                    description: string | null;
+                                    labels: {
+                                        [key: string]: string;
+                                    };
+                                    /** Format: date-time */
+                                    startsAt: string;
+                                    endsAt: string | null;
+                                    /** Format: date-time */
+                                    lastReceivedAt: string;
+                                }[];
+                                resolved: {
+                                    name: string;
+                                    severity: string | null;
+                                    /** @enum {string} */
+                                    status: "firing" | "resolved";
+                                    summary: string | null;
+                                    description: string | null;
+                                    labels: {
+                                        [key: string]: string;
+                                    };
+                                    /** Format: date-time */
+                                    startsAt: string;
+                                    endsAt: string | null;
+                                    /** Format: date-time */
+                                    lastReceivedAt: string;
+                                }[];
+                            };
+                            settings: {
+                                group: string;
+                                label: string;
+                                value: string;
+                            }[];
                         };
                     };
                 };

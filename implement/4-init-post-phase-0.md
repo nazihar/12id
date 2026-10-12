@@ -249,6 +249,7 @@ Responsibilities:
 - **Wallets** (per-installation tokens), per-wallet mediator invitations, and the mediator webhook receiver that relays wake-ups to the customer (§4.8, §12.12). No device tokens are stored
 - Admin UI (the Phase 4 console reaches it through the console scope), including **aggregate stats for the console's dashboards** — per-tenant and platform-wide counters, a daily series and attention lists, computed from the mirror tables only, never through agent-service (Phase 4 C8)
 - **Console feedback, set 1 (released 2026-10-12 as platform `v0.4.0`; [`22-console-feedback.md`](22-console-feedback.md)):** the audit log also takes what the console reports about itself (sign-ins, account changes, exports; `POST /admin/audit/events`), keeps the actor's email, and is append-only; proof and face-check outcomes for the Verification page (`GET /v1/stats/verification`, `GET /v1/biometrics/checks`); one connection's activity (`GET /v1/connections/:id/activity`). All console scope only, from platform-api's tables only
+- **Console feedback, set 2 (2026-10-12, C15 and C16 built, not deployed; same document):** audit rows have a retention period of their own (`GET/PUT /v1/audit-retention`, console scope; a pass on the sweep's timer deletes what is older); the alerts Alertmanager pushes (`POST /internal/alerts`, its own bearer secret, never proxied by the edge) and the operators' health view over them (`GET /admin/health`).
 - Business-data-to-credential-attribute mapping
 - **Biometric gate** (planned, Phase 6, §2.8): policies per tenant, credential definition and proof template; the gate state; the biometric log; the SDK's biometric wallet routes; the `biometric.check_completed` webhook. Vendor code and images stay in biometric-service
 
@@ -926,7 +927,11 @@ One app, two roles: **platform operator** (all tenants) and **tenant member** (o
   - **C11 customer page:** everything on one connection.
   - **C12 export:** every main list as Excel and CSV (`write-excel-file` 4.1.1 pinned).
   - **Found on the way:** the list routes sorted with a plain `DESC` while the list indexes are `DESC NULLS LAST`, so every list page was sorted instead of read from its index (fixed, `newestFirst`); the biometric log could not be read without the gate engine (fixed).
-  - Set 2 (maker–checker, security events, notifications, operator health page) and the "not now" list are kept in the plan.
+  - The "not now" list is kept in the plan.
+- [~] **Console feedback, set 2 (approved 2026-10-12; same two documents, section "Set 2"):** two releases.
+  - **`v0.5.0`, built and passing locally 2026-10-12, not committed, not deployed.** **C15 audit log period:** audit rows are deleted after a period of their own (per organisation, default 730 days, a year at least, or kept), separate from and longer than the period for end users' data; the append-only trigger lets only that pass delete (migration `0014_audit_retention`). **C16 system health page:** Alertmanager pushes its alerts to platform-api (`POST /internal/alerts`, one new secret), and `/ops/health` shows the readiness checks, the alerts, a heartbeat from monitoring and the non-secret settings (migration `0015_platform_alerts`).
+  - **`v0.6.0`, not started.** **C17–C19 approval by a second person** for a fixed list of configuration changes, switched on per organisation.
+  - Later: security events, in-console notifications.
 
 Original checklist: tenant management; catalogue (both identifier forms); proof template builder (expiry predicate enforced); credential and connection browser; webhook delivery log.
 

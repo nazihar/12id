@@ -37,6 +37,8 @@ const EVENT_LABELS: Record<string, string> = {
   'account.member_role_changed': 'Member role changed',
   'account.member_removed': 'Member removed',
   'export.run': 'List exported',
+  // Written by platform-api's retention pass (implement/22 C15), not by a person.
+  'audit.purged': 'Old audit entries deleted',
 }
 
 /** What an audit row did, for a person: an event's name, or the call as `METHOD /route`. */

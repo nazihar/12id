@@ -1,6 +1,6 @@
 # Console feedback, set 1 — verification dashboards, customer activity, Excel/CSV export, audit, operator accounts
 
-**Status (2026-10-12):** planned and approved by the owner on 2026-10-11 (export as both Excel and CSV, owner question the same day). Set 1 is released as platform `v0.4.0` (commit `7cb5f44`; staging runs `0.4.0-rc.1`). Results are in
+**Status (2026-10-12):** planned and approved by the owner on 2026-10-11 (export as both Excel and CSV, owner question the same day). Set 1 is released as platform `v0.4.0` (commit `7cb5f44`; staging runs `0.4.0-rc.1`). Set 2 was approved on 2026-10-12 and is the section "Set 2" below. Results are in
 [`23-console-feedback-findings.md`](23-console-feedback-findings.md).
 
 ## Context
@@ -245,18 +245,204 @@ entry. `check:client` stays clean and the login page's bundle does not grow.
 - Regenerate `openapi.json` (path count must stay the same: every new route is console-only) and
   `openapi.console.json`; `npm run openapi:client` in the console.
 
-## Kept for later — set 2 (needs owner decisions; about 2–3 weeks)
-After the `v0.4.0` release (owner, 2026-10-12).
-- **Maker–checker (4):** one approver, for a fixed list of sensitive changes (biometric thresholds and
-  provider, webhook endpoint, API keys, roles, retention). No multi-level chains.
+## Set 2 — audit log period, system health page, approval by a second person
+Approved by the owner on 2026-10-12, after the `v0.4.0` release. **Status (2026-10-12): C15 and C16 are built and pass locally, uncommitted; C17–C19 are not started.** Findings: [`23-console-feedback-findings.md`](23-console-feedback-findings.md), "Set 2 — findings".
+
+What the owner decided on 2026-10-12:
+- **Audit log period:** as proposed (its own period per organisation, default 2 years, not below 1).
+- **System health page:** now.
+- **Approval by a second person (maker–checker):** now, for configuration changes. The owner listed the areas and left the choice of what is held and what is not to this plan; creating a proof template is held too (owner's comment on the plan).
+- **Security events and notifications:** later (below).
+- **Documents:** these two feedback files, no new ones.
+
+### Two releases, in this order
+| Release | Content | Rough size |
+|---|---|---|
+| `v0.5.0` | C15 audit log period, C16 system health page | about 1 week |
+| `v0.6.0` | C17–C19 approval by a second person | about 2.5 weeks |
+
+Why split: the first two are small and independent, so the customer gets them without waiting for the
+large one. Sizes are estimates.
+
+
+### C15 — Audit log period (feedback 12)
+- **Setting.** `tenants.audit_retention_days` (null = the deployment default). New config
+  `AUDIT_RETENTION_DAYS` in `services/platform-api/src/config.ts`: default 730. Allowed values for both:
+  365 to 3650, or 0 = keep everything (same meaning of 0 as the existing data period).
+- **Which period applies to a row.** A row with a tenant follows that tenant's period. A row without one
+  (operator sign-ins, platform changes, and all sign-ins, since an account can belong to several
+  organisations) follows the deployment setting.
+- **Deleting.** A second pass in `services/platform-api/src/retention.ts`, on the existing timer:
+  batches of 5,000, oldest first. The existing indexes `console_audit_tenant_idx (tenant_id, at)` and
+  `console_audit_at_idx` cover it; no new index.
+- **The append-only trigger.** Migration `0014`: `refuse_audit_change()` lets through exactly one thing,
+  a `DELETE` on `console_audit` inside a transaction that set `app.audit_purge` (transaction-local).
+  `UPDATE`, `TRUNCATE` and the `erasures` table stay refused. This guards against application bugs, as
+  before; it never stopped a database owner.
+- **The gap is explained.** Each pass that deleted rows writes one audit row (`audit.purged`, count and
+  cut-off date).
+- **The erasure log is not deleted:** it is the proof that a request was honoured.
+- **API.** `GET/PUT /v1/audit-retention` (`routes/data-protection.ts`), console only; same roles as the data
+  period (owner, admin, operator). As built it is a route of its own and not two more fields on
+  `/v1/data-retention`, which is a customer route (findings, C15, 1).
+- **Console.** A second card on the shared Data protection page
+  (`console/src/features/tenant-data/data-protection.tsx`), so it appears for the organisation and for
+  the operator's view of a tenant.
+- **Docs:** `services/platform-api/docs/data-protection.md` (it says today that the log keeps everything).
+- **Tests:** rows older than the period go and newer stay; a tenant on 0 keeps all; rows without a tenant
+  follow the deployment period; a plain `DELETE` is still refused; values below 365 are refused.
+
+### C16 — System health page for operators (feedback 17, part of 10 and 16)
+**Finding that shapes it:** Prometheus and Alertmanager listen on the host's `127.0.0.1` only
+(`infra/compose/compose.monitoring.yml`), and the console lives on a Docker network, so the console
+cannot ask them anything. Opening them to containers would also open Alertmanager's unauthenticated
+"silence" API. So the page is fed the other way round: **Alertmanager pushes, platform-api keeps.**
+platform-api is already published on the host's `127.0.0.1:3500`, and the edge already answers 404 for
+`/internal/*`.
+
+- **platform-api**
+  - Migration `0015`: `platform_alerts` (fingerprint, name, severity, summary, labels, status, started,
+    ended, last received). Resolved alerts are kept 30 days, then swept.
+  - `POST /internal/alerts` in `routes/internal.ts`: Alertmanager's webhook format, authenticated with a
+    bearer secret (`ALERT_WEBHOOK_SECRET`, compared with `tokenMatches` like the mediator webhook).
+    Without the secret the route answers 404 and the page says monitoring is not connected.
+  - `GET /admin/health` (operator or auditor): the readiness checks that exist today (database, agent
+    service, mediator database, biometric service), alerts firing now, alerts resolved in the last
+    7 days, when monitoring last reported, the platform version, and a fixed list of non-secret settings
+    (environment, public hosts, ledger, default periods, rate limits, webhook retry limits, whether
+    biometrics and mail are connected). The list is an allow-list in code; no secret can reach it.
+- **infra**
+  - `compose.monitoring.yml`: a second Alertmanager receiver (webhook to
+    `http://127.0.0.1:3500/internal/alerts`, secret read from a file) on a route with `continue: true`,
+    so mail keeps working as it does.
+  - `monitoring/alerts.yml`: a `Watchdog` alert that always fires, sent to the webhook only, every
+    5 minutes. It is how the page can say "monitoring last reported 2 minutes ago" or "nothing heard
+    for 40 minutes".
+  - `compose.platform.yml`: `PLATFORM_VERSION: ${VERSION}` (the bundle has one version for every image).
+  - One new secret, `ALERT_WEBHOOK_SECRET`, in the platform and the monitoring secret files. The owner
+    sets it with `set-secret.sh` before the deploy.
+- **Console**
+  - `/ops/health` (`operatorReadMiddleware`, so auditors see it): a status row per component, the
+    firing alerts with severity and since when, recently resolved ones, the monitoring signal, and the
+    read-only "what is running" list. Plain HTML; no chart.
+  - "System health" in the operator sidebar (`components/shell/use-shell-model.ts`); the health strip on
+    `/ops` (`routes/_authed/ops/index.tsx`) links to it and shows the number of firing alerts.
+- **Cost:** one table, two routes, one page, one receiver and one rule in the monitoring config, one
+  secret. No new service and no new network path.
+- **Why this also helps later:** in-console notifications (deferred) can read the same table.
+- **Tests:** the webhook (wrong secret, firing then resolved, a repeated firing does not duplicate);
+  the allow-list holds no secret name; Playwright: page shows a firing alert, an auditor can open it.
+
+
+### C17–C19 — Approval by a second person
+
+#### The rule I chose
+A change needs a second person when it **opens access, sends data somewhere else, weakens a check, or
+cannot be undone**. A change that only **closes** access, or is day-to-day work, never waits: an
+emergency stop must not depend on a colleague being available.
+
+| Area | Needs a second person | Does not |
+|---|---|---|
+| API keys | create | revoke |
+| Webhook | set or change the endpoint, rotate the signing secret, remove the endpoint | retry a delivery |
+| Biometric provider | set, change, remove | test the connection |
+| Face checks | on/off and the default policy; the policy of a credential definition; the policy or rule of a proof template | |
+| Proof templates | create, change, delete (owner, 2026-10-12: creating is held too) | |
+| Catalogue | publish a schema, publish a credential definition (permanent on the ledger) | mark a schema deprecated |
+| Data protection | the data period and the audit log period | erasure on request |
+| Members | invite, change a role | remove a member, cancel an invitation |
+| Operators | invite, change a role, unban | ban, sign out everywhere, delete |
+| Approvals | switching them off | switching them on |
+
+Reasons for the less obvious ones:
+- **Erasure is not held.** The customer's backend can erase with its API key, so holding the console's
+  button would protect nothing. Every erasure already needs a reason and is logged.
+- **Operators are included** although they were not on the list. An operator could otherwise create a
+  second operator account and approve their own requests with it.
+- **Any change to a face-check setting is held**, stricter or looser. Judging the direction of a rule
+  with conditions is error-prone.
+- **The break-glass admin token stays a bypass**, as it is for everything else. It is audited.
+
+#### How it works
+- **Off by default, switched on per organisation** (a single-owner organisation cannot use it). Switching
+  on needs at least two people who can approve. For operator accounts there is one deployment setting,
+  `OPERATOR_APPROVALS`.
+- **Who may approve:** someone who could have made the change themselves, and who is not the person who
+  asked. Member changes: another owner, or an operator.
+- **A request** waits 7 days, then expires. The person who asked can cancel it. A rejection needs a reason.
+- **One open request per thing at a time** (one for the webhook endpoint, one per template, and so on;
+  requests for different things wait side by side). Why:
+  - The approver sees "before → after". With two open requests for the same thing, the second one's
+    "before" is wrong as soon as the first is approved, so the approver would be agreeing to something
+    other than what the screen showed.
+  - Whichever is approved last would silently undo the other, although both were approved.
+  - It costs the person asking nothing: they cancel their request and send the corrected one. Anyone
+    else who wants a different change sees who is already waiting and why.
+  - It does not apply to things that are new each time: API keys, invitations, new templates and new
+    catalogue entries can have any number of open requests.
+- **Approved changes take effect at once.** Three kinds hand a secret to the person who asked (a new API
+  key, a new webhook endpoint, a new signing secret). Those wait for that person to press "Apply", and
+  the secret is shown to them once, as today.
+- **The change is checked again when it is applied.** If it no longer fits (the template was deleted
+  meanwhile), the request ends as "failed" with the reason.
+- **Audit:** asked, approved, rejected, cancelled, expired and applied are audit rows; the change's own
+  row names both people.
+- **How the approver finds out:** an "Approvals" entry in the sidebar with a count. Mail comes with the
+  notifications work, later.
+
+#### C17 — platform-api: requests and the hold
+- Migration `0016`: `change_requests` (tenant or none, type, the held call, summary, value before,
+  who asked, who decided, reason, status, expiry) and `tenants.approvals_required`.
+  Lists use `newestFirst()` from `src/http/list.ts`.
+- **One hold for every route, not code per route.** A `preHandler` in the customer scope
+  (`src/http/app.ts`) and on the two operator routes that create API keys. A route opts in with
+  `config: { approval: '<type>' }`. For a console caller of a tenant that requires approval, the hook
+  stores the validated call and answers `202`. Each further route costs one config line and a summary.
+  `requireTenantPrincipal` already loads the tenant row, so the hook adds no query.
+- **Applying** replays the stored call inside platform-api with Fastify's `app.inject`, so the route's
+  own validation and checks run again and the normal audit row is written.
+- Routes: `GET /v1/change-requests`, `POST …/:id/approve | reject | cancel | apply`, and
+  `GET/PUT /v1/approvals` (the switch); operator twins under `/admin` for requests without a tenant.
+- Every held route is already console-only, so the customer `openapi.json` does not change.
+- **Biometric provider.** Its configuration may carry vendor secrets and is by rule never stored in
+  platform-api (review L10). So biometric-service gets a "waiting" slot next to the active
+  configuration (stored encrypted as usual), and platform-api holds only the provider's name and its
+  non-secret part. This is the one change outside platform-api and the console; about a day.
+- Requests that are decided are deleted with the audit log period (C15).
+
+#### C18 — console: members and operators
+These run through Better Auth in the console, not through platform-api. The request is still stored in
+platform-api (one list, one set of rules); on approval the console performs the Better Auth call and
+reports the result. Touches `features/portal/members.functions.ts` and
+`features/operators/operators.functions.ts`. Enforced in the console, like every account action today.
+
+#### C19 — console: the Approvals pages
+- `/t/$orgSlug/approvals`, `/ops/tenants/$tenantId/approvals`, `/ops/approvals`: "Waiting" and
+  "History" tabs on the existing `DataTable`; a details dialog (summary, before and after, the held call
+  redacted as in the audit log's Details); Approve, Reject with a reason, Cancel, Apply.
+- The switch and the fixed list of what needs approval sit at the top of the page.
+- Every page with a held change shows a notice ("a change to the webhook endpoint is waiting for
+  approval, asked by …") and its form answers "sent for approval". One helper for the roughly 15 server
+  functions in `features/portal/portal-data.functions.ts` and `features/tenant-data/`.
+- Auditors see the lists and cannot decide. The audit log gets an "Approvals" kind.
+
+#### Tests for C17–C19
+- platform-api: held when on, direct when off; the asker cannot approve; a role that could not make the
+  change cannot approve; a second request for the same thing is refused; expiry; apply re-validates and
+  can fail; the secret reaches only the asker; an API key caller is unaffected; switching off is itself
+  held; the provider's configuration is never in `change_requests`; two new API keys can wait at the
+  same time while a second request for the same webhook endpoint is refused.
+- Console: the guarded-functions test covers the new functions; Playwright with two accounts: ask,
+  approve, see the change; reject; create an API key and collect it; invite a member.
+
+---
+
+### Later (owner, 2026-10-12)
 - **Security events (9, part of 1):** biometric lockouts, "live but wrong face", repeated declines, with
   an open / reviewed status. Built on C10's checks list. Not a fraud suite: the bank's own fraud system
   sees the business data.
-- **In-console notifications (10, 11):** a bell plus mail, fed by the attention lists and the security
-  events.
-- **Audit log period (12):** its own retention period per organisation on the Data protection page (default 2 years, not below 1), separate from the 90-day period for end users' data, plus one deployment setting for the entries that belong to no organisation. **Decided by the owner on 2026-10-12**; the reasoning is in the findings, "Open, for the owner" 1.
-- **System health page for operators (17, part of 10):** service status and firing alerts read from
-  Prometheus and Alertmanager; a read-only "what is running" panel (covers the useful part of 16).
+- **In-console notifications (10, 11):** a bell plus mail, fed by the attention lists, the security
+  events, the alerts of C16 and the approval requests of C17.
 
 ## Not now, with the reason
 - **Location analytics (14):** a new category of personal data, against the privacy model. Only on a

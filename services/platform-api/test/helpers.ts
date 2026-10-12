@@ -39,7 +39,7 @@ export async function testDatabase(): Promise<{ db: Database; close: () => Promi
     }
   }
   if (!shared) return null
-  const tables = [schema.erasures, schema.exchangeGateEvents, schema.exchangeGates, schema.credentialDefinitionPolicies, schema.biometricSettings, schema.consoleAudit, schema.webhookDeliveries, schema.webhookEndpoints, schema.idempotencyKeys, schema.proofTemplates, schema.proofs, schema.credentials, schema.connections, schema.wallets, schema.apiKeys, schema.outboxCursor, schema.tenants]
+  const tables = [schema.platformAlerts, schema.erasures, schema.exchangeGateEvents, schema.exchangeGates, schema.credentialDefinitionPolicies, schema.biometricSettings, schema.consoleAudit, schema.webhookDeliveries, schema.webhookEndpoints, schema.idempotencyKeys, schema.proofTemplates, schema.proofs, schema.credentials, schema.connections, schema.wallets, schema.apiKeys, schema.outboxCursor, schema.tenants]
   // The audit and the erasure log refuse DELETE (migration 0012); only this cleanup switches that off.
   const appendOnly = ['console_audit', 'erasures']
   for (const name of appendOnly) await shared.db.execute(sql.raw(`alter table ${name} disable trigger user`))
@@ -90,6 +90,7 @@ export const testConfig: PlatformConfig = {
   MEDIATOR_INVITATION_TTL_HOURS: 24,
   MEDIATOR_QUEUE_TTL_DAYS: 30,
   RETENTION_DAYS: 90,
+  AUDIT_RETENTION_DAYS: 730,
   IDEMPOTENCY_TTL_MS: 60_000,
   DRAIN_DEADLINE_MS: 1000,
   BIOMETRIC_EXPIRY_POLL_MS: 30_000,

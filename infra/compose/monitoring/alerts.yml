@@ -1,6 +1,16 @@
 groups:
   - name: platform
     rules:
+      # Always fires. Alertmanager sends it to platform-api every five minutes and to nobody else
+      # (compose.monitoring.yml): it is how the console's System health page knows that monitoring
+      # is alive (implement/22-console-feedback.md C16). No mail is sent for it.
+      - alert: Watchdog
+        expr: vector(1)
+        labels:
+          severity: none
+        annotations:
+          summary: 'Heartbeat from monitoring; always firing'
+
       - alert: TargetDown
         expr: up == 0
         for: 2m

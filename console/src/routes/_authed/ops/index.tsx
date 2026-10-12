@@ -1,6 +1,6 @@
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
-import { CircleAlertIcon, CircleCheckIcon, PauseCircleIcon } from 'lucide-react'
+import { CircleAlertIcon, CircleCheckIcon, PauseCircleIcon, TriangleAlertIcon } from 'lucide-react'
 
 import { type AttentionItem, AttentionList } from '@/components/dashboard/attention-list'
 import { ActivityChart } from '@/components/dashboard/charts'
@@ -14,6 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { type OperatorDashboard, operatorDashboardQuery } from '@/features/dashboard/dashboard.queries'
 import { parseDashboardSearch, rangeOf } from '@/features/dashboard/dashboard.schemas'
 import { auditAction, auditResult } from '@/features/ops/audit-events'
+import { CHECK_LABELS } from '@/features/ops/health-format'
 import { percent } from '@/features/verification/verification-format'
 import { auditLogQuery } from '@/features/ops/ops.queries'
 import { formatDateTime } from '@/lib/format'
@@ -27,8 +28,6 @@ export const Route = createFileRoute('/_authed/ops/')({
   errorComponent: RouteError,
   component: OperatorDashboardPage,
 })
-
-const CHECK_LABELS: Record<string, string> = { database: 'Platform database', agent: 'Agent service', mediatorDatabase: 'Mediator database' }
 
 function HealthStrip({ health }: { health: OperatorDashboard['health'] }) {
   const checks = Object.entries(health.checks)
@@ -47,6 +46,16 @@ function HealthStrip({ health }: { health: OperatorDashboard['health'] }) {
           platform-api draining
         </Badge>
       )}
+      {/* What monitoring reports (implement/22 C16); the list is on the System health page. */}
+      {health.alertsFiring > 0 && (
+        <Badge variant="destructive" className="gap-1" data-testid="alerts-firing-count">
+          <TriangleAlertIcon className="size-3" aria-hidden />
+          {health.alertsFiring} alert{health.alertsFiring === 1 ? '' : 's'} firing
+        </Badge>
+      )}
+      <Link to="/ops/health" className="text-sm text-muted-foreground underline-offset-4 hover:underline">
+        System health
+      </Link>
     </div>
   )
 }

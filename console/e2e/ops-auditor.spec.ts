@@ -64,6 +64,8 @@ test('an auditor reads the operator area and changes nothing; an operator edits 
   await expect(auditor.getByTestId('stat-tenants')).toBeVisible()
   await auditor.getByRole('link', { name: 'Audit log', exact: true }).click()
   await expect(auditor.getByTestId('audit-table')).toContainText('Operator invited')
+  await auditor.getByRole('link', { name: 'System health', exact: true }).click()
+  await expect(auditor.getByTestId('health-services')).toContainText('Platform database')
 
   // And nothing that changes anything.
   await auditor.getByRole('link', { name: 'Tenants', exact: true }).click()

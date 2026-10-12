@@ -28,6 +28,12 @@ export const tenants = pgTable('tenants', {
    * 0 = keep until erased by request.
    */
   retentionDays: integer('retention_days'),
+  /**
+   * Days an audit row of this tenant is kept before it is deleted (implement/22 C15); null =
+   * AUDIT_RETENTION_DAYS, 0 = keep everything. Longer than `retentionDays` on purpose: the audit outlasts
+   * the data it describes.
+   */
+  auditRetentionDays: integer('audit_retention_days'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [uniqueIndex('tenants_agent_tenant_unique').on(table.agentTenantId)])
@@ -289,6 +295,29 @@ export const consoleAudit = pgTable('console_audit', {
    */
   changes: jsonb('changes').$type<Record<string, unknown>>(),
 }, (table) => [index('console_audit_at_idx').on(table.at), index('console_audit_tenant_idx').on(table.tenantId, table.at), index('console_audit_actor_idx').on(table.actor, table.at.desc())])
+
+// --- Monitoring alerts (implement/22-console-feedback.md C16) --------------------------------
+export const ALERT_STATUSES = ['firing', 'resolved'] as const
+
+/**
+ * What Alertmanager reported (`alerts.ts`), for the operators' system health page. One row per
+ * occurrence of an alert; a repeated notification updates it. Not tenant data.
+ */
+export const platformAlerts = pgTable('platform_alerts', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  /** Alertmanager's hash of the alert's labels: the same alert has the same fingerprint every time it fires. */
+  fingerprint: text('fingerprint').notNull(),
+  name: text('name').notNull(),
+  severity: text('severity'),
+  status: text('status', { enum: ALERT_STATUSES }).notNull(),
+  summary: text('summary'),
+  description: text('description'),
+  labels: jsonb('labels').$type<Record<string, string>>().notNull(),
+  startsAt: timestamp('starts_at', { withTimezone: true }).notNull(),
+  endsAt: timestamp('ends_at', { withTimezone: true }),
+  firstReceivedAt: timestamp('first_received_at', { withTimezone: true }).notNull().defaultNow(),
+  lastReceivedAt: timestamp('last_received_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [uniqueIndex('platform_alerts_occurrence_unique').on(table.fingerprint, table.startsAt), index('platform_alerts_status_idx').on(table.status, table.lastReceivedAt)])
 
 // --- Biometric gate (Phase 6, implement/15-phase-6-biometric.md B3) ------------------------
 // Vendor configuration and images live in biometric-service; these tables hold policy, the gate

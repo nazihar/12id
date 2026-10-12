@@ -4,7 +4,7 @@
  * every area declares its navigation here and nowhere else.
  */
 import { useMatchRoute, useMatches, useRouteContext } from '@tanstack/react-router'
-import { BuildingIcon, ChartColumnIcon, FileBadgeIcon, GlobeIcon, KeyRoundIcon, LayoutDashboardIcon, type LucideIcon, ScanFaceIcon, ScrollTextIcon, ShieldCheckIcon, ShieldUserIcon, SmartphoneIcon, UsersIcon, WalletIcon, WebhookIcon } from 'lucide-react'
+import { ActivityIcon, BuildingIcon, ChartColumnIcon, FileBadgeIcon, GlobeIcon, KeyRoundIcon, LayoutDashboardIcon, type LucideIcon, ScanFaceIcon, ScrollTextIcon, ShieldCheckIcon, ShieldUserIcon, SmartphoneIcon, UsersIcon, WalletIcon, WebhookIcon } from 'lucide-react'
 
 import type { TenantRole } from '@/lib/permissions'
 
@@ -44,6 +44,7 @@ const OPS_ITEMS: NavItem[] = [
   { label: 'Tenants', to: '/ops/tenants', icon: BuildingIcon },
   { label: 'Dead deliveries', to: '/ops/deliveries', icon: WebhookIcon },
   { label: 'Audit log', to: '/ops/audit', icon: ScrollTextIcon },
+  { label: 'System health', to: '/ops/health', icon: ActivityIcon },
   { label: 'Operators', to: '/ops/operators', icon: ShieldUserIcon },
 ]
 

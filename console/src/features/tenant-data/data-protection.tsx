@@ -2,7 +2,7 @@
  * Data protection UI (Phase 7 H1), shared by the operator console and the tenant portal:
  *   - "Erase personal data" on a finished exchange or a connection; operators must give a reason;
  *   - the "erased" mark next to a scrubbed record;
- *   - the retention period card and the erasure log.
+ *   - the retention period card, the audit log's own period (implement/22 C15) and the erasure log.
  * Every action goes through callbacks, so the same UI runs over operator and portal server functions.
  */
 import { type QueryKey, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -27,6 +27,8 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { formatDateTime } from '@/lib/format'
 import type { Page } from '@/lib/list-search'
+
+import { AUDIT_RETENTION_MAX_DAYS, validAuditRetentionDays } from './retention.schemas'
 
 export type EraseKind = 'connection' | 'credential' | 'proof'
 
@@ -109,41 +111,67 @@ export interface Retention {
   platformDefault: number
 }
 
-const describeDays = (days: number) => (days === 0 ? 'kept until erased on request' : `${days} day${days === 1 ? '' : 's'}`)
+/** The audit log's own period (implement/22 C15). */
+export interface AuditRetention {
+  auditRetentionDays: number
+  tenantSetting: number | null
+  platformDefault: number
+  minimumDays: number
+}
 
-/** The retention period, with an editor when `save` is given (owners, admins, operators). */
-export function RetentionCard({ retention, save, invalidateKey }: { retention: Retention; save?: (retentionDays: number | null) => Promise<unknown>; invalidateKey: QueryKey }) {
+const describeDays = (days: number) => (days === 0 ? 'kept until erased on request' : `${days} day${days === 1 ? '' : 's'}`)
+/** 730 days reads better as "730 days (2 years)"; a period that is not whole years stays in days. */
+const describeAuditDays = (days: number) => (days === 0 ? 'kept, never deleted' : days % 365 === 0 ? `${days} days (${days / 365} year${days === 365 ? '' : 's'})` : `${days} days`)
+
+interface PeriodCardProps {
+  title: string
+  description: string
+  /** The period in force, the organisation's own setting (null = the platform default) and that default, in days. */
+  inForce: number
+  tenantSetting: number | null
+  platformDefault: number
+  describe: (days: number) => string
+  /** Whether a typed whole number may be saved. */
+  valid: (days: number) => boolean
+  hint: string
+  saved: string
+  testId: string
+  save?: (days: number | null) => Promise<unknown>
+  invalidateKey: QueryKey
+}
+
+/** One period in days, with an editor when `save` is given (owners, admins, operators). */
+function PeriodCard({ title, description, inForce, tenantSetting, platformDefault, describe, valid, hint, saved, testId, save, invalidateKey }: PeriodCardProps) {
   const hydrated = useHydrated()
   const queryClient = useQueryClient()
   const inputId = useId()
-  const [value, setValue] = useState(retention.tenantSetting === null ? '' : String(retention.tenantSetting))
+  const [value, setValue] = useState(tenantSetting === null ? '' : String(tenantSetting))
   const mutation = useMutation({
     mutationFn: (days: number | null) => save!(days),
     onSuccess: async () => {
-      toast.success('Retention period saved.')
+      toast.success(saved)
       await queryClient.invalidateQueries({ queryKey: invalidateKey })
     },
   })
   const parsed = value.trim() === '' ? null : Number(value)
-  const invalid = parsed !== null && (!Number.isInteger(parsed) || parsed < 0 || parsed > 3650)
+  const invalid = parsed !== null && (!Number.isInteger(parsed) || !valid(parsed))
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Retention period</CardTitle>
-        <CardDescription>
-          How long personal data is kept after an exchange finishes: credential attribute values, disclosed proof values, webhook delivery bodies and biometric scores. After that it is erased automatically; the exchanges stay in your lists and dashboards.
-        </CardDescription>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        <p className="text-sm" data-testid="retention-in-force">
-          In force: <strong>{describeDays(retention.retentionDays)}</strong>
-          {retention.tenantSetting === null ? ` (the platform default)` : ` (your setting; the platform default is ${describeDays(retention.platformDefault)})`}
+        <p className="text-sm" data-testid={`${testId}-in-force`}>
+          In force: <strong>{describe(inForce)}</strong>
+          {tenantSetting === null ? ` (the platform default)` : ` (your setting; the platform default is ${describe(platformDefault)})`}
         </p>
         {save && (
           <form
             noValidate
             method="post"
             className="flex flex-wrap items-end gap-2"
+            data-testid={`${testId}-form`}
             onSubmit={(event) => {
               event.preventDefault()
               if (!invalid) mutation.mutate(parsed)
@@ -151,13 +179,13 @@ export function RetentionCard({ retention, save, invalidateKey }: { retention: R
           >
             <div className="grid gap-1.5">
               <Label htmlFor={inputId}>Days</Label>
-              <Input id={inputId} inputMode="numeric" className="w-40" value={value} readOnly={!hydrated} aria-invalid={invalid} placeholder={`default (${retention.platformDefault})`} onChange={(event) => setValue(event.target.value)} />
+              <Input id={inputId} inputMode="numeric" className="w-40" value={value} readOnly={!hydrated} aria-invalid={invalid} placeholder={`default (${platformDefault})`} onChange={(event) => setValue(event.target.value)} />
             </div>
             <Button type="submit" disabled={!hydrated || invalid || mutation.isPending}>
               {mutation.isPending && <Spinner />}
               Save
             </Button>
-            <p className="basis-full text-xs text-muted-foreground">Empty = the platform default. 0 = keep until erased on request. At most 3650.</p>
+            <p className="basis-full text-xs text-muted-foreground">{hint}</p>
           </form>
         )}
         {mutation.error && (
@@ -167,6 +195,49 @@ export function RetentionCard({ retention, save, invalidateKey }: { retention: R
         )}
       </CardContent>
     </Card>
+  )
+}
+
+/** The retention period, with an editor when `save` is given (owners, admins, operators). */
+export function RetentionCard({ retention, save, invalidateKey }: { retention: Retention; save?: (retentionDays: number | null) => Promise<unknown>; invalidateKey: QueryKey }) {
+  return (
+    <PeriodCard
+      title="Retention period"
+      description="How long personal data is kept after an exchange finishes: credential attribute values, disclosed proof values, webhook delivery bodies and biometric scores. After that it is erased automatically; the exchanges stay in your lists and dashboards."
+      inForce={retention.retentionDays}
+      tenantSetting={retention.tenantSetting}
+      platformDefault={retention.platformDefault}
+      describe={describeDays}
+      valid={(days) => days >= 0 && days <= 3650}
+      hint="Empty = the platform default. 0 = keep until erased on request. At most 3650."
+      saved="Retention period saved."
+      testId="retention"
+      save={save}
+      invalidateKey={invalidateKey}
+    />
+  )
+}
+
+/**
+ * The audit log's period. It is a setting of its own, and a longer one: the log has to outlast the
+ * data it describes, or the record that someone revealed or erased a person's data would go with it.
+ */
+export function AuditRetentionCard({ retention, save, invalidateKey }: { retention: AuditRetention; save?: (auditRetentionDays: number | null) => Promise<unknown>; invalidateKey: QueryKey }) {
+  return (
+    <PeriodCard
+      title="Audit log period"
+      description="How long the audit log keeps its entries about this organisation: who changed which setting, who revealed or erased personal data, and who exported a list. Older entries are deleted. This period is separate from the one above and longer on purpose: the log has to outlast the data it describes. Sign-ins are kept for the platform's period."
+      inForce={retention.auditRetentionDays}
+      tenantSetting={retention.tenantSetting}
+      platformDefault={retention.platformDefault}
+      describe={describeAuditDays}
+      valid={validAuditRetentionDays}
+      hint={`Empty = the platform default. 0 = keep everything. Otherwise ${retention.minimumDays} to ${AUDIT_RETENTION_MAX_DAYS} days: the log is kept for a year at least.`}
+      saved="Audit log period saved."
+      testId="audit-retention"
+      save={save}
+      invalidateKey={invalidateKey}
+    />
   )
 }
 
