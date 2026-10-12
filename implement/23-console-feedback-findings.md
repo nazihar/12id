@@ -1,6 +1,6 @@
 # Console feedback, set 1 — findings
 
-**Plan:** [22-console-feedback.md](22-console-feedback.md). **Status (2026-10-12): set 1 (C10–C14) is built and passes locally. Nothing is deployed and nothing is committed.**
+**Plan:** [22-console-feedback.md](22-console-feedback.md). **Status (2026-10-12): set 1 (C10–C14) is committed (`7cb5f44`) and runs on staging as `v0.4.0-rc.1`. The checks that need no webhook receiver pass there; `smoke:platform-credo` and `smoke:biometric-credo` are not run yet, and `v0.4.0` is not tagged until they are** (see "On staging" below).
 
 | Item | State |
 |---|---|
@@ -12,8 +12,9 @@
 | List order (found on the way) | **fixed, local.** Every list page is read from its index again |
 | Biometric log without the gate engine (found on the way) | **fixed, local** |
 | Final local run | **2026-10-12, all green.** platform-api: `tsc` clean, `npm test` 131/131 (111 before this work), `openapi.json` 34 paths (unchanged), `openapi.console.json` 55 → 59. Console: `tsc` clean, Vitest 75/75 (44 before), `vite build` and `check:client` clean, the Excel writer is a 71 KB chunk of its own. Playwright against a local platform-api, one run: 9/9 (`auth` 2, `export`, `lists`, `ops`, `ops-audit`, `ops-auditor`, `portal`, `verification`). Not run: `biometrics.spec.ts`, any staging smoke, the phone |
+| Staging | **2026-10-12, `0.4.0-rc.1`.** Deployed clean; `console-feedback-check` 19/19, `e2e:staging` 4/4 (one spec is new), `conditional-gate-check` 7/7. Not run: the two Credo smokes, the phone |
 
-Every claim below comes from a local run on 2026-10-11 or 2026-10-12, or a read of the installed source on those dates.
+Every claim below comes from a local run on 2026-10-11 or 2026-10-12, or a read of the installed source on those dates; the section "On staging" comes from staging on 2026-10-12.
 
 ---
 
@@ -230,9 +231,36 @@ Not taken: the npm `xlsx` package (stale on the registry) and `exceljs` (a large
 2. **Tenant suspension** does not exist (statuses are provisioning, ready, failed). Not in the checklist; likely to come up with it.
 3. **"3D liveness":** the provider is AWS Rekognition Face Liveness; FaceTec is designed for and not built.
 4. **Set 2 comes after this release** (owner, 2026-10-12). It needs decisions before any build: which changes need a second person (maker–checker), what counts as a security event, who is notified of what, and the audit period above.
-5. **Not run in this work:** `biometrics.spec.ts` (needs a local biometric-service), every staging smoke, and the phone. Nothing here changes the SDK, agent-service or biometric-service.
+5. **Not run in this work:** `biometrics.spec.ts` (needs a local biometric-service), `smoke:platform-credo` and `smoke:biometric-credo` on staging (they need the `-R 3200` tunnel, which the owner opens), and the phone. Nothing here changes the SDK, agent-service or biometric-service. `v0.4.0` waits for the two smokes.
 
-## Deploy notes (when this goes to staging)
+## On staging (2026-10-12, `v0.4.0-rc.1`)
+Commit `7cb5f44` on `master` (owner: "Commit and release"); CI green (`ci-services`, `ci-console`, `docs`). Tag `v0.4.0-rc.1` on that commit; `release-images` built it (run 38207514881). Deployed the same day with `deploy.sh`, seven stacks, 254 s, no failed step.
+
+| Check on `0.4.0-rc.1` | Result |
+|---|---|
+| Containers, one-shot jobs | all healthy; the migration and role jobs exited 0 |
+| `check-inspect-clean`, monitoring | 0 of 32 containers with a secret in their config; 22/22 targets up; no alert firing |
+| Bundle against the VM's tree | compose files, scripts and systemd units identical; only `release.env` changed. Rollback: `infra/compose/release.env.prev-0.3.0-rc.1` on the VM |
+| Migrations | platform-api `0012_audit_events` and `0013_verification_indexes`, console `0001_last_sign_in` applied |
+| `0012` without a superuser | `refuse_audit_change()` and its four triggers exist and are owned by `platform_api`: the service role created them itself, as expected after H3 |
+| Append-only, on the real table | `UPDATE`, `DELETE` and `TRUNCATE` on `console_audit` each refused (each tried in a transaction and rolled back); 762 rows before and after |
+| From outside | `POST https://api.<domain>/admin/audit/events` → 404 with and without `X-Console-Token`; `GET /v1/stats/verification` without credentials → 401 |
+| `infra/smoke/console-feedback-check.ts` (new, creates nothing) | **19/19** on the biometric smoke tenant (95 face checks, 131 attempts): an API key gets 403 on the three console-only routes; proof outcomes, face-check outcomes, attempts and rejection reasons each add up; the dashboard carries the same headline numbers; the checks list filters; one connection's activity matches the lists narrowed to it; an auditor reads everything masked, cannot create an API key (403 "auditors are read-only", key count unchanged) and cannot reveal |
+| `e2e:staging` | **4/4** in one run: the three existing specs, and the new `staging-feedback.spec.ts` |
+| `staging-feedback.spec.ts` (new) | as an operator in a browser, under the deployed Content-Security-Policy with no refusal: the Verification page on real data (27 proof requests, 26 verified; 95 face checks, 69 passed, 19 failed, 3 expired, 4 cancelled), a check's biometric log, the 95 checks exported as CSV (96 lines, BOM) and as Excel (a real workbook), the customer page of one connection, and the sign-in and both exports in the audit log under the operator's email |
+| Audit log after the browser runs | every sign-in is there as `auth.sign_in` with the email, the method ("authenticator app"), the network address and the browser; the changes made by the specs carry the actor's email; `export.run` rows say list, format, filters and row count (`checks`, 95, `csv` and `xlsx`) |
+| Last sign-in | set for the two accounts that signed in since the deploy (2 of 10); the others read "never" until they do |
+| `conditional-gate-check` (regression) | 7/7 |
+
+**Seen on real data, not a defect:** the "By template" table lists nine rows named "biometric proof". They are nine templates, one per smoke run, that share a name; the table counts per template, not per name.
+
+**How `release.env` was made this time.** `release.sh` writes it from the registry digests of the commit's `sha-<short>` tags, and the release page carries the result. The GitHub token for downloading that asset comes from `git credential fill`, and on 2026-10-12 the credential helper stopped answering there (it wanted a window; `git push` kept working). So the nine digests of `sha-7cb5f44` were read from the registry on the VM and written in the same form. The method was checked first against the 0.3.0 release, whose file is known.
+
+**Not run on staging, and why.**
+- `smoke:platform-credo` and `smoke:biometric-credo`: their webhook receiver sits behind the `-R 3200` tunnel, which the owner opens. Every earlier release ran both before its final tag, so `v0.4.0` is not tagged yet.
+- The phone: nothing in this release reaches the SDK, agent-service or biometric-service code.
+
+## Deploy notes
 - One platform release (`v0.4.0-rc.1`): platform-api and console images both change.
 - Migrations: platform-api `0012_audit_events`, `0013_verification_indexes`; console `0001_last_sign_in`. All additive. `0012` creates a function and four triggers: the service role owns its tables (H3), so no superuser step is expected; check it on staging as `pg_trgm` was checked in C9.
 - After the deploy, check from outside that `POST https://api.<domain>/admin/audit/events` answers 404, with and without `X-Console-Token`.

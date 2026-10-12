@@ -1,6 +1,6 @@
 # Console feedback, set 1 — verification dashboards, customer activity, Excel/CSV export, audit, operator accounts
 
-**Status (2026-10-12):** planned and approved by the owner on 2026-10-11 (export as both Excel and CSV, owner question the same day). Set 1 is built and passes locally; nothing is deployed. Results are in
+**Status (2026-10-12):** planned and approved by the owner on 2026-10-11 (export as both Excel and CSV, owner question the same day). Set 1 is committed (`7cb5f44`) and on staging as `v0.4.0-rc.1`; `v0.4.0` waits for the two Credo smokes. Results are in
 [`23-console-feedback-findings.md`](23-console-feedback-findings.md).
 
 ## Context

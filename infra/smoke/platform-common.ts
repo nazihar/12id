@@ -53,25 +53,28 @@ export function platformClient(baseUrl: string, bearer: string): PlatformClient 
  * token never leaves the VM. The request travels base64-encoded in an env var and the script on
  * stdin, so nothing needs shell quoting.
  *
+ * `role` is the console role the call is made with (`owner` unless a check is about another role,
+ * such as the read-only `auditor`).
+ *
  * Env: PLATFORM_TENANT_ID (printed by platform-bootstrap.ts), VM_SSH (default
  * ubuntu@123.176.58.72), VM_SSH_KEY (default ~/.ssh/12id_staging_ed25519), PLATFORM_CONTAINER.
  */
-export function consoleClient(tenantId = env('PLATFORM_TENANT_ID')): PlatformClient {
+export function consoleClient(tenantId = env('PLATFORM_TENANT_ID'), role = 'owner'): PlatformClient {
   const target = env('VM_SSH', 'ubuntu@123.176.58.72')
   const key = env('VM_SSH_KEY', `${homedir()}/.ssh/12id_staging_ed25519`)
   const container = env('PLATFORM_CONTAINER', 'platform-platform-api-1')
   const script = `
-const { method, path, body, tenant } = JSON.parse(Buffer.from(process.env.REQ, 'base64').toString())
+const { method, path, body, tenant, role, extra } = JSON.parse(Buffer.from(process.env.REQ, 'base64').toString())
 // Phase 9 M11: the token is a mounted secret file (CONSOLE_TOKEN_FILE), no longer an env value.
 const token = process.env.CONSOLE_TOKEN_FILE ? (await import('node:fs')).readFileSync(process.env.CONSOLE_TOKEN_FILE, 'utf8').trim() : process.env.CONSOLE_TOKEN
-const headers = { 'x-console-token': token, 'x-console-actor': 'smoke', 'x-console-role': 'owner', 'x-console-tenant': tenant }
+const headers = { 'x-console-token': token, 'x-console-actor': 'smoke', 'x-console-role': role, 'x-console-tenant': tenant, ...extra }
 if (body !== undefined) headers['content-type'] = 'application/json'
 const res = await fetch('http://127.0.0.1:3500' + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) })
 const json = await res.json().catch(() => ({}))
 process.stdout.write(JSON.stringify({ status: res.status, json }))
 `
-  async function call<T>(method: string, path: string, body?: unknown) {
-    const req = Buffer.from(JSON.stringify({ method, path, body, tenant: tenantId })).toString('base64')
+  async function call<T>(method: string, path: string, body?: unknown, extra: Record<string, string> = {}) {
+    const req = Buffer.from(JSON.stringify({ method, path, body, tenant: tenantId, role, extra })).toString('base64')
     const child = spawn('ssh', ['-i', key, '-o', 'BatchMode=yes', target, 'docker', 'exec', '-i', '-e', `REQ=${req}`, container, 'node', '--input-type=module', '-'], { stdio: ['pipe', 'pipe', 'pipe'] })
     let stdout = ''
     let stderr = ''
