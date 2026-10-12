@@ -9,12 +9,12 @@ This document is the source for every 12iD pitch. It is not sent to a client as 
 | Part | What it holds | Goes into |
 |---|---|---|
 | 2. Core story | What 12iD is, how it works, why it is different | Every pitch |
-| 3. By reader | Management; product and digital channels; technical; procurement, legal and compliance | The blocks that match who will read the pitch |
-| 4. By use case | Six use cases that repeat in every industry | The use case a pitch leads with; the base for an industry that has no block |
-| 5. By industry | Banks, government and healthcare first, then three more; each told in the same six parts | One block per pitch |
+| 3. By reader | Four readers found in most pitches (management; product and digital channels; technical; procurement, legal and compliance) and five more for specific cases (risk and fraud; finance; operations; the people who will use it; implementation partners) | The blocks that match who will read the pitch |
+| 4. By use case | Eight use cases that repeat in every industry | The use case a pitch leads with; the base for an industry that has no block |
+| 5. By industry | Eight industries, each told in the same six parts, with banks, government and healthcare first; eight more in brief | One block per pitch |
 | 6. Questions and answers | Grouped by reader, plus how 12iD compares with what clients use today | The groups that match |
 | 7. Closing blocks | Evidence, who 12iD is, the next step | Every pitch |
-| 8. Wording and recipes | Terms, style, taglines, which blocks make which document, market notes, open fields | Followed, never copied |
+| 8. Wording and recipes | Terms, style, taglines, which blocks make which document, market notes, open fields, plain-word definitions | Followed, never copied |
 
 Three rules:
 
@@ -132,12 +132,14 @@ The steps are always the same: issue, hold, prove.
 - **Education.** Student and graduate credentials the institution can confirm on the spot, for exams, campus services and alumni access.
 - **Workforce.** Staff and contractor credentials that prove role, training and clearance at the door or online.
 - **Access and membership.** Entry to premises, events or services for the right person only.
+- **Telecommunications.** A subscriber registered once, and a number that moves only when its registered owner approves.
+- **Online platforms.** Sellers, drivers and couriers verified once, with proof at each shift or sale that the verified person is the one working.
 
 ---
 
 ## Part 3: By reader
 
-*Writer's note: pick the blocks for the people who will read the pitch. Each block names its group of questions in Part 6.*
+*Writer's note: pick the blocks for the people who will read the pitch. Blocks 3.1 to 3.4 are for the readers found in most pitches. Blocks 3.5 to 3.9 are for a specific reader, and usually go out as a separate short document (recipes in 8.4). Each block names its group of questions in Part 6, where it has one.*
 
 ### 3.1 Management
 
@@ -225,11 +227,99 @@ The steps are always the same: issue, hold, prove.
 
 `[to fill per client: pricing model, contract term, service levels, support hours and response times, onboarding plan, named contact]`
 
+### 3.5 Risk, fraud and security operations
+
+*Writer's note: this reader counts losses and investigates cases: the head of fraud, the head of risk, the information security officer. They care about which attacks stop working, what is left, and what evidence they have afterwards. Be exact, and never promise that fraud ends. Questions: 6.6.*
+
+**Which attacks stop working**
+
+| The attack today | With 12iD |
+|---|---|
+| A forged or edited document | A credential is signed by the organisation that issued it and cannot be altered. |
+| A stolen password, or a one-time code read out to a caller | There is no code to steal. The approval happens in your app, from the wallet. |
+| A registered number taken over by someone else | Nothing is sent to the number. The credential is on the device, not on the number. |
+| A credential copied to a second device | A 12iD credential cannot be copied to another device. |
+| A borrowed or stolen device | Where you require it, the face check confirms who is holding the device. |
+| A printed photo, or a face on a screen, held up to the camera | The check is designed to tell a living person from an image. |
+
+**What you have afterwards**
+
+- **A record of every check.** Every credential issued and every check made is in the console, with who did what and when.
+- **The result of every face check.** The image is deleted; the result stays with the record.
+- **A rule you can tighten.** You decide where the face check applies, and you can change it yourself after an incident: a lower amount, or more kinds of action.
+
+### 3.6 Finance: the business case
+
+*Writer's note: this reader wants the return in numbers. 12iD has no general figure to quote, because the numbers are the client's own. Give them the six lines below, and fill the worksheet with them in the working session (7.3). Never fill it with estimates of your own.*
+
+**Where the return comes from**
+
+- **Checks you no longer repeat.** Every identity check costs staff time and fees. A credential that is reused replaces every check after the first.
+- **Codes you no longer send.** Every one-time code sent by text message has a price.
+- **Fraud you no longer pay for.** The losses, the refunds, and the cost of investigating each case.
+- **Visits and calls that no longer happen.** Every visit and every call made only to prove identity has a handling cost.
+- **Data you no longer hold.** Fewer stored copies mean less to secure, and less exposed in a breach.
+- **People who finish.** Every person who gives up on a slow sign-up is income lost, or a service not delivered.
+
+**Worksheet**
+
+| Line | Your figure today | Expected with 12iD |
+|---|---|---|
+| Identity checks repeated each year, and the cost of one | `[to fill per client]` | `[to fill per client]` |
+| One-time codes sent each year, and the price of one | `[to fill per client]` | `[to fill per client]` |
+| Losses each year from impersonation and forged documents | `[to fill per client]` | `[to fill per client]` |
+| Visits and calls each year made only to prove identity, and the cost of one | `[to fill per client]` | `[to fill per client]` |
+| People who start a sign-up and do not finish | `[to fill per client]` | `[to fill per client]` |
+
+### 3.7 Operations and front-line staff
+
+*Writer's note: this reader manages branches, counters, reception desks or a call centre. They care about what their staff do differently, how long a person waits, and what happens when something does not work. Their support decides whether a pilot succeeds.*
+
+**What changes for your staff**
+
+- **They stop judging documents.** Staff ask for proof and receive a confirmed answer. They no longer decide by eye whether a document is genuine.
+- **They stop copying and filing.** There is no photocopy to make and no scan to store.
+- **They see less.** Staff see the fact they need and nothing else, so less personal data passes across a desk or a screen.
+- **One step, everywhere.** Asking for proof is the same at a counter, on a call and in the field.
+- **Exceptions go the usual way.** A person who does not have the app, or cannot pass the face check, is served by your present process.
+
+### 3.8 The people who will use it
+
+*Writer's note: this is text the client can use in its own app, on its website or in a leaflet when it introduces the wallet to its customers, citizens or patients. Use it too when a pitch must show that people will accept the change. In this block and in 6.7, "you" is the person, and the client is named: replace [Organisation]. Use the shortest words there are.*
+
+**What it is**
+
+[Organisation] can now give you a digital proof, kept in the [Organisation] app on your own mobile device. It shows one thing about you: for example, that your identity has been checked, or that you hold a valid licence.
+
+**What changes for you**
+
+- You do not bring or upload the same documents again.
+- When [Organisation] needs proof, the app asks you first. You see what is asked, and you decide.
+- Only the fact that is needed is shown. Nothing else.
+- For important actions you look at the camera for a few seconds, so that nobody else can act in your name.
+
+**What stays yours**
+
+- Your proof is kept on your own device.
+- Your face image is used for the check and then deleted. Only the result is kept.
+- If you lose your device, nobody else can use what is on it. You receive your proof again on your new device.
+
+### 3.9 Implementation partners
+
+*Writer's note: this reader builds or maintains the client's app and systems: a software company, an integrator, or the client's own developers. They care about how much work it is, what they are given, and whether 12iD takes work away from them. It does not: it gives them a component. The technical detail is in 3.3; questions are in 6.3.*
+
+**What you build, and what you are given**
+
+- **The app stays yours.** The 12iD SDK adds the wallet to the app you build and maintain. The screens and the design remain your work.
+- **You do not build the hard parts.** Signing credentials, encrypted messaging, the ledger and the face check are delivered by 12iD.
+- **Three pieces of work.** Add the wallet to the mobile app, connect the backend to 12iD, and define the credentials in the console.
+- **What you are given.** The SDK, the API with its documentation, a working example app and backend to start from, and an environment to test in.
+
 ---
 
 ## Part 4: By use case
 
-*Writer's note: these six use cases repeat in every industry. Use them in two ways. First, to choose what a pitch leads with: lead with one use case, the one that costs the client most today, and mention at most two more. Second, to write for an industry that has no block in Part 5: pick the use cases that apply and tell them with the template in 5.7.*
+*Writer's note: these eight use cases repeat in every industry. Use them in two ways. First, to choose what a pitch leads with: lead with one use case, the one that costs the client most today, and mention at most two more. Second, to write for an industry that has no block in Part 5: pick the use cases that apply and tell them with the template in 5.10.*
 
 ### 4.1 Enrolment: check once, then reuse
 
@@ -278,6 +368,22 @@ The steps are always the same: issue, hold, prove.
 **With 12iD.** The same wallet serves your own people. A credential carries a person's role, training or clearance. They prove it at the door or online, with the face check for the most sensitive access. It expires with the role or the contract, and you can revoke it at any time.
 
 **Examples.** A bank's tellers and agents prove who they are before they open the systems they work in. An agency's officers sign in to case systems. A clinician proves their registration and their right to work on a ward.
+
+### 4.7 Acting for someone else
+
+**Today.** A parent, a carer or an authorised representative proves their authority with a letter or a stamped form, checked by eye each time.
+
+**With 12iD.** You issue a credential for the authority itself: who may act, for whom, and until when. The representative proves it from their own wallet, with the face check where you require it. It expires on the date you set, and you can revoke it at any time.
+
+**Examples.** A company's authorised signatory approves a payment from a business account. A guardian collects a benefit for a dependant. A carer collects a prescription for a patient.
+
+### 4.8 Confirming that a person is still entitled
+
+**Today.** Entitlement is checked once and then assumed. To check it again, the person is asked to attend in person or to send documents.
+
+**With 12iD.** Every credential has an expiry date, so entitlement is confirmed again each time it is renewed. Where you need to know that the person themselves is still there, they pass the face check from wherever they are.
+
+**Examples.** A bank reviews a long-standing customer's details without a branch visit. A pensioner confirms their entitlement each year from home. An insured member renews their cover.
 
 ---
 
@@ -516,7 +622,99 @@ Member. Season ticket. Event ticket. Over-18 status. Membership tier.
 
 No shared card. No identity document at the door. No queue while someone checks a list.
 
-### 5.7 A new industry
+### 5.7 Telecommunications
+
+*Writer's note: for mobile operators and internet providers.*
+
+**The problem today**
+
+- **A number can be taken over.** Someone who persuades staff to move a number to a new SIM receives the owner's calls and codes.
+- **Registration is repeated and copied.** Every new connection means the same documents again, and another stored copy.
+- **A shop cannot tell who is asking.** A dealer sees a document, not the account holder.
+
+**A mobile operator and its subscriber**
+
+**1. Issue.** A subscriber registers a connection. The operator checks their identity once, as it does today. The subscriber passes the face check in the operator's app, and the operator places a "registered subscriber" credential in the wallet.
+
+**2. Hold.** The credential stays on the subscriber's device, under their control, until it expires or the operator revokes it.
+
+**3. Prove.** Later, someone asks for the number to be moved to a new SIM. The operator asks the wallet for proof and requires the face check. The subscriber sees the request and approves it. The number moves only when the registered subscriber, in person, has agreed. If the device itself was lost, the subscriber passes the face check on their new device against the photo the operator holds on record.
+
+**Other ways to use it**
+
+- **More connections.** A second line or a new service for a registered subscriber, with no second registration.
+- **Change of owner.** A number passes to another person only when the present owner approves.
+- **Account changes by call.** A caller is confirmed through their wallet, in place of security questions.
+- **Device financing.** A subscriber is confirmed in person before a device is handed over on credit.
+- **Dealers and shop staff.** Each dealer proves who they are before registering or changing a connection.
+
+**Credentials you could issue**
+
+Registered subscriber. Account owner. Administrator of a business account. Authorised dealer.
+
+**What you gain**
+
+- A subscriber is registered once, and a number moves only when its registered owner approves.
+- One registration is reused for every new connection.
+- Fewer copies of identity documents are held in shops and by dealers.
+- Every registration and change is tied to a known member of staff.
+
+No number moved by a stranger. No documents copied at the shop. No second registration.
+
+### 5.8 Online platforms
+
+*Writer's note: for marketplaces, delivery and ride services, rental platforms and freelance platforms.*
+
+**The problem today**
+
+- **Accounts are shared and sold.** The person who passed the check at sign-up is not always the person doing the work.
+- **Trust rests on a profile.** A customer cannot tell whether the person who arrives is the person on the profile.
+- **Checks by hand slow down sign-up.** People who wait days to start go elsewhere.
+
+**A delivery platform and its courier**
+
+**1. Issue.** A courier signs up. The platform checks their identity and their driving licence once. The courier passes the face check in the platform's app, and the platform places a "verified courier" credential in the wallet.
+
+**2. Hold.** The credential stays on the courier's device, protected by the device's secure hardware. It expires with the licence, and the platform can revoke it at any time.
+
+**3. Prove.** At the start of each shift the app asks the wallet for proof, and the platform requires the face check. The courier approves. The platform knows that the person starting the shift is the verified courier, not someone using their account.
+
+**Other ways to use it**
+
+- **Payout details.** A change of bank account is approved by the account's owner in person.
+- **Sellers.** A seller is verified once, and confirms in person before a high-value listing goes live.
+- **Hosts and guests.** Both sides of a rental prove they are verified, without exchanging documents.
+- **Age-restricted deliveries.** The person receiving the order proves "over 18" and nothing else.
+
+**Credentials you could issue**
+
+Verified courier or driver. Verified seller. Verified host. Licensed driver. Over-18 customer.
+
+**What you gain**
+
+- Sellers, drivers and couriers are verified once, with proof at each shift or sale that the verified person is the one working.
+- An account cannot be lent or sold.
+- Payout details change only when the account's owner approves.
+- Your customers deal with people you have verified.
+
+No shared account. No stranger at the door. No payout sent to the wrong person.
+
+### 5.9 More industries, in brief
+
+*Writer's note: these have no full block. To pitch to one, take its row, read the use cases it names in Part 4, and write the block with the template in 5.10. In a general pitch, a row can be added to "Where it fits" (2.8) as one line.*
+
+| Industry | The problem today | Lead with | A first credential |
+|---|---|---|---|
+| Insurance | Claims are made in another person's name, and cover is confirmed by letter or call | Approving a sensitive action (4.2); proving one fact (4.4) | Insured member |
+| Pension and investment funds | Members attend in person to show they are still entitled; payments are redirected by fraud | Confirming that a person is still entitled (4.8); approving a sensitive action (4.2) | Scheme member |
+| Utilities | Accounts are opened or changed in another person's name | Enrolment (4.1); approving a sensitive action (4.2) | Account holder |
+| Travel and hospitality | An identity document is copied at every check-in | Proving one fact (4.4); confirming who is asking (4.3) | Verified guest |
+| Property and rental | Tenants and buyers send full sets of documents to every agent | Enrolment (4.1); acting for someone else (4.7) | Verified tenant |
+| Transport and logistics | Drivers are swapped, and licences are not checked for being current | Staff, agents and professionals (4.6) | Licensed driver |
+| Professional bodies | Registration is confirmed by letter or by call | Proving one fact (4.4); staff, agents and professionals (4.6) | Registered practitioner |
+| Retail of age-restricted goods | Age is shown with a full identity document | Proving one fact (4.4) | Over-18 status |
+
+### 5.10 A new industry
 
 *Writer's note: copy these six headings to add an industry. Keep each part to the size of the blocks above. Start from the use cases in Part 4 and choose the ones that apply.*
 
@@ -536,7 +734,7 @@ A closing line: three short sentences that each begin with "No".
 
 ## Part 6: Questions and answers
 
-*Writer's note: take the groups that match the reader blocks in the pitch, and add 6.5 whenever the client already uses another method. In a general pitch, use 6.1 to 6.4.*
+*Writer's note: take the groups that match the reader blocks in the pitch, and add 6.5 whenever the client already uses another method. In a general pitch, use 6.1 to 6.4. Groups 6.6 and 6.7 go with blocks 3.5 and 3.8.*
 
 ### 6.1 Management
 
@@ -616,6 +814,39 @@ They do, and you keep using it for your first check. 12iD does not replace it. I
 **Why not a general wallet app that people install themselves?**
 A general wallet belongs to someone else's brand, and people must find it, install it and learn it. 12iD puts the wallet inside the app your customers already use, and delivers the wallet, the face check and the console as one solution.
 
+### 6.6 Risk and fraud
+
+**Does 12iD stop all fraud?**
+No method does. 12iD closes the routes that depend on a forged document, a stolen code, a copied credential or a borrowed device. A person who is tricked into approving a request themselves remains a risk. Showing them exactly what they are approving, inside your own app, reduces it.
+
+**What evidence do we have after a disputed action?**
+The record in the console shows what was asked, when, and that it was approved from the person's wallet. Where the face check applied, its result is part of the record.
+
+**Can we change where the face check applies?**
+Yes, yourselves, in the console. You set it for each credential and each kind of request, and you can set it by rule.
+
+### 6.7 The people who will use it
+
+*Writer's note: as in 3.8, "you" is the person. Replace [Organisation].*
+
+**Do I need another app?**
+No. It is part of the [Organisation] app.
+
+**Is my face stored?**
+No. The image is used for the check and deleted once the check is complete. Only the result is kept.
+
+**Who sees my information?**
+[Organisation] sees what you agree to show, each time, and nothing more.
+
+**Can I say no to a request?**
+Yes. Nothing is shown unless you agree.
+
+**What if I lose my device?**
+Nobody else can use what is on it. You receive your proof again on your new device.
+
+**Do I have to use it?**
+`[to fill per client: whether the present process stays available beside the wallet]`
+
 ---
 
 ## Part 7: Closing blocks
@@ -663,6 +894,8 @@ A working demonstration is available: a mobile app and the management console. I
 | "wallet" | "vault" or "app" for the wallet (the wallet is inside the client's app) |
 | "mobile device", then "device" | "phone", "handset" ("smartphone" only in the answer in 6.2) |
 | "you" and "your organisation", for what the client does or gains | "the organisation", "enterprises", "the customer" for the client |
+| In 3.8 and 6.7 only: "you" for the person, and the client's name for the client | "you" for the client in those two blocks |
+| "proof" for what the wallet gives, and for the credential when speaking to the person (3.8, 6.7) | "credential" in text for the people who will use it |
 | "the ledger", explained where it first appears | "blockchain", except in the answer in 6.3 |
 | "card", "badge": only for the physical things 12iD replaces | "card" for a 12iD credential |
 
@@ -701,6 +934,26 @@ A working demonstration is available: a mobile app and the management console. I
 | **Product brief** | 2.1 (one paragraph), the industry scenario and "Other ways to use it", 3.2, 6.2, 6.5, 7.1 |
 | **Technical brief** | 2.1 (one sentence), 2.4, 2.5, 3.3, 6.3 |
 | **Procurement pack** | 2.1 (one paragraph), 2.4, 3.4, 6.4, 7.2 |
+| **Risk and fraud brief** | 2.1 (one paragraph), 3.5, the industry scenario, 6.6, 6.5 |
+| **Business case** | 2.1 (one paragraph), 3.6 with the worksheet filled in, 2.7, 7.3 |
+| **Staff briefing** | 2.3, the industry scenario, 3.7 |
+| **Partner brief** | 2.1 (one sentence), 2.4, 3.9, "How it connects to your systems" from 3.3, 6.3 |
+| **Leaflet for the people who will use it** | 3.8, 6.7. It goes out under the client's name, not 12iD's |
+
+**A response to a tender**
+
+*Writer's note: a tender sets its own headings and numbering. Keep them, answer every requirement in the tender's own order, and fill each answer from the blocks below.*
+
+| The tender asks for | Use |
+|---|---|
+| A summary of the offer | 2.1 (one paragraph), 2.4 |
+| Understanding of the need | "The problem today" from the industry block |
+| The proposed solution | The industry scenario, 2.5, "Other ways to use it" |
+| A technical description | 3.3 |
+| Security and data protection | "Privacy and security in plain terms" from 3.3, "How your data is treated" from 3.4, 6.3, 6.4 |
+| An implementation plan | 7.3, "What you provide" from 3.4, "How much work is the integration?" from 6.3 |
+| Experience and references | 7.1, 7.2 |
+| Price and terms | "Terms" from 3.4 |
 
 **First-contact e-mail**
 
@@ -788,7 +1041,10 @@ Check every rule and law at the time of writing. Do not cite one from memory.
 | Field | Where | Changes with |
 |---|---|---|
 | Pricing, contract term, service levels, support, onboarding, contact | 3.4 | Client |
+| The business case worksheet | 3.6 | Client |
+| The client's name, in place of [Organisation] | 3.8, 6.7 | Client |
 | Expected duration of the integration | 6.3 | Client |
+| Whether the present process stays available | 6.7 | Client |
 | Measured time for the demonstration flow | 7.1 | Date |
 | How the client gets the demonstration | 7.1 | Client |
 | Pilots and reference clients | 7.1 | Date |
@@ -796,4 +1052,20 @@ Check every rule and law at the time of writing. Do not cite one from memory.
 | Length of the pilot, and the contact | 7.3 | Client |
 | Regulator, law, national scheme, hosting, alternatives, language | 8.5 | Market |
 
-Before sending any pitch, check three things: no line that starts with *Writer's note* is in it, no `[to fill …]` is left, and the tagline appears once.
+### 8.7 Plain words
+
+*Writer's note: use these definitions word for word whenever a term must be explained. Add the table as a last page when a pitch goes to readers who are new to the subject.*
+
+| Word | In plain words |
+|---|---|
+| Credential | A digital proof of one thing about a person, signed by the organisation that gave it |
+| Wallet | The secure place, inside your app on the person's own device, where their credentials are kept |
+| Issue | To give a person a credential |
+| Proof | The wallet's answer to a question you ask, which can be trusted on the spot |
+| Face check | A look at the camera, by which 12iD confirms that a living person is present and matches the photo you hold on record |
+| Expiry date | The date after which a credential is no longer accepted |
+| Revoke | To end a credential before its expiry date |
+| Console | The website where your team manages credentials, rules and records |
+| Ledger | A public record of which organisations issue which credentials. It holds no personal data |
+
+Before sending any pitch, check four things: no line that starts with *Writer's note* is in it, no `[to fill …]` and no [Organisation] is left, and the tagline appears once.
