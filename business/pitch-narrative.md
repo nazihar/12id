@@ -167,7 +167,7 @@ The steps are always the same: issue, hold, prove.
 
 - **Fewer steps.** An approval happens inside your app. The person sees the request, agrees, and where you require it looks at the camera. There is no code to wait for and type in, and no document to photograph again.
 - **Your design.** A request for approval appears in your app's own design and wording. The person never leaves your app.
-- **You decide where the face check applies.** You set it for each credential and each kind of request, and you can set it by rule: for example, only for a transfer above an amount you choose. Routine actions stay quick, and only the risky ones add a step.
+- **You decide where the face check applies.** You set it for each credential and each kind of request. For a request you can also set it by rule, using numbers your own systems already know: an amount, a risk score, whether the device is new, the days since the last check. Routine actions stay quick, and only the risky ones add a step.
 - **A clear path when something goes wrong.** A person with a new device gets their credentials issued again. A person who does not pass the face check has a set number of attempts, and then your own process takes over.
 
 ### 3.3 Technical: IT, security and architecture
@@ -189,6 +189,7 @@ The steps are always the same: issue, hold, prove.
 - **Everything is traceable.** Changes and sensitive actions in the console are written to an audit log.
 - **Strong sign-in for your team.** Console access is by invitation, with two-factor authentication for every team member.
 - **Protected and recoverable.** Each organisation's records are kept separate from every other organisation's. Backups are made every night, encrypted, and copied to a second site.
+- **The face check cannot be skipped.** 12iD enforces it, not the app. A credential is not issued, and a result is not released to you, until the check has passed, whatever the app on the device does.
 
 **The technology foundation**
 
@@ -242,11 +243,16 @@ The steps are always the same: issue, hold, prove.
 | A borrowed or stolen device | Where you require it, the face check confirms who is holding the device. |
 | A printed photo, or a face on a screen, held up to the camera | The check is designed to tell a living person from an image. |
 
+**How the face check is controlled**
+
+- **A rule driven by your own risk signals.** For a request, the face check can depend on up to five conditions, on any numbers your systems send with it: an amount, a score from your fraud engine, whether the device is new, the days since the last check. You choose whether one condition is enough or all of them must hold.
+- **A rule you can tighten.** You change it yourself, in the console, after an incident: a lower amount, a lower score, or more kinds of action.
+- **A check the app cannot skip.** 12iD enforces the face check itself. A credential is not issued, and a result is not released to you, until the check has passed, whatever the app on the device does.
+
 **What you have afterwards**
 
 - **A record of every check.** Every credential issued and every check made is in the console, with who did what and when.
 - **The result of every face check.** The image is deleted; the result stays with the record.
-- **A rule you can tighten.** You decide where the face check applies, and you can change it yourself after an incident: a lower amount, or more kinds of action.
 
 ### 3.6 Finance: the business case
 
@@ -333,7 +339,7 @@ The steps are always the same: issue, hold, prove.
 
 **Today.** A password or a one-time code approves the action. Either can be stolen, and neither shows who used it.
 
-**With 12iD.** The person sees the action in your app and approves it from the wallet. Where the risk is higher, you also require the face check. You set the rule: for example, every transfer above an amount you choose.
+**With 12iD.** The person sees the action in your app and approves it from the wallet. Where the risk is higher, you also require the face check. You set the rule, using numbers your own systems already know: for example, every transfer above an amount you choose, or every request your fraud engine scores as risky.
 
 **Examples.** A bank customer approves a large transfer, or a change of their registered mobile number. A citizen confirms new bank details for a benefit payment. A patient approves the release of their test results.
 
@@ -823,7 +829,10 @@ No method does. 12iD closes the routes that depend on a forged document, a stole
 The record in the console shows what was asked, when, and that it was approved from the person's wallet. Where the face check applied, its result is part of the record.
 
 **Can we change where the face check applies?**
-Yes, yourselves, in the console. You set it for each credential and each kind of request, and you can set it by rule.
+Yes, yourselves, in the console. You set it for each credential and each kind of request. For a request, a rule can combine up to five conditions on numbers your systems send with it, such as an amount, a risk score or whether the device is new.
+
+**Can a modified app skip the face check?**
+No. 12iD enforces the check, not the app. The credential is not issued, and the result is not released to you, until the check has passed.
 
 ### 6.7 The people who will use it
 
