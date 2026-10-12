@@ -15,6 +15,7 @@ import { tenantOverviewQuery } from '@/features/tenants/tenants.queries'
 import { type TenantListSearch, tenantListSearch, tenantStatusOptions } from '@/features/tenants/tenants.schemas'
 import { formatDateTime } from '@/lib/format'
 import { isFiltered, pagingFor, resetFor, parseListSearch, searchPatcher } from '@/lib/list-search'
+import { useCanOperate } from '@/lib/use-can-operate'
 
 type TenantRow = Awaited<ReturnType<typeof getTenantOverview>>['items'][number]
 
@@ -48,13 +49,14 @@ export const Route = createFileRoute('/_authed/ops/tenants/')({
 })
 
 function TenantsPage() {
+  const canOperate = useCanOperate()
   const search = Route.useSearch()
   const onSearch = searchPatcher<TenantListSearch>(Route.useNavigate())
   const fetching = useListPending()
   const { data: tenants } = useSuspenseQuery(tenantOverviewQuery(search))
   return (
     <section className="space-y-4">
-      <PageHeader title="Tenants" description="Every customer tenant on the platform with its onboarding state and activity, newest first." actions={<CreateTenantDialog />} />
+      <PageHeader title="Tenants" description="Every customer tenant on the platform with its onboarding state and activity, newest first." actions={canOperate ? <CreateTenantDialog /> : undefined} />
       <DataTable
         columns={columns}
         data={tenants.items}

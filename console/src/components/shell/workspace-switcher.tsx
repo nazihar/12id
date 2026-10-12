@@ -35,7 +35,7 @@ export function WorkspaceSwitcher({ workspace }: { workspace: Workspace }) {
             }
           />
           <DropdownMenuContent className="w-(--anchor-width) min-w-56" align="start" side={isMobile ? 'bottom' : 'right'} sideOffset={4}>
-            {viewer.isOperator && (
+            {viewer.isStaff && (
               <>
                 <DropdownMenuGroup>
                   <DropdownMenuLabel>Platform</DropdownMenuLabel>

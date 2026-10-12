@@ -4,6 +4,7 @@
  */
 import { Writable } from 'node:stream'
 
+import { sql } from 'drizzle-orm'
 import { pino } from 'pino'
 
 import { type AgentClient, type AgentLedgerObject, type OutboxRow } from '../src/agent-client.ts'
@@ -39,7 +40,14 @@ export async function testDatabase(): Promise<{ db: Database; close: () => Promi
   }
   if (!shared) return null
   const tables = [schema.erasures, schema.exchangeGateEvents, schema.exchangeGates, schema.credentialDefinitionPolicies, schema.biometricSettings, schema.consoleAudit, schema.webhookDeliveries, schema.webhookEndpoints, schema.idempotencyKeys, schema.proofTemplates, schema.proofs, schema.credentials, schema.connections, schema.wallets, schema.apiKeys, schema.outboxCursor, schema.tenants]
-  for (const table of tables) await shared.db.delete(table)
+  // The audit and the erasure log refuse DELETE (migration 0012); only this cleanup switches that off.
+  const appendOnly = ['console_audit', 'erasures']
+  for (const name of appendOnly) await shared.db.execute(sql.raw(`alter table ${name} disable trigger user`))
+  try {
+    for (const table of tables) await shared.db.delete(table)
+  } finally {
+    for (const name of appendOnly) await shared.db.execute(sql.raw(`alter table ${name} enable trigger user`))
+  }
   const pool = shared.pool
   return { db: shared.db, close: async () => void pool }
 }

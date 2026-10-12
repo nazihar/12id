@@ -265,15 +265,19 @@ export const idempotencyKeys = pgTable('idempotency_keys', {
 /**
  * Who did what through the console scope or with the break-glass admin token (Phase 4 C1).
  * `tenant_id` has no foreign key: a refused request for an unknown tenant is still worth a row.
+ * Append-only: a trigger refuses UPDATE, DELETE and TRUNCATE (migration 0012; `erasures` likewise).
  */
 export const consoleAudit = pgTable('console_audit', {
   id: bigserial('id', { mode: 'number' }).primaryKey(),
   at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
   actor: text('actor').notNull(),
+  /** The actor's email when it acted (implement/22 C13): the row stays readable after the account is deleted. */
+  actorLabel: text('actor_label'),
   role: text('role').notNull(),
   tenantId: uuid('tenant_id'),
+  /** The HTTP method, or `EVENT` for something the console reported (a sign-in, an account change, an export). */
   method: text('method').notNull(),
-  /** Route pattern (`/v1/api-keys/:id`), never the concrete URL with its query string. */
+  /** Route pattern (`/v1/api-keys/:id`), never the concrete URL with its query string; for an event, its type (`auth.sign_in`). */
   route: text('route').notNull(),
   statusCode: integer('status_code').notNull(),
   requestId: text('request_id').notNull(),
@@ -340,6 +344,10 @@ export const exchangeGates = pgTable('exchange_gates', {
 }, (table) => [
   uniqueIndex('exchange_gates_record_unique').on(table.tenantId, table.recordType, table.recordId),
   index('exchange_gates_thread_idx').on(table.tenantId, table.threadId),
+  // The face-checks list and the Verification page's daily series (implement/22 C10): newest first per
+  // tenant, optionally by status, closed by the primary key so the fixed order needs no sort (as in C9).
+  index('exchange_gates_tenant_created_idx').on(table.tenantId, table.createdAt.desc(), table.id.desc()),
+  index('exchange_gates_tenant_status_created_idx').on(table.tenantId, table.status, table.createdAt.desc(), table.id.desc()),
   index('exchange_gates_pending_expiry_idx').on(table.expiresAt).where(sql`${table.status} = 'pending'`),
 ])
 
@@ -365,6 +373,8 @@ export const exchangeGateEvents = pgTable('exchange_gate_events', {
   reason: text('reason'),
 }, (table) => [
   index('exchange_gate_events_gate_idx').on(table.gateId, table.id),
+  // Attempts of a window, for the rejection reasons and score distributions (implement/22 C10).
+  index('exchange_gate_events_attempts_idx').on(table.tenantId, table.at.desc()).where(sql`${table.type} = 'attempt_completed'`),
   uniqueIndex('exchange_gate_events_session_started_unique').on(table.sessionId).where(sql`${table.type} = 'session_started'`),
 ])
 

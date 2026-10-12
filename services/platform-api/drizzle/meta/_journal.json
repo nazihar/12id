@@ -85,6 +85,20 @@
       "when": 1791698762905,
       "tag": "0011_biometric_condition",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1791710651605,
+      "tag": "0012_audit_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1791714746568,
+      "tag": "0013_verification_indexes",
+      "breakpoints": true
     }
   ]
 }

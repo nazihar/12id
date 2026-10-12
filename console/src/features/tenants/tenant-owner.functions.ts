@@ -11,11 +11,12 @@ import { eq } from 'drizzle-orm'
 import { memberSearch } from '@/features/portal/members.schemas'
 import { createTenantOrganizationInput, tenantInput } from '@/features/tenants/tenants.schemas'
 import { OPERATOR_ROLE, hasPlatformRole } from '@/lib/permissions'
+import { principalActor, recordEvent } from '@/server/audit.server'
 import { auth } from '@/server/auth.server'
 import { consoleDb } from '@/server/db.server'
 import { member, organization, user } from '@/server/db/auth-schema'
 import { listOrganizationMembers } from '@/server/members.server'
-import { operatorMiddleware } from '@/server/middleware'
+import { operatorMiddleware, operatorReadMiddleware } from '@/server/middleware'
 import { platformFor, unwrap } from '@/server/platform.server'
 
 function slugFor(name: string, tenantId: string) {
@@ -30,7 +31,7 @@ function slugFor(name: string, tenantId: string) {
 
 /** The tenant's console organization with one page of its members (Phase 4 C9), or null. */
 export const getTenantOrganization = createServerFn({ method: 'GET' })
-  .middleware([operatorMiddleware])
+  .middleware([operatorReadMiddleware])
   .validator(tenantInput.extend(memberSearch.omit({ tab: true }).shape))
   .handler(async ({ data }) => {
     const { db } = consoleDb()
@@ -62,6 +63,7 @@ export const createTenantOrganization = createServerFn({ method: 'POST' })
     const created = await auth.api.createOrganization({
       body: { name: tenant.name, slug: slugFor(tenant.name, data.tenantId), platformTenantId: data.tenantId, userId: owner.id },
     })
+    await recordEvent({ type: 'account.organization_created', actor: principalActor(context.principal), tenantId: data.tenantId, detail: { owner: data.ownerEmail, newAccount: isNewAccount } })
     if (isNewAccount) await auth.api.requestPasswordReset({ body: { email: data.ownerEmail, redirectTo: '/reset-password' } })
     return { organizationId: created?.id ?? null, ownerEmail: data.ownerEmail, passwordLinkSent: isNewAccount }
   })

@@ -5,12 +5,14 @@ import { useListPending } from '@/components/data-table/use-list-pending'
 import { RouteError } from '@/components/route-error'
 import { PageHeader } from '@/components/page-header'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { exportTenantList } from '@/features/export/export.functions'
 import { type DeliverySearch, deliverySearch } from '@/features/tenant-data/list.schemas'
 import { DeliveriesPanel } from '@/features/tenant-data/panels'
 import { getWebhookDelivery, retryWebhookDelivery } from '@/features/tenant-data/tenant-data.functions'
 import { webhookDeliveriesQuery, webhookEndpointQuery } from '@/features/tenant-data/tenant-data.queries'
 import { formatDateTime } from '@/lib/format'
 import { parseListSearch, searchPatcher } from '@/lib/list-search'
+import { useCanOperate } from '@/lib/use-can-operate'
 
 export const Route = createFileRoute('/_authed/ops/tenants/$tenantId/webhooks')({
   validateSearch: parseListSearch(deliverySearch),
@@ -22,6 +24,7 @@ export const Route = createFileRoute('/_authed/ops/tenants/$tenantId/webhooks')(
 })
 
 function WebhooksPage() {
+  const canOperate = useCanOperate()
   const { tenantId } = Route.useParams()
   const { data: endpoint } = useSuspenseQuery(webhookEndpointQuery(tenantId))
   const search = Route.useSearch()
@@ -58,8 +61,9 @@ function WebhooksPage() {
         fetching={fetching}
         invalidateKey={['ops', 'tenant', tenantId, 'webhook-deliveries']}
         loadBody={(deliveryId) => getWebhookDelivery({ data: { tenantId, deliveryId } })}
-        revealBody={(deliveryId, revealReason) => getWebhookDelivery({ data: { tenantId, deliveryId, revealReason } })}
-        retryDelivery={(deliveryId) => retryWebhookDelivery({ data: { tenantId, deliveryId } })}
+        revealBody={canOperate ? (deliveryId, revealReason) => getWebhookDelivery({ data: { tenantId, deliveryId, revealReason } }) : undefined}
+        retryDelivery={canOperate ? (deliveryId) => retryWebhookDelivery({ data: { tenantId, deliveryId } }) : undefined}
+        onExport={(format) => exportTenantList({ data: { tenantId, list: 'deliveries', format, search } })}
       />
     </div>
   )

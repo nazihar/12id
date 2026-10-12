@@ -91,7 +91,7 @@ What protects the data described above, in short:
   - Console accounts are by invitation only, with two-factor authentication for everyone (operators: authenticator app only). Sessions end 24 hours after sign-in (operators: 12 hours).
   - API keys and wallet tokens are stored only as hashes.
   - Your webhooks are signed (HMAC-SHA256).
-  - Every change made in the console, and every operator reveal of masked data, is in an audit log.
+  - Every change made in the console, every operator reveal of masked data, every sign-in and failed sign-in, every change to a console account and every export is in an audit log that the platform can add to but not alter.
 - **Abuse limits:** request rates per API key, per wallet and per network address; size limits on every message; a daily ceiling on ledger writes per organisation.
 - **Resilience:** monitoring with alerts by mail. The services restart on their own after a failure. Restores from backup, and a rebuild of the whole platform from the off-site copy with the offline key alone, are rehearsed.
 
@@ -101,7 +101,10 @@ What protects the data described above, in short:
 - An operator who needs to see them to answer a support request must give a reason. The reveal is recorded, with the reason, in the audit log.
 - Operators erase data only on your request. They must enter a reason, and you receive the `record.erased` webhook.
 - An API key created for you by an operator is marked *Created by operator* in your API keys list, and your owners are told by e-mail.
-- The console keeps sign-in records only while they are live: expired sessions and verification codes are deleted hourly.
+- Sessions and verification codes are kept only while they are live: expired ones are deleted hourly.
+- **Sign-ins are in the audit log.** Each sign-in, failed sign-in and sign-out of a console account is recorded with the account's e-mail address, the network address and the browser it came from. This applies to your own staff's accounts as well as to operators. The audit log is append-only and has no automatic deletion.
+- An **auditor** account can read what an operator reads and can change nothing. It sees the same masks and cannot reveal what is behind them.
+- **Exports.** Owners and admins of your organisation, and operators and auditors, can export a list as an Excel or CSV file. A file holds the list's own columns and identifiers, never attribute values, disclosed values or webhook bodies; an operator's or auditor's file is masked like their screen. Every export is recorded in the audit log with who took it, which list, which filters and how many rows.
 
 ## Biometric checks
 

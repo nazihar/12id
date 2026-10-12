@@ -335,27 +335,34 @@ export function createGateEngine(deps: GateDeps) {
       return due.length
     },
 
-    async log(tenantId: string, recordType: RecordType, recordId: string) {
-      const [gate] = await deps.db.select().from(exchangeGates).where(and(eq(exchangeGates.tenantId, tenantId), eq(exchangeGates.recordType, recordType), eq(exchangeGates.recordId, recordId)))
-      if (!gate) return { biometric: null, events: [] }
-      const rows = await deps.db.select().from(exchangeGateEvents).where(eq(exchangeGateEvents.gateId, gate.id)).orderBy(asc(exchangeGateEvents.id))
-      return {
-        biometric: toBiometricView(gate),
-        events: rows.map((row) => ({
-          id: row.id,
-          at: row.at.toISOString(),
-          type: row.type,
-          attempt: row.attempt,
-          providerId: row.providerId,
-          vendorSessionId: row.vendorSessionId,
-          livenessScore: row.livenessScore,
-          matchScore: row.matchScore,
-          thresholds: row.thresholds,
-          decision: row.decision,
-          reason: row.reason,
-        })),
-      }
-    },
+    log: (tenantId: string, recordType: RecordType, recordId: string) => gateLog(deps.db, tenantId, recordType, recordId),
+  }
+}
+
+/**
+ * The biometric log of one exchange: its gate and every step, oldest first. A read of platform-api's
+ * own tables, so it needs no gate engine: the log of a past check stays readable on a deployment
+ * that runs without biometric-service (implement/22 C10).
+ */
+export async function gateLog(db: Database, tenantId: string, recordType: RecordType, recordId: string) {
+  const [gate] = await db.select().from(exchangeGates).where(and(eq(exchangeGates.tenantId, tenantId), eq(exchangeGates.recordType, recordType), eq(exchangeGates.recordId, recordId)))
+  if (!gate) return { biometric: null, events: [] }
+  const rows = await db.select().from(exchangeGateEvents).where(eq(exchangeGateEvents.gateId, gate.id)).orderBy(asc(exchangeGateEvents.id))
+  return {
+    biometric: toBiometricView(gate),
+    events: rows.map((row) => ({
+      id: row.id,
+      at: row.at.toISOString(),
+      type: row.type,
+      attempt: row.attempt,
+      providerId: row.providerId,
+      vendorSessionId: row.vendorSessionId,
+      livenessScore: row.livenessScore,
+      matchScore: row.matchScore,
+      thresholds: row.thresholds,
+      decision: row.decision,
+      reason: row.reason,
+    })),
   }
 }
 

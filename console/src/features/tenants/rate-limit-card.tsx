@@ -9,29 +9,33 @@ import { Card, CardAction, CardDescription, CardHeader, CardTitle } from '@/comp
 import { DialogClose, DialogFooter } from '@/components/ui/dialog'
 import { setTenantRateLimit } from '@/features/tenants/tenants.functions'
 import { type RateLimitInput, rateLimitInput } from '@/features/tenants/tenants.schemas'
+import { useCanOperate } from '@/lib/use-can-operate'
 
 /** Operator: the tenant's per-API-key request limit (platform review M4). */
 export function RateLimitCard({ tenantId, rateLimitPerMin }: { tenantId: string; rateLimitPerMin: number | null }) {
+  const canOperate = useCanOperate()
   const current = rateLimitPerMin === null ? 'Platform default' : rateLimitPerMin === 0 ? 'No limit' : `${rateLimitPerMin} per minute`
   return (
     <Card>
       <CardHeader>
         <CardTitle>API request limit</CardTitle>
         <CardDescription>Requests per minute for each of this tenant's API keys: {current}. Raise it for a busy integration; the console itself is not limited.</CardDescription>
-        <CardAction>
-          <FormDialog
-            trigger={
-              <Button size="sm" variant="outline">
-                <GaugeIcon />
-                Change limit
-              </Button>
-            }
-            title="API request limit"
-            description="Applies to every API key of this tenant from the next request. The platform default is set by the operator of this deployment."
-          >
-            {({ close }) => <RateLimitForm tenantId={tenantId} rateLimitPerMin={rateLimitPerMin} onDone={close} />}
-          </FormDialog>
-        </CardAction>
+        {canOperate && (
+          <CardAction>
+            <FormDialog
+              trigger={
+                <Button size="sm" variant="outline">
+                  <GaugeIcon />
+                  Change limit
+                </Button>
+              }
+              title="API request limit"
+              description="Applies to every API key of this tenant from the next request. The platform default is set by the operator of this deployment."
+            >
+              {({ close }) => <RateLimitForm tenantId={tenantId} rateLimitPerMin={rateLimitPerMin} onDone={close} />}
+            </FormDialog>
+          </CardAction>
+        )}
       </CardHeader>
     </Card>
   )

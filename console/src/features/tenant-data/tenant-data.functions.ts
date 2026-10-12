@@ -7,7 +7,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
-import { operatorMiddleware } from '@/server/middleware'
+import { operatorMiddleware, operatorReadMiddleware } from '@/server/middleware'
 import { pageParams } from '@/lib/list-search'
 import { PlatformCallError, platformFor, unwrap } from '@/server/platform.server'
 
@@ -23,7 +23,7 @@ const operatorReason = z.string().trim().min(3, 'Give a reason (at least 3 chara
 
 /** One page of schemas or of credential definitions (`tab`), newest first. */
 export const listCatalogue = createServerFn({ method: 'GET' })
-  .middleware([operatorMiddleware])
+  .middleware([operatorReadMiddleware])
   .validator(tenantInput.extend(catalogueSearch.shape))
   .handler(async ({ context, data }) => {
     const platform = platformFor(context.principal, { tenantId: data.tenantId })
@@ -34,13 +34,13 @@ export const listCatalogue = createServerFn({ method: 'GET' })
   })
 
 export const listProofTemplates = createServerFn({ method: 'GET' })
-  .middleware([operatorMiddleware])
+  .middleware([operatorReadMiddleware])
   .validator(tenantInput.extend(templateSearch.shape))
   .handler(async ({ context, data }) => unwrap(await platformFor(context.principal, { tenantId: data.tenantId }).GET('/v1/proof-templates', { params: { query: pageParams(data) } })))
 
 /** One page of the exchange kind the search's tab names (connections by default). */
 export const listExchanges = createServerFn({ method: 'GET' })
-  .middleware([operatorMiddleware])
+  .middleware([operatorReadMiddleware])
   .validator(tenantInput.extend(exchangeSearch.shape))
   .handler(async ({ context, data }) => {
     const platform = platformFor(context.principal, { tenantId: data.tenantId })
@@ -51,13 +51,13 @@ export const listExchanges = createServerFn({ method: 'GET' })
   })
 
 export const listWallets = createServerFn({ method: 'GET' })
-  .middleware([operatorMiddleware])
+  .middleware([operatorReadMiddleware])
   .validator(tenantInput.extend(walletSearch.shape))
   .handler(async ({ context, data }) => unwrap(await platformFor(context.principal, { tenantId: data.tenantId }).GET('/v1/wallets', { params: { query: walletQueryParams(data) } })))
 
 /** The tenant's webhook endpoint, or null when none is configured. The signing secret is never returned. */
 export const getWebhookEndpoint = createServerFn({ method: 'GET' })
-  .middleware([operatorMiddleware])
+  .middleware([operatorReadMiddleware])
   .validator(tenantInput)
   .handler(async ({ context, data }) => {
     try {
@@ -69,13 +69,13 @@ export const getWebhookEndpoint = createServerFn({ method: 'GET' })
   })
 
 export const listWebhookDeliveries = createServerFn({ method: 'GET' })
-  .middleware([operatorMiddleware])
+  .middleware([operatorReadMiddleware])
   .validator(tenantInput.extend(deliverySearch.shape))
   .handler(async ({ context, data }) => unwrap(await platformFor(context.principal, { tenantId: data.tenantId }).GET('/v1/webhook/deliveries', { params: { query: deliveryQueryParams(data) } })))
 
 /** Includes the signed body, which carries credential attributes; platform-api audits the read. */
 export const getWebhookDelivery = createServerFn({ method: 'GET' })
-  .middleware([operatorMiddleware])
+  .middleware([operatorReadMiddleware])
   .validator(tenantInput.extend({ deliveryId: z.number().int().positive(), revealReason: operatorReason.optional() }))
   .handler(async ({ context, data }) =>
     unwrap(await platformFor(context.principal, { tenantId: data.tenantId, revealReason: data.revealReason }).GET('/v1/webhook/deliveries/{id}', { params: { path: { id: data.deliveryId } } }))
@@ -90,7 +90,7 @@ export const retryWebhookDelivery = createServerFn({ method: 'POST' })
 
 /** Phase 6: one exchange's biometric log. platform-api audits the read (auditRead). */
 export const getBiometricLog = createServerFn({ method: 'GET' })
-  .middleware([operatorMiddleware])
+  .middleware([operatorReadMiddleware])
   .validator(tenantInput.extend({ kind: z.enum(['credential', 'proof']), id: z.string().min(1).max(100) }))
   .handler(async ({ context, data }) => {
     const platform = platformFor(context.principal, { tenantId: data.tenantId })
@@ -100,7 +100,7 @@ export const getBiometricLog = createServerFn({ method: 'GET' })
 
 /** Phase 6: the tenant's biometric settings, read-only for operators (tenants configure their own vendor). */
 export const getTenantBiometrics = createServerFn({ method: 'GET' })
-  .middleware([operatorMiddleware])
+  .middleware([operatorReadMiddleware])
   .validator(tenantInput)
   .handler(async ({ context, data }) => {
     const platform = platformFor(context.principal, { tenantId: data.tenantId })
@@ -127,7 +127,7 @@ export const eraseTenantRecord = createServerFn({ method: 'POST' })
   })
 
 export const getTenantRetention = createServerFn({ method: 'GET' })
-  .middleware([operatorMiddleware])
+  .middleware([operatorReadMiddleware])
   .validator(tenantInput)
   .handler(async ({ context, data }) => unwrap(await platformFor(context.principal, { tenantId: data.tenantId }).GET('/v1/data-retention')))
 
@@ -137,6 +137,6 @@ export const setTenantRetention = createServerFn({ method: 'POST' })
   .handler(async ({ context, data }) => unwrap(await platformFor(context.principal, { tenantId: data.tenantId }).PUT('/v1/data-retention', { body: { retentionDays: data.retentionDays } })))
 
 export const listTenantErasures = createServerFn({ method: 'GET' })
-  .middleware([operatorMiddleware])
+  .middleware([operatorReadMiddleware])
   .validator(tenantInput.extend({ page: z.number().int().min(1).default(1), pageSize: z.number().int().min(1).max(100).default(25) }))
   .handler(async ({ context, data }) => unwrap(await platformFor(context.principal, { tenantId: data.tenantId }).GET('/v1/erasures', { params: { query: { page: data.page, pageSize: data.pageSize } } })))

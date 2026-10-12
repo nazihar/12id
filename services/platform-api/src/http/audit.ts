@@ -24,7 +24,7 @@ declare module 'fastify' {
 export function consoleAuditHook(db: Database) {
   return async (request: FastifyRequest, reply: FastifyReply) => {
     const principal = request.tenant?.principal
-    const who = principal?.kind === 'console' ? { actor: principal.actor, role: principal.role } : request.operator ? { actor: request.operator.actor, role: 'operator' } : null
+    const who = principal?.kind === 'console' ? { actor: principal.actor, role: principal.role, label: principal.actorLabel } : request.operator ? { actor: request.operator.actor, role: 'operator', label: request.operator.actorLabel } : null
     if (!who) return
     const mutating = request.method !== 'GET' && request.method !== 'HEAD'
     if (!mutating && request.routeOptions.config?.auditRead !== true && !request.auditReason) return
@@ -35,7 +35,7 @@ export function consoleAuditHook(db: Database) {
     // Reads record no body; a mutating call records what it changed (review L10).
     const changes = mutating ? auditChanges({ params: request.params, body: request.body, recordBody: request.routeOptions.config?.auditBody !== false }) : null
     try {
-      await db.insert(consoleAudit).values({ actor: who.actor, role: who.role, tenantId, method: request.method, route, statusCode: reply.statusCode, requestId: String(request.id), reason: request.auditReason ?? null, changes })
+      await db.insert(consoleAudit).values({ actor: who.actor, actorLabel: who.label ?? null, role: who.role, tenantId, method: request.method, route, statusCode: reply.statusCode, requestId: String(request.id), reason: request.auditReason ?? null, changes })
     } catch (error) {
       request.log.error({ err: error, actor: who.actor, route }, 'console audit write failed')
     }

@@ -9,6 +9,7 @@ import { RateLimitCard } from '@/features/tenants/rate-limit-card'
 import { createApiKey, revokeApiKey } from '@/features/tenants/tenants.functions'
 import { tenantApiKeysQuery, tenantQuery } from '@/features/tenants/tenants.queries'
 import { parseListSearch, searchPatcher } from '@/lib/list-search'
+import { useCanOperate } from '@/lib/use-can-operate'
 
 export const Route = createFileRoute('/_authed/ops/tenants/$tenantId/api-keys')({
   validateSearch: parseListSearch(apiKeySearch),
@@ -23,6 +24,7 @@ function ApiKeysPage() {
   const search = Route.useSearch()
   const onSearch = searchPatcher<ApiKeySearch>(Route.useNavigate())
   const fetching = useListPending()
+  const canOperate = useCanOperate()
   const { data: keys } = useSuspenseQuery(tenantApiKeysQuery(tenantId, search))
   const { data: tenant } = useSuspenseQuery(tenantQuery(tenantId))
   return (
@@ -34,8 +36,8 @@ function ApiKeysPage() {
         onSearch={onSearch}
         fetching={fetching}
         invalidateKey={['ops', 'tenant', tenantId, 'api-keys']}
-        createKey={(label) => createApiKey({ data: { tenantId, label } })}
-        revokeKey={(apiKeyId) => revokeApiKey({ data: { tenantId, apiKeyId } })}
+        createKey={canOperate ? (label) => createApiKey({ data: { tenantId, label } }) : undefined}
+        revokeKey={canOperate ? (apiKeyId) => revokeApiKey({ data: { tenantId, apiKeyId } }) : undefined}
       />
     </div>
   )

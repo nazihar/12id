@@ -5,7 +5,7 @@
  */
 import { randomBytes } from 'node:crypto'
 
-import { type SQL, and, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
+import { type SQL, and, eq, inArray, isNull, sql } from 'drizzle-orm'
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { z } from 'zod'
 
@@ -15,7 +15,7 @@ import { EVENT_TYPES } from '../../webhooks/events.ts'
 import { type TenantContext, requireConsolePrincipal } from '../auth.ts'
 import { PlatformError, notFound } from '../errors.ts'
 import { maskBody, masked } from '../personal-data.ts'
-import { createdBetween, createdRange, listPage, pageOf, pageQuery } from '../list.ts'
+import { createdBetween, createdRange, listPage, newestFirst, pageOf, pageQuery } from '../list.ts'
 import { CONSOLE_ONLY_TAG } from './console.ts'
 
 const errorBody = z.object({ error: z.string(), reason: z.string() })
@@ -146,7 +146,7 @@ export const webhookRoutes = (deps: { db: Database }): FastifyPluginAsyncZod => 
     async (request) => {
       const filters = [eq(webhookDeliveries.tenantId, tenant(request).id), ...deliveryFilters(request.query)]
       const page = await listPage(deps.db, { table: webhookDeliveries, where: filters, ...request.query }, (where, limit, offset) =>
-        deps.db.select().from(webhookDeliveries).where(where).orderBy(desc(webhookDeliveries.createdAt), desc(webhookDeliveries.id)).limit(limit).offset(offset)
+        deps.db.select().from(webhookDeliveries).where(where).orderBy(...newestFirst(webhookDeliveries.createdAt, webhookDeliveries.id)).limit(limit).offset(offset)
       )
       return { ...page, items: page.items.map(delivery) }
     }

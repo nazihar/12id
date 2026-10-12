@@ -5,18 +5,19 @@
  *   function that validates the invitation and calls `auth.api.createUser` without request headers
  *   (the admin plugin allows that server-side call); the first operator comes from the CLI.
  * - 2FA for everyone, enforced by the console middleware (Better Auth makes it opt-in per user).
- *   Methods: TOTP or email OTP. Operators are TOTP-only: email OTP offers itself to every 2FA user at
- *   sign-in once `sendOTP` exists, so the after-hook below refuses a session obtained through it.
+ *   Methods: TOTP or email OTP. Operators and auditors are TOTP-only: email OTP offers itself to every
+ *   2FA user at sign-in once `sendOTP` exists, so the after-hook below refuses a session obtained through it.
  * - Tenants are organizations carrying the platform tenant id; users never create organizations.
  */
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
-import { APIError, createAuthMiddleware } from 'better-auth/api'
+import { APIError, createAuthMiddleware, getIP } from 'better-auth/api'
 import { admin, organization, twoFactor } from 'better-auth/plugins'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { eq } from 'drizzle-orm'
 
-import { OPERATOR_ROLE, SESSION_MAX_AGE_MS, hasPlatformRole, platformAc, platformRoles, tenantAc, tenantRoles } from '../lib/permissions'
+import { OPERATOR_ROLE, SESSION_MAX_AGE_MS, platformAc, platformRoles, staffRoleOf, tenantAc, tenantRoles } from '../lib/permissions'
+import { reportAuthCall, reportPasswordReset, reportSignOut } from './auth-audit.server'
 import { consoleDb } from './db.server'
 import * as schema from './db/auth-schema'
 import { startAuthHousekeeping } from './data-protection.server'
@@ -33,14 +34,21 @@ export const auth = betterAuth({
   ...authSecretOptions(env),
   trustedOrigins: [env.BETTER_AUTH_URL],
   database: drizzleAdapter(consoleDb().db, { provider: 'pg', schema }),
+  // When the account last completed a sign-in (implement/22 C14). Sessions cannot tell: expired ones are purged hourly.
+  user: {
+    additionalFields: {
+      lastSignInAt: { type: 'date', required: false, input: false },
+    },
+  },
   emailAndPassword: {
     enabled: true,
     disableSignUp: true,
     minPasswordLength: 12,
     revokeSessionsOnPasswordReset: true,
     // The link reached the mailbox, so the address is verified; accepting organization invitations requires it.
-    onPasswordReset: async ({ user }) => {
+    onPasswordReset: async ({ user }, request) => {
       await consoleDb().db.update(schema.user).set({ emailVerified: true }).where(eq(schema.user.id, user.id))
+      await reportPasswordReset(user, request, request ? getIP(request, auth.options) : null)
     },
     // Also the first-password link for accounts an operator created (tenant owners), so the wording covers both.
     sendResetPassword: async ({ user, url }) => {
@@ -61,14 +69,20 @@ export const auth = betterAuth({
     enabled: true,
     storage: 'database',
   },
+  // Both hooks also report to the audit log (implement/22 C13, auth-audit.server.ts).
   hooks: {
+    before: createAuthMiddleware(async (ctx) => {
+      await reportSignOut(ctx)
+    }),
     after: createAuthMiddleware(async (ctx) => {
-      if (ctx.path !== '/two-factor/verify-otp') return
+      let refusal: APIError | undefined
       const created = ctx.context.newSession
-      if (created && hasPlatformRole((created.user as { role?: string }).role, OPERATOR_ROLE)) {
+      if (ctx.path === '/two-factor/verify-otp' && created && staffRoleOf((created.user as { role?: string }).role)) {
         await ctx.context.internalAdapter.deleteSession(created.session.token)
-        throw new APIError('FORBIDDEN', { message: 'operators must use an authenticator app' })
+        refusal = new APIError('FORBIDDEN', { message: 'operators must use an authenticator app' })
       }
+      await reportAuthCall(ctx, refusal)
+      if (refusal) throw refusal
     }),
   },
   plugins: [

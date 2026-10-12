@@ -3,6 +3,7 @@
  * admins, members) see their data as is. An operator, who can open every tenant, gets attribute
  * values, disclosed values, holder labels and webhook bodies masked, unless the console sends a
  * reason in `x-console-reveal-reason`. That reveal is audited with the reason, like an erasure.
+ * An auditor (implement/22 C14) also opens every tenant, sees the same masks and cannot reveal.
  */
 import type { FastifyRequest } from 'fastify'
 
@@ -43,7 +44,11 @@ function decodeHeader(value: unknown): string | undefined {
 /** true when this request must see personal data masked. Records a reveal's reason for the audit. */
 export function masked(request: FastifyRequest): boolean {
   const principal = (request.tenant as TenantContext | undefined)?.principal
-  if (principal?.kind !== 'console' || principal.role !== 'operator') return false
+  if (principal?.kind !== 'console' || (principal.role !== 'operator' && principal.role !== 'auditor')) return false
+  if (principal.role === 'auditor') {
+    if (request.headers[REVEAL_REASON_HEADER] !== undefined) throw new PlatformError(403, 'forbidden', 'auditors cannot reveal personal data')
+    return true
+  }
   // The console URI-encodes the reason: a header cannot carry every character a person may type.
   const reason = cleanReason(decodeHeader(request.headers[REVEAL_REASON_HEADER]))
   if (!reason) return true

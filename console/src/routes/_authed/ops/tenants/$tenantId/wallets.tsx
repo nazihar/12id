@@ -4,6 +4,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useListPending } from '@/components/data-table/use-list-pending'
 import { PageHeader } from '@/components/page-header'
 import { RouteError } from '@/components/route-error'
+import { exportTenantList } from '@/features/export/export.functions'
 import { type WalletSearch, walletSearch } from '@/features/tenant-data/list.schemas'
 import { WalletsTable } from '@/features/tenant-data/panels'
 import { walletsQuery } from '@/features/tenant-data/tenant-data.queries'
@@ -25,7 +26,7 @@ function WalletsPage() {
   return (
     <section className="space-y-4">
       <PageHeader title="Wallets" description="One wallet per app installation, created by the tenant's backend." />
-      <WalletsTable data={data} search={search} onSearch={onSearch} fetching={useListPending()} />
+      <WalletsTable data={data} search={search} onSearch={onSearch} fetching={useListPending()} onExport={(format) => exportTenantList({ data: { tenantId, list: 'wallets', format, search } })} />
     </section>
   )
 }

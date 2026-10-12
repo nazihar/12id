@@ -40,7 +40,7 @@ function SetupTwoFactorPage() {
     validators: { onDynamic: confirmPasswordForm },
     onSubmitMeta: { method: 'totp' as Method },
     onSubmit: async ({ value, meta }) => {
-      const useEmail = meta.method === 'otp' && !viewer.isOperator
+      const useEmail = meta.method === 'otp' && !viewer.isStaff
       setError(null)
       const result = useEmail ? await authClient.twoFactor.enable({ password: value.password, method: 'otp' }) : await authClient.twoFactor.enable({ password: value.password })
       if (result.error) {
@@ -75,13 +75,13 @@ function SetupTwoFactorPage() {
   }
 
   return (
-    <AuthLayout size="md" title="Set up two-factor authentication" description={viewer.isOperator ? 'Operator accounts use an authenticator app.' : 'Use an authenticator app, or receive codes by email.'}>
+    <AuthLayout size="md" title="Set up two-factor authentication" description={viewer.isStaff ? 'Operator accounts use an authenticator app.' : 'Use an authenticator app, or receive codes by email.'}>
       {!enrollment ? (
         <Form form={form}>
           <form.FormError error={error} />
           <form.AppField name="password">{(field) => <field.PasswordField label="Confirm your password" autoComplete="current-password" autoFocus />}</form.AppField>
           <form.SubmitButton pendingLabel="Checking…">Use an authenticator app</form.SubmitButton>
-          {!viewer.isOperator && (
+          {!viewer.isStaff && (
             <form.Subscribe selector={(state) => state.isSubmitting}>
               {(isSubmitting) => (
                 <Button type="button" variant="outline" disabled={!hydrated || isSubmitting} onClick={() => void form.handleSubmit({ method: 'otp' })}>

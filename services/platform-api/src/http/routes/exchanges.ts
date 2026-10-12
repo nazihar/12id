@@ -5,7 +5,7 @@
  *
  * Ids exposed here are the agent's Credo record ids, always scoped by tenant.
  */
-import { type SQL, and, desc, eq, inArray, or } from 'drizzle-orm'
+import { type SQL, and, eq, inArray, or } from 'drizzle-orm'
 import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { z } from 'zod'
@@ -14,7 +14,7 @@ import { credentialValuesSchema } from '@12id/credo-base/credential-values.ts'
 
 import type { AgentClient } from '../../agent-client.ts'
 import type { BiometricClient } from '../../biometric-client.ts'
-import { type GateEngine, biometricLogView, gatesFor } from '../../biometric/gate.ts'
+import { type GateEngine, biometricLogView, gateLog, gatesFor } from '../../biometric/gate.ts'
 import { effectivePolicy, runGated } from '../../biometric/gating.ts'
 import { conditionParam } from '../../biometric/policy.ts'
 import type { Database } from '../../db/client.ts'
@@ -24,7 +24,7 @@ import { expandTemplate, templateDefinition } from '../../templates.ts'
 import { connectionView, credentialView, expiryOf, proofView, toConnectionView, toCredentialView, toProofView } from '../../views.ts'
 import { assertTenantReady, type TenantContext } from '../auth.ts'
 import { cleanReason, maskConnection, maskCredential, maskProof, masked } from '../personal-data.ts'
-import { containsI, createdBetween, createdRange, listPage, many, oneOrMany, pageOf, pageQuery, searchQuery } from '../list.ts'
+import { containsI, createdBetween, createdRange, listPage, many, newestFirst, oneOrMany, pageOf, pageQuery, searchQuery } from '../list.ts'
 import { PlatformError, badRequest, notFound } from '../errors.ts'
 import { resolveCredentialDefinition } from './catalogue.ts'
 
@@ -144,7 +144,7 @@ export const exchangeRoutes = (deps: ExchangeDeps): FastifyPluginAsyncZod => asy
       const filters = exchangeFilters(connections, t.id, request.query, [connections.externalId, connections.theirLabel])
       if (request.query.invitationId) filters.push(eq(connections.invitationId, request.query.invitationId))
       const page = await listPage(deps.db, { table: connections, where: filters, ...request.query }, (where, limit, offset) =>
-        deps.db.select().from(connections).where(where).orderBy(desc(connections.createdAt), desc(connections.recordId)).limit(limit).offset(offset)
+        deps.db.select().from(connections).where(where).orderBy(...newestFirst(connections.createdAt, connections.recordId)).limit(limit).offset(offset)
       )
       const hide = masked(request)
       return { ...page, items: page.items.map((r) => (hide ? maskConnection(toConnectionView(r)) : toConnectionView(r))) }
@@ -214,7 +214,7 @@ export const exchangeRoutes = (deps: ExchangeDeps): FastifyPluginAsyncZod => asy
       const filters = exchangeFilters(credentials, t.id, request.query, [credentials.externalId])
       if (request.query.connectionId) filters.push(eq(credentials.connectionId, request.query.connectionId))
       const page = await listPage(deps.db, { table: credentials, where: filters, ...request.query }, (where, limit, offset) =>
-        deps.db.select().from(credentials).where(where).orderBy(desc(credentials.createdAt), desc(credentials.recordId)).limit(limit).offset(offset)
+        deps.db.select().from(credentials).where(where).orderBy(...newestFirst(credentials.createdAt, credentials.recordId)).limit(limit).offset(offset)
       )
       const gates = await gatesFor(deps.db, t.id, 'credential', page.items.map((r) => r.recordId))
       const hide = masked(request)
@@ -289,7 +289,7 @@ export const exchangeRoutes = (deps: ExchangeDeps): FastifyPluginAsyncZod => asy
       const filters = exchangeFilters(proofs, t.id, request.query, [proofs.externalId])
       if (request.query.connectionId) filters.push(eq(proofs.connectionId, request.query.connectionId))
       const page = await listPage(deps.db, { table: proofs, where: filters, ...request.query }, (where, limit, offset) =>
-        deps.db.select().from(proofs).where(where).orderBy(desc(proofs.createdAt), desc(proofs.recordId)).limit(limit).offset(offset)
+        deps.db.select().from(proofs).where(where).orderBy(...newestFirst(proofs.createdAt, proofs.recordId)).limit(limit).offset(offset)
       )
       const gates = await gatesFor(deps.db, t.id, 'proof', page.items.map((r) => r.recordId))
       const hide = masked(request)
@@ -366,7 +366,7 @@ export const exchangeRoutes = (deps: ExchangeDeps): FastifyPluginAsyncZod => asy
       const t = tenant(request)
       const [row] = await deps.db.select({ recordId: credentials.recordId }).from(credentials).where(and(eq(credentials.tenantId, t.id), eq(credentials.recordId, request.params.id)))
       if (!row) throw notFound('credential exchange')
-      return { ...(deps.gates ? await deps.gates.log(t.id, 'credential', row.recordId) : { biometric: null, events: [] }), condition: null }
+      return { ...(await gateLog(deps.db, t.id, 'credential', row.recordId)), condition: null }
     }
   )
 
@@ -388,7 +388,7 @@ export const exchangeRoutes = (deps: ExchangeDeps): FastifyPluginAsyncZod => asy
       if (!row) throw notFound('proof exchange')
       // The numbers sent are the customer's data about a person: masked for operators like disclosed values.
       const condition = row.condition && masked(request) ? { ...row.condition, conditions: row.condition.conditions.map((c) => ({ ...c, input: null })) } : row.condition
-      return { ...(deps.gates ? await deps.gates.log(t.id, 'proof', row.recordId) : { biometric: null, events: [] }), condition }
+      return { ...(await gateLog(deps.db, t.id, 'proof', row.recordId)), condition }
     }
   )
 }

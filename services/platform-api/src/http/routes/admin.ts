@@ -3,7 +3,7 @@
  * the console (console token + operator role + actor) and the break-glass `x-admin-token` over an
  * SSH tunnel. The edge answers 404 for /admin/*; both callers are audited (audit.ts).
  */
-import { type SQL, desc, eq, inArray, or } from 'drizzle-orm'
+import { type SQL, and, desc, eq, inArray, like, ne, or } from 'drizzle-orm'
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { z } from 'zod'
 
@@ -13,7 +13,8 @@ import type { Database } from '../../db/client.ts'
 import { DELIVERY_STATUSES, apiKeys, consoleAudit, tenants, webhookDeliveries } from '../../db/schema.ts'
 import { requireOperator } from '../auth.ts'
 import { notFound } from '../errors.ts'
-import { containsI, createdBetween, createdRange, listPage, many, oneOrMany, pageOf, pageQuery, searchQuery } from '../list.ts'
+import { containsI, createdBetween, createdRange, listPage, many, newestFirst, oneOrMany, pageOf, pageQuery, searchQuery } from '../list.ts'
+import { AUDIT_EVENT_METHOD, AUDIT_KINDS, type AuditKind } from './audit-events.ts'
 import { CONSOLE_ONLY_TAG } from './console.ts'
 import { activeRevokedByTenant, deadDeliveriesByTenant, exchangeActivityByTenant } from './stats.ts'
 import { deliveryFilters, deliveryListQuery, deliveryView, toDeliveryView } from './webhook.ts'
@@ -45,9 +46,13 @@ const auditView = z.object({
   id: z.number().int(),
   at: z.iso.datetime(),
   actor: z.string(),
+  /** The actor's email when it acted; null on rows written before it was kept. */
+  actorLabel: z.string().nullable(),
   role: z.string(),
   tenantId: z.string().nullable(),
+  /** The HTTP method of a change, or `EVENT` for a sign-in, an account change or an export the console reported. */
   method: z.string(),
+  /** The route pattern of a change, or the event's type (`auth.sign_in`). */
   route: z.string(),
   statusCode: z.number().int(),
   requestId: z.string(),
@@ -201,7 +206,7 @@ export const adminRoutes = (deps: AdminDeps): FastifyPluginAsyncZod => async (ap
       const filters = deliveryFilters(request.query)
       if (request.query.tenantId) filters.push(eq(webhookDeliveries.tenantId, request.query.tenantId))
       const page = await listPage(deps.db, { table: webhookDeliveries, where: filters, ...request.query }, (where, limit, offset) =>
-        deps.db.select().from(webhookDeliveries).where(where).orderBy(desc(webhookDeliveries.createdAt), desc(webhookDeliveries.id)).limit(limit).offset(offset)
+        deps.db.select().from(webhookDeliveries).where(where).orderBy(...newestFirst(webhookDeliveries.createdAt, webhookDeliveries.id)).limit(limit).offset(offset)
       )
       return { ...page, items: page.items.map((row) => ({ ...toDeliveryView(row), tenantId: row.tenantId })) }
     }
@@ -213,25 +218,33 @@ export const adminRoutes = (deps: AdminDeps): FastifyPluginAsyncZod => async (ap
       schema: {
         tags,
         summary: 'Console audit log',
-        description: 'Newest first, paged. Each change carries its route parameters and request body, with secrets and personal data replaced. `q` matches the route pattern or the actor id, or any of the `qActor` ids (the console resolves names and emails to account ids); `actor` restricts to one or more actor ids.',
-        querystring: pageQuery.extend(createdRange.shape).extend(searchQuery.shape).extend({ tenantId: z.uuid().optional(), actor: oneOrMany(z.string().min(1).max(200)), qActor: oneOrMany(z.string().min(1).max(200)) }),
+        description:
+          'Newest first, paged. Each change carries its route parameters and request body, with secrets and personal data replaced. Sign-ins, account changes and exports are rows with method `EVENT` and their type as the route. `kind` keeps one family: `change` (calls that went through this API), `sign-in`, `account` or `export`. `q` matches the route pattern or event type, the actor id or the actor label (email), or any of the `qActor` ids (the console resolves names and emails to account ids); `actor` restricts to one or more actor ids.',
+        querystring: pageQuery
+          .extend(createdRange.shape)
+          .extend(searchQuery.shape)
+          .extend({ tenantId: z.uuid().optional(), kind: z.enum(Object.keys(AUDIT_KINDS) as [AuditKind, ...AuditKind[]]).optional(), actor: oneOrMany(z.string().min(1).max(200)), qActor: oneOrMany(z.string().min(1).max(200)) }),
         response: { 200: pageOf(auditView) },
       },
     },
     async (request) => {
-      const { tenantId, q } = request.query
+      const { tenantId, q, kind } = request.query
       const actors = many(request.query.actor)
       const filters: SQL[] = createdBetween(consoleAudit.at, request.query)
       if (tenantId) filters.push(eq(consoleAudit.tenantId, tenantId))
+      if (kind) {
+        const prefix = AUDIT_KINDS[kind]
+        filters.push(prefix === null ? ne(consoleAudit.method, AUDIT_EVENT_METHOD) : and(eq(consoleAudit.method, AUDIT_EVENT_METHOD), like(consoleAudit.route, `${prefix}%`))!)
+      }
       if (actors.length) filters.push(inArray(consoleAudit.actor, actors))
       const qActors = many(request.query.qActor)
-      if (q) filters.push(or(containsI(consoleAudit.route, q), containsI(consoleAudit.actor, q), ...(qActors.length ? [inArray(consoleAudit.actor, qActors)] : []))!)
+      if (q) filters.push(or(containsI(consoleAudit.route, q), containsI(consoleAudit.actor, q), containsI(consoleAudit.actorLabel, q), ...(qActors.length ? [inArray(consoleAudit.actor, qActors)] : []))!)
       const page = await listPage(deps.db, { table: consoleAudit, where: filters, ...request.query }, (where, limit, offset) =>
         deps.db.select().from(consoleAudit).where(where).orderBy(desc(consoleAudit.at), desc(consoleAudit.id)).limit(limit).offset(offset)
       )
       return {
         ...page,
-        items: page.items.map((row) => ({ id: row.id, at: row.at.toISOString(), actor: row.actor, role: row.role, tenantId: row.tenantId, method: row.method, route: row.route, statusCode: row.statusCode, requestId: row.requestId, reason: row.reason, changes: row.changes ?? null })),
+        items: page.items.map((row) => ({ id: row.id, at: row.at.toISOString(), actor: row.actor, actorLabel: row.actorLabel, role: row.role, tenantId: row.tenantId, method: row.method, route: row.route, statusCode: row.statusCode, requestId: row.requestId, reason: row.reason, changes: row.changes ?? null })),
       }
     }
   )

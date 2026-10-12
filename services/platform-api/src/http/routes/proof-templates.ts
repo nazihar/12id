@@ -2,7 +2,7 @@
  * Proof template CRUD (P4). Validation is static here; catalogue resolution happens at request time.
  * Reads take an API key or the console; writes are console only (review K1).
  */
-import { type SQL, and, desc, eq } from 'drizzle-orm'
+import { type SQL, and, eq } from 'drizzle-orm'
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { z } from 'zod'
 
@@ -12,7 +12,7 @@ import { templateBiometricOverride } from '../../biometric/policy.ts'
 import { templateDefinition, validateTemplate } from '../../templates.ts'
 import { type TenantContext, requireConsolePrincipal } from '../auth.ts'
 import { notFound } from '../errors.ts'
-import { containsI, listPage, pageOf, pageQuery, searchQuery } from '../list.ts'
+import { containsI, listPage, newestFirst, pageOf, pageQuery, searchQuery } from '../list.ts'
 import { CONSOLE_ONLY_TAG } from './console.ts'
 
 const errorBody = z.object({ error: z.string(), reason: z.string() })
@@ -74,7 +74,7 @@ export const proofTemplateRoutes = (deps: { db: Database }): FastifyPluginAsyncZ
       const filters: SQL[] = [eq(proofTemplates.tenantId, tenant(request).id)]
       if (request.query.q) filters.push(containsI(proofTemplates.name, request.query.q))
       const page = await listPage(deps.db, { table: proofTemplates, where: filters, ...request.query }, (where, limit, offset) =>
-        deps.db.select().from(proofTemplates).where(where).orderBy(desc(proofTemplates.createdAt), desc(proofTemplates.id)).limit(limit).offset(offset)
+        deps.db.select().from(proofTemplates).where(where).orderBy(...newestFirst(proofTemplates.createdAt, proofTemplates.id)).limit(limit).offset(offset)
       )
       return { ...page, items: page.items.map(view) }
     }

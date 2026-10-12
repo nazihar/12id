@@ -11,6 +11,7 @@ import { type AttentionItem, AttentionList } from '@/components/dashboard/attent
 import { ActivityChart, OutcomeBar, outcomeRow } from '@/components/dashboard/charts'
 import { StatGrid, StatTile } from '@/components/dashboard/stat-tile'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { percent } from '@/features/verification/verification-format'
 import { formatDateTime } from '@/lib/format'
 
 import type { TenantDashboard } from './dashboard.queries'
@@ -19,6 +20,7 @@ export interface TenantDashboardLinks {
   exchanges: Pick<LinkProps, 'to' | 'params'>
   wallets: Pick<LinkProps, 'to' | 'params'>
   webhooks: Pick<LinkProps, 'to' | 'params'>
+  verification: Pick<LinkProps, 'to' | 'params'>
 }
 
 /** platform-api's exchange states grouped for the outcome bar. Connections complete; the other two finish in `done`. */
@@ -38,7 +40,7 @@ export function tenantAttentionItems(stats: TenantDashboard, links: TenantDashbo
 }
 
 export function TenantDashboardBody({ stats, links }: { stats: TenantDashboard; links: TenantDashboardLinks }) {
-  const { totals, webhook } = stats
+  const { totals, webhook, verification } = stats
   const inFlight = (byState: Record<string, number>, outcomes: { done: string[]; abandoned: string[] }) => outcomeRow('', byState, outcomes).inFlight
   const outcomes = [outcomeRow('Connections', totals.connections.byState, CONNECTION_OUTCOMES), outcomeRow('Credentials', totals.credentials.byState, EXCHANGE_OUTCOMES), outcomeRow('Proofs', totals.proofs.byState, EXCHANGE_OUTCOMES)]
 
@@ -66,8 +68,16 @@ export function TenantDashboardBody({ stats, links }: { stats: TenantDashboard; 
             <CardTitle>Outcomes</CardTitle>
             <CardDescription>Where every exchange stands today.</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
             <OutcomeBar rows={outcomes} testId="outcome-chart" />
+            <p className="text-sm text-muted-foreground" data-testid="verification-summary">
+              Last {stats.days} days: {verification.proofsVerified} of {verification.proofsRequested} proof requests verified
+              {verification.faceChecks > 0 && `, ${verification.faceChecksPassed} of ${verification.faceChecks} face checks passed (${percent(verification.faceChecksPassed, verification.faceChecksPassed + verification.faceChecksFailed)} of those decided)`}
+              .{' '}
+              <Link {...links.verification} className="underline">
+                Verification
+              </Link>
+            </p>
           </CardContent>
         </Card>
       </div>

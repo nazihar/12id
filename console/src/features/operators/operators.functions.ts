@@ -1,32 +1,55 @@
 /**
- * Operator accounts (Phase 4 stage 4a), through Better Auth's admin plugin. Calls pass the signed-in
- * operator's own session, so Better Auth re-checks the operator role's permissions as well.
- * A new operator receives a set-password link and must set up an authenticator app at first sign-in.
+ * Accounts of the operator area (Phase 4 stage 4a; implement/22-console-feedback.md C14), through
+ * Better Auth's admin plugin. Calls pass the signed-in operator's own session, so Better Auth
+ * re-checks the operator role's permissions as well. Two roles: an operator runs the platform, an
+ * auditor reads it and changes nothing. A new account receives a set-password link and must set up
+ * an authenticator app at first sign-in.
+ *
+ * Every change is reported to the audit log (C13), naming the account by its email: after a deletion
+ * that is all that is left of it.
+ *
+ * Nobody acts on their own account here. That also keeps the platform operable: whoever makes a
+ * change is an operator who can sign in, and stays one afterwards.
  */
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { z } from 'zod'
 
-import { type SQL, and, count, desc, eq, ilike, isNull, or } from 'drizzle-orm'
+import { type SQL, and, count, desc, eq, ilike, inArray, isNull, or } from 'drizzle-orm'
 
-import { inviteOperatorInput, operatorSearch } from '@/features/operators/operators.schemas'
+import { editOperatorInput, inviteOperatorInput, operatorSearch } from '@/features/operators/operators.schemas'
 import { likeContains, pageParams } from '@/lib/list-search'
-import { OPERATOR_ROLE } from '@/lib/permissions'
+import { STAFF_ROLES, staffRoleOf } from '@/lib/permissions'
+import { principalActor, recordEvent } from '@/server/audit.server'
 import { auth } from '@/server/auth.server'
 import { consoleDb } from '@/server/db.server'
 import { user } from '@/server/db/auth-schema'
-import { operatorMiddleware } from '@/server/middleware'
+import { operatorMiddleware, operatorReadMiddleware } from '@/server/middleware'
 
 const userInput = z.object({ userId: z.string().min(1).max(100) })
 
-/** One page of operator accounts, newest first (Phase 4 C9): search by name or email, filter by status. */
+/** The audit names the account an action was taken on by its email, which outlives the account. */
+async function emailOf(userId: string) {
+  const [row] = await consoleDb().db.select({ email: user.email }).from(user).where(eq(user.id, userId))
+  return row?.email ?? null
+}
+
+/** An account of the operator area. Editing and deleting never reach a tenant member's account from here. */
+async function staffAccount(userId: string) {
+  const [row] = await consoleDb().db.select({ id: user.id, email: user.email, name: user.name, role: user.role }).from(user).where(eq(user.id, userId))
+  const role = staffRoleOf(row?.role)
+  if (!row || !role) throw new Error('This is not an operator or auditor account.')
+  return { ...row, role }
+}
+
+/** One page of operator and auditor accounts, newest first (Phase 4 C9): search by name or email, filter by role and status. */
 export const listOperators = createServerFn({ method: 'GET' })
-  .middleware([operatorMiddleware])
+  .middleware([operatorReadMiddleware])
   .validator(operatorSearch)
   .handler(async ({ data }) => {
     const { db } = consoleDb()
     const { page, pageSize, q } = pageParams(data)
-    const filters: SQL[] = [eq(user.role, OPERATOR_ROLE)]
+    const filters: SQL[] = [data.role ? eq(user.role, data.role) : inArray(user.role, [...STAFF_ROLES])]
     if (data.status) filters.push(data.status === 'banned' ? eq(user.banned, true) : or(isNull(user.banned), eq(user.banned, false))!)
     if (q) {
       const pattern = likeContains(q)
@@ -34,20 +57,65 @@ export const listOperators = createServerFn({ method: 'GET' })
     }
     const where = and(...filters)
     const [rows, [{ total }]] = await Promise.all([
-      db.select({ id: user.id, email: user.email, name: user.name, banned: user.banned, createdAt: user.createdAt }).from(user).where(where).orderBy(desc(user.createdAt), desc(user.id)).limit(pageSize).offset((page - 1) * pageSize),
+      db
+        .select({ id: user.id, email: user.email, name: user.name, role: user.role, banned: user.banned, twoFactorEnabled: user.twoFactorEnabled, lastSignInAt: user.lastSignInAt, createdAt: user.createdAt })
+        .from(user)
+        .where(where)
+        .orderBy(desc(user.createdAt), desc(user.id))
+        .limit(pageSize)
+        .offset((page - 1) * pageSize),
       db.select({ total: count() }).from(user).where(where),
     ])
-    const items = rows.map((operator) => ({ ...operator, banned: Boolean(operator.banned), createdAt: operator.createdAt.toISOString() }))
+    const items = rows.map((account) => ({
+      ...account,
+      role: staffRoleOf(account.role) ?? 'operator',
+      banned: Boolean(account.banned),
+      twoFactorEnabled: Boolean(account.twoFactorEnabled),
+      lastSignInAt: account.lastSignInAt?.toISOString() ?? null,
+      createdAt: account.createdAt.toISOString(),
+    }))
     return { items, total, page, pageSize }
   })
 
 export const inviteOperator = createServerFn({ method: 'POST' })
   .middleware([operatorMiddleware])
   .validator(inviteOperatorInput)
-  .handler(async ({ data }) => {
-    await auth.api.createUser({ headers: getRequestHeaders(), body: { email: data.email, name: data.name, role: OPERATOR_ROLE } })
+  .handler(async ({ context, data }) => {
+    await auth.api.createUser({ headers: getRequestHeaders(), body: { email: data.email, name: data.name, role: data.role } })
+    await recordEvent({ type: 'account.operator_invited', actor: principalActor(context.principal), detail: { account: data.email, name: data.name, role: data.role } })
     await auth.api.requestPasswordReset({ body: { email: data.email, redirectTo: '/reset-password' } })
     return { email: data.email }
+  })
+
+/** Name and role of an operator or auditor account. A role change applies to the account's next request. */
+export const editOperator = createServerFn({ method: 'POST' })
+  .middleware([operatorMiddleware])
+  .validator(userInput.extend(editOperatorInput.shape))
+  .handler(async ({ context, data }) => {
+    if (data.userId === context.principal.actor) throw new Error('You cannot change your own account here.')
+    const account = await staffAccount(data.userId)
+    const actor = principalActor(context.principal)
+    if (data.name !== account.name) {
+      await auth.api.adminUpdateUser({ headers: getRequestHeaders(), body: { userId: account.id, data: { name: data.name } } })
+      await recordEvent({ type: 'account.operator_updated', actor, detail: { account: account.email, userId: account.id, name: data.name, previousName: account.name } })
+    }
+    if (data.role !== account.role) {
+      await auth.api.setRole({ headers: getRequestHeaders(), body: { userId: account.id, role: data.role } })
+      await recordEvent({ type: 'account.operator_role_changed', actor, detail: { account: account.email, userId: account.id, role: data.role, previousRole: account.role } })
+    }
+    return { name: data.name, role: data.role }
+  })
+
+/** Removes the account and its sessions for good. Its past audit entries keep its email (C13). */
+export const deleteOperator = createServerFn({ method: 'POST' })
+  .middleware([operatorMiddleware])
+  .validator(userInput)
+  .handler(async ({ context, data }) => {
+    if (data.userId === context.principal.actor) throw new Error('You cannot delete your own account.')
+    const account = await staffAccount(data.userId)
+    await auth.api.removeUser({ headers: getRequestHeaders(), body: { userId: account.id } })
+    await recordEvent({ type: 'account.operator_deleted', actor: principalActor(context.principal), detail: { account: account.email, userId: account.id, name: account.name, role: account.role } })
+    return { deleted: true }
   })
 
 export const banOperator = createServerFn({ method: 'POST' })
@@ -57,21 +125,24 @@ export const banOperator = createServerFn({ method: 'POST' })
     if (data.userId === context.principal.actor) throw new Error('You cannot ban your own account.')
     // Banning also revokes the user's sessions.
     await auth.api.banUser({ headers: getRequestHeaders(), body: { userId: data.userId, banReason: data.reason } })
+    await recordEvent({ type: 'account.operator_banned', actor: principalActor(context.principal), detail: { account: await emailOf(data.userId), userId: data.userId, reason: data.reason } })
     return { banned: true }
   })
 
 export const unbanOperator = createServerFn({ method: 'POST' })
   .middleware([operatorMiddleware])
   .validator(userInput)
-  .handler(async ({ data }) => {
+  .handler(async ({ context, data }) => {
     await auth.api.unbanUser({ headers: getRequestHeaders(), body: { userId: data.userId } })
+    await recordEvent({ type: 'account.operator_unbanned', actor: principalActor(context.principal), detail: { account: await emailOf(data.userId), userId: data.userId } })
     return { banned: false }
   })
 
 export const revokeOperatorSessions = createServerFn({ method: 'POST' })
   .middleware([operatorMiddleware])
   .validator(userInput)
-  .handler(async ({ data }) => {
+  .handler(async ({ context, data }) => {
     await auth.api.revokeUserSessions({ headers: getRequestHeaders(), body: { userId: data.userId } })
+    await recordEvent({ type: 'account.operator_sessions_revoked', actor: principalActor(context.principal), detail: { account: await emailOf(data.userId), userId: data.userId } })
     return { revoked: true }
   })

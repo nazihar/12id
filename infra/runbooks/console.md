@@ -94,6 +94,20 @@ set-password link; the link works once and expires in one hour).
 
 - **Break-glass.** `x-admin-token` on `/admin/*` over an SSH tunnel still works (see
   `platform-api.md`); every use is in the console audit log as actor `admin-token`.
+- **Roles of the operator area** (implement/22 C14). An **operator** runs the platform. An **auditor**
+  sees every page an operator sees and can change nothing: no button is offered, the console's server
+  functions refuse it, and platform-api answers 403 to anything but a read. Personal data stays masked
+  for an auditor, with no reveal. Both use an authenticator app and have 12 h sessions. Add either from
+  Operators → Add operator; change the role from the row's Edit action.
+- **Deleting an account.** Operators → Delete removes the account, its sessions and its 2FA setup for
+  good. What it did stays in the audit log under its e-mail address. To block access and keep the
+  account, ban it instead. Nobody can edit, ban or delete their own account, so an operator always
+  remains; if the last one is lost anyway, create one with console-tools (First operator, above).
+- **The audit log is append-only** (platform-api migration `0012`). A trigger refuses `UPDATE`,
+  `DELETE` and `TRUNCATE` on `console_audit` and `erasures`. It also holds sign-ins, failed sign-ins,
+  account changes and exports, which the console reports to platform-api. There is no retention job:
+  pruning it is a deliberate act by the database owner (drop the trigger, delete, recreate it), to be
+  decided and recorded, not a routine step. Removing a tenant row that has erasure entries needs the same.
 - **Lost authenticator.** Backup codes were shown at enrollment. Without them, an operator disables
   2FA for the account directly in the `console` database (`update "user" set two_factor_enabled=false;
   delete from two_factor where user_id=…`) and the user re-enrolls at next sign-in. Record it in

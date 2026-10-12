@@ -11,10 +11,13 @@ import { RouteError } from '@/components/route-error'
 import { RowAction, RowActions } from '@/components/row-action'
 import { StateBadge } from '@/components/state-badge'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { exportOpsList } from '@/features/export/export.functions'
+import { auditAction, auditKindOptions, auditResult } from '@/features/ops/audit-events'
 import type { listAuditLog } from '@/features/ops/ops.functions'
 import { auditLogQuery } from '@/features/ops/ops.queries'
 import { type AuditSearch, auditSearch } from '@/features/ops/ops.schemas'
-import { DateRangeFilter } from '@/components/data-table/list-toolbar'
+import { ExportMenu } from '@/components/data-table/export-menu'
+import { DateRangeFilter, SelectFilter } from '@/components/data-table/list-toolbar'
 import { useListPending } from '@/components/data-table/use-list-pending'
 import { formatDateTime } from '@/lib/format'
 import { isFiltered, pagingFor, resetFor, parseListSearch, searchPatcher } from '@/lib/list-search'
@@ -49,8 +52,16 @@ const baseColumns = [
       )
     },
   }),
-  column.accessor((row) => `${row.method} ${row.route}`, { id: 'action', header: 'Action', cell: ({ getValue }) => <span className="font-mono text-xs">{getValue()}</span> }),
-  column.accessor('statusCode', { header: 'Result' }),
+  column.accessor((row) => auditAction(row).text, {
+    id: 'action',
+    header: 'Action',
+    // A call is shown as it was made; an event (a sign-in, an account change, an export) by its name.
+    cell: ({ row }) => {
+      const action = auditAction(row.original)
+      return action.event ? <span title={row.original.route}>{action.text}</span> : <span className="font-mono text-xs">{action.text}</span>
+    },
+  }),
+  column.accessor((row) => auditResult(row), { id: 'result', header: 'Result' }),
 ]
 
 export const Route = createFileRoute('/_authed/ops/audit')({
@@ -85,14 +96,23 @@ function AuditPage() {
   )
   return (
     <section className="space-y-4">
-      <PageHeader title="Audit log" description="Every change made through the console and the break-glass token, with what it changed, plus reads of webhook bodies. Newest first." />
+      <PageHeader
+        title="Audit log"
+        description="Every change made through the console and the break-glass token, with what it changed; reads of webhook bodies; sign-ins and failed sign-ins; account changes; exports. Newest first."
+      />
       <DataTable
         columns={columns}
         data={data.items}
         paging={pagingFor(data, onSearch)}
         onReset={resetFor(search, onSearch)}
-        search={{ value: search.q, placeholder: 'Search actor, email or route', onChange: (q) => onSearch({ q }) }}
-        toolbar={<DateRangeFilter label="Date" from={search.from} to={search.to} onChange={(range) => onSearch(range)} />}
+        search={{ value: search.q, placeholder: 'Search actor, email, route or event', onChange: (q) => onSearch({ q }) }}
+        toolbar={
+          <>
+            <SelectFilter label="Kind" options={auditKindOptions} value={search.kind} onChange={(kind) => onSearch({ kind })} testId="audit-kind" />
+            <DateRangeFilter label="Date" from={search.from} to={search.to} onChange={(range) => onSearch(range)} />
+          </>
+        }
+        actions={<ExportMenu onExport={(format) => exportOpsList({ data: { list: 'audit', format, search } })} />}
         fetching={useListPending()}
         emptyMessage={isFiltered(search) ? 'No audit entries match.' : 'No audit entries.'}
         testId="audit-table"
@@ -108,11 +128,9 @@ function AuditEntryDialog({ entry, onClose }: { entry: AuditRow | null; onClose:
     <Dialog open={entry !== null} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[calc(100svh-2rem)] overflow-y-auto overscroll-contain sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle className="font-mono text-sm">
-            {entry?.method} {entry?.route}
-          </DialogTitle>
+          <DialogTitle className={entry && auditAction(entry).event ? 'text-sm' : 'font-mono text-sm'}>{entry ? auditAction(entry).text : ''}</DialogTitle>
           <DialogDescription>
-            {entry ? `${formatDateTime(entry.at)} by ${entry.actorEmail ?? entry.actor}, result ${entry.statusCode}.` : ''} Secrets and personal data were replaced before this was stored.
+            {entry ? `${formatDateTime(entry.at)} by ${entry.actorEmail ?? entry.actor}, result ${auditResult(entry)}.` : ''} Secrets and personal data were replaced before this was stored.
           </DialogDescription>
         </DialogHeader>
         {entry?.reason && (

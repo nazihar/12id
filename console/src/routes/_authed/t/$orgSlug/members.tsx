@@ -70,6 +70,7 @@ function MembersPage() {
     memberColumn.accessor('email', { header: 'Email' }),
     memberColumn.accessor('role', { header: 'Role', cell: ({ getValue }) => <StateBadge state={getValue()} /> }),
     memberColumn.accessor('twoFactorEnabled', { header: '2FA', cell: ({ getValue }) => (getValue() ? 'on' : 'not set up') }),
+    memberColumn.accessor('lastSignInAt', { header: 'Last sign-in', cell: ({ getValue }) => (getValue() ? formatDateTime(getValue() as string) : 'never') }),
     memberColumn.accessor('since', { header: 'Member since', cell: ({ getValue }) => formatDateTime(getValue()) }),
     memberColumn.display({
       id: 'actions',

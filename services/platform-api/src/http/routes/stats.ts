@@ -16,7 +16,9 @@ import { DELIVERY_STATUSES, tenants, webhookEndpoints } from '../../db/schema.ts
 import type { ReadinessReport } from '../app.ts'
 import { type TenantContext, requireConsolePrincipal } from '../auth.ts'
 import { notFound } from '../errors.ts'
+import { daysQuery } from '../stats-window.ts'
 import { CONSOLE_ONLY_TAG } from './console.ts'
+import { verificationTotals, verificationTotalsView } from './verification.ts'
 
 export type ExchangeKind = 'connections' | 'credentials' | 'proofs'
 const KINDS: ExchangeKind[] = ['connections', 'credentials', 'proofs']
@@ -26,9 +28,6 @@ const TERMINAL_EXCHANGE_STATES = ['done', 'abandoned', 'declined']
 const STUCK_AFTER = sql`interval '24 hours'`
 const EXPIRING_WITHIN = sql`interval '30 days'`
 
-export const DAYS_MIN = 7
-export const DAYS_MAX = 90
-const daysQuery = z.object({ days: z.coerce.number().int().min(DAYS_MIN).max(DAYS_MAX).default(30) })
 
 const stateCounts = z.record(z.string(), z.number().int())
 const activeRevoked = z.object({ active: z.number().int(), revoked: z.number().int() })
@@ -63,6 +62,8 @@ export const tenantStatsView = z.object({
     walletsNeverConnected: z.number().int(),
   }),
   series: z.array(seriesPoint),
+  /** Proof and face-check outcomes of the window (implement/22 C10); the Verification page has the detail. */
+  verification: verificationTotalsView,
 })
 
 export const platformStatsView = z.object({
@@ -85,6 +86,8 @@ export const platformStatsView = z.object({
     tenantsWithoutWebhook: z.number().int(),
   }),
   series: z.array(seriesPoint),
+  /** Proof and face-check outcomes of the window, across tenants (implement/22 C10). */
+  verification: verificationTotalsView,
   topTenants: z.array(z.object({ tenantId: z.string(), name: z.string(), exchanges: z.number().int() })),
   health: z.object({ ready: z.boolean(), draining: z.boolean(), checks: z.record(z.string(), z.boolean()) }),
 })
@@ -208,7 +211,7 @@ export const tenantStatsRoutes = (deps: { db: Database }): FastifyPluginAsyncZod
     async (request) => {
       const t = tenant(request)
       const { days } = request.query
-      const [tenantRow, activity, wallets, keys, dead, endpoint, deliveries, stuckCredentials, stuckProofs, walletsNeverConnected, expiry, series] = await Promise.all([
+      const [tenantRow, activity, wallets, keys, dead, endpoint, deliveries, stuckCredentials, stuckProofs, walletsNeverConnected, expiry, series, verification] = await Promise.all([
         deps.db.select().from(tenants).where(eq(tenants.id, t.id)).then((rows) => rows[0]),
         exchangeActivityByTenant(deps.db, t.id),
         activeRevokedByTenant(deps.db, 'wallets', t.id),
@@ -223,6 +226,7 @@ export const tenantStatsRoutes = (deps: { db: Database }): FastifyPluginAsyncZod
         walletsNeverConnectedCount(deps.db, t.id),
         expiryCounts(deps.db, t.id),
         activitySeries(deps.db, days, t.id),
+        verificationTotals(deps.db, days, t.id),
       ])
       if (!tenantRow) throw notFound('tenant')
       const exchanges = activity.get(t.id) ?? emptyActivity()
@@ -250,6 +254,7 @@ export const tenantStatsRoutes = (deps: { db: Database }): FastifyPluginAsyncZod
         webhook: { configured: endpoint !== null, url: endpoint?.url ?? null, deliveries: byStatus, lastDeliveredAt: lastDeliveredAt?.toISOString() ?? null, lastFailureAt: lastFailureAt?.toISOString() ?? null },
         attention: { stuckCredentials, stuckProofs, deadDeliveries: dead.get(t.id) ?? 0, expiringCredentials: expiry.expiring, expiredCredentials: expiry.expired, walletsNeverConnected },
         series,
+        verification,
       }
     }
   )
@@ -269,7 +274,7 @@ export const platformStatsRoutes = (deps: { db: Database; readiness: () => Promi
     },
     async (request) => {
       const { days } = request.query
-      const [tenantRows, activity, wallets, keys, dead, stuckCredentials, stuckProofs, walletsNeverConnected, withWebhook, series, health] = await Promise.all([
+      const [tenantRows, activity, wallets, keys, dead, stuckCredentials, stuckProofs, walletsNeverConnected, withWebhook, series, verification, health] = await Promise.all([
         deps.db.select().from(tenants).orderBy(desc(tenants.createdAt)),
         exchangeActivityByTenant(deps.db),
         activeRevokedByTenant(deps.db, 'wallets'),
@@ -280,6 +285,7 @@ export const platformStatsRoutes = (deps: { db: Database; readiness: () => Promi
         walletsNeverConnectedCount(deps.db),
         deps.db.select({ n: count() }).from(webhookEndpoints).then((rows) => Number(rows[0]?.n ?? 0)),
         activitySeries(deps.db, days),
+        verificationTotals(deps.db, days),
         deps.readiness().catch(() => ({ ready: false, draining: false, checks: {} })),
       ])
       const windowCounts = await deps.db.execute<{ tenant_id: string; n: number }>(sql`
@@ -321,6 +327,7 @@ export const platformStatsRoutes = (deps: { db: Database; readiness: () => Promi
           tenantsWithoutWebhook: Math.max(0, tenantRows.length - withWebhook),
         },
         series,
+        verification,
         topTenants: windowCounts.rows.map((row) => ({ tenantId: row.tenant_id, name: names.get(row.tenant_id) ?? row.tenant_id, exchanges: Number(row.n) })),
         health,
       }

@@ -7,6 +7,7 @@
  *                 templates, biometric policies, webhook endpoint/secret/retry; review K1)
  *   wallet token  /v1/wallet/*
  *   operator      /admin/* (console token + operator role, or the break-glass admin token)
+ *   console only  POST /admin/audit/events (the console token alone: events it reports about itself)
  *   none          /internal/mediator/:secret, /healthz, /readyz (never proxied by the edge)
  *
  * Response schemas are enforced by the serializer, so a handler cannot leak fields that are not
@@ -30,7 +31,9 @@ import { CONSOLE_TOKEN_HEADER, requireOperator, requireTenantPrincipal, requireW
 import { platformErrorHandler } from './errors.ts'
 import { useIdempotency } from './idempotency.ts'
 import { rateLimiter } from './rate-limit.ts'
+import { activityRoutes } from './routes/activity.ts'
 import { adminRoutes } from './routes/admin.ts'
+import { auditEventRoutes } from './routes/audit-events.ts'
 import { biometricRoutes, walletBiometricRoutes } from './routes/biometrics.ts'
 import { catalogueRoutes } from './routes/catalogue.ts'
 import { dataProtectionRoutes } from './routes/data-protection.ts'
@@ -40,6 +43,7 @@ import { internalRoutes } from './routes/internal.ts'
 import { proofTemplateRoutes } from './routes/proof-templates.ts'
 import { publicRoutes } from './routes/public.ts'
 import { platformStatsRoutes, tenantStatsRoutes } from './routes/stats.ts'
+import { verificationRoutes } from './routes/verification.ts'
 import { walletCustomerRoutes, walletDeviceRoutes } from './routes/wallets.ts'
 import { webhookRoutes } from './routes/webhook.ts'
 
@@ -153,6 +157,8 @@ export function buildApp(deps: AppDeps, options: BuildOptions = {}) {
     await scope.register(webhookRoutes({ db: deps.db }))
     await scope.register(consoleRoutes({ db: deps.db }))
     await scope.register(tenantStatsRoutes({ db: deps.db }))
+    await scope.register(verificationRoutes({ db: deps.db }))
+    await scope.register(activityRoutes({ db: deps.db }))
   })
 
   // SDK scope: wallet token.
@@ -169,6 +175,8 @@ export function buildApp(deps: AppDeps, options: BuildOptions = {}) {
     scope.addHook('onRequest', requireOperator(deps.config.PLATFORM_ADMIN_TOKEN, deps.config.CONSOLE_TOKEN))
     await scope.register(platformStatsRoutes({ db: deps.db, readiness: deps.readiness }))
   })
+  // What the console reports about itself (sign-ins, account changes, exports): console token only.
+  app.register(auditEventRoutes({ db: deps.db, consoleToken: deps.config.CONSOLE_TOKEN }))
 
   return app
 }

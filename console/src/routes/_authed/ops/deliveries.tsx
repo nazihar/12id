@@ -18,6 +18,7 @@ import { DateRangeFilter, SelectFilter } from '@/components/data-table/list-tool
 import { useListPending } from '@/components/data-table/use-list-pending'
 import { formatDateTime } from '@/lib/format'
 import { isFiltered, pagingFor, resetFor, parseListSearch, searchPatcher } from '@/lib/list-search'
+import { useCanOperate } from '@/lib/use-can-operate'
 
 type DeliveryRow = Awaited<ReturnType<typeof listDeliveriesAcrossTenants>>['items'][number]
 
@@ -74,6 +75,7 @@ function DeadDeliveriesPage() {
 
 function RetryAction({ tenantId, delivery }: { tenantId: string; delivery: DeliveryRow }) {
   const queryClient = useQueryClient()
+  const canOperate = useCanOperate()
   const retry = useMutation({
     mutationFn: () => retryWebhookDelivery({ data: { tenantId, deliveryId: delivery.id } }),
     onSuccess: async () => {
@@ -81,6 +83,7 @@ function RetryAction({ tenantId, delivery }: { tenantId: string; delivery: Deliv
       await queryClient.invalidateQueries({ queryKey: ['ops', 'deliveries'] })
     },
   })
+  if (!canOperate) return null
   return (
     <RowActions>
       <RowAction

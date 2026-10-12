@@ -4453,11 +4453,365 @@ export interface paths {
                                 credentials: number;
                                 proofs: number;
                             }[];
+                            verification: {
+                                proofsRequested: number;
+                                proofsVerified: number;
+                                proofsFailed: number;
+                                faceChecks: number;
+                                faceChecksPassed: number;
+                                faceChecksFailed: number;
+                            };
                         };
                     };
                 };
                 /** @description Default Response */
                 403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/stats/verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Proof and face-check outcomes for one tenant
+         * @description How proof requests ended and how face checks went over the window: totals, a daily series, the busiest templates, rejection reasons, attempts needed and score distributions. A request or a check counts on the day it started, by its outcome today; an attempt counts on the day it was made. Computed from platform-api tables only.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    days?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            days: number;
+                            proofs: {
+                                requested: number;
+                                verified: number;
+                                failed: number;
+                                abandoned: number;
+                                inFlight: number;
+                                series: {
+                                    day: string;
+                                    verified: number;
+                                    failed: number;
+                                    abandoned: number;
+                                    inFlight: number;
+                                }[];
+                                templates: {
+                                    templateId: string | null;
+                                    name: string | null;
+                                    requested: number;
+                                    verified: number;
+                                    failed: number;
+                                }[];
+                                conditional: {
+                                    required: number;
+                                    notRequired: number;
+                                };
+                            };
+                            faceChecks: {
+                                enabled: boolean;
+                                thresholds: {
+                                    minLivenessScore: number;
+                                    minMatchScore: number;
+                                };
+                                total: number;
+                                byStatus: {
+                                    pending: number;
+                                    passed: number;
+                                    failed: number;
+                                    expired: number;
+                                    cancelled: number;
+                                };
+                                issuance: {
+                                    pending: number;
+                                    passed: number;
+                                    failed: number;
+                                    expired: number;
+                                    cancelled: number;
+                                };
+                                proofs: {
+                                    pending: number;
+                                    passed: number;
+                                    failed: number;
+                                    expired: number;
+                                    cancelled: number;
+                                };
+                                series: {
+                                    day: string;
+                                    passed: number;
+                                    failed: number;
+                                    expired: number;
+                                    open: number;
+                                    cancelled: number;
+                                }[];
+                                attempts: {
+                                    total: number;
+                                    passed: number;
+                                    rejected: number;
+                                };
+                                reasons: {
+                                    reason: string;
+                                    attempts: number;
+                                }[];
+                                attemptsToPass: {
+                                    attempts: number;
+                                    checks: number;
+                                }[];
+                                scores: {
+                                    liveness: number[];
+                                    match: number[];
+                                };
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/biometrics/checks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List face checks
+         * @description One row per gated exchange, newest first, paged. `q` is a case-insensitive contains match on the external id of the exchange. No images, as everywhere; the full log of one check is on its exchange.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    page?: number;
+                    /** @description 25, 50 or 100. */
+                    pageSize?: number;
+                    /** @description Created at or after this instant (ISO 8601). */
+                    from?: string;
+                    /** @description Created before this instant (ISO 8601). */
+                    to?: string;
+                    /** @description Case-insensitive contains match. */
+                    q?: string;
+                    /** @description One or more of pending, passed, failed, expired, cancelled; repeat the parameter for several. */
+                    status?: string | string[];
+                    recordType?: "credential" | "proof";
+                    /** @description Checks with at least one unsuccessful attempt turned down for this reason, e.g. `match_below_threshold`. */
+                    reason?: string;
+                    /** @description Checks on the exchanges of one connection. */
+                    connectionId?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items: {
+                                id: string;
+                                /** @enum {string} */
+                                recordType: "credential" | "proof";
+                                recordId: string;
+                                externalId: string | null;
+                                connectionId: string | null;
+                                providerId: string;
+                                thresholds: {
+                                    minLivenessScore: number;
+                                    minMatchScore: number;
+                                };
+                                /** Format: date-time */
+                                createdAt: string;
+                                biometric: {
+                                    /** @enum {boolean} */
+                                    required: true;
+                                    /** @enum {string} */
+                                    status: "pending" | "passed" | "failed" | "expired" | "cancelled";
+                                    attempts: number;
+                                    attemptsRemaining: number;
+                                    livenessScore: number | null;
+                                    matchScore: number | null;
+                                    reason: string | null;
+                                    /** Format: date-time */
+                                    expiresAt: string;
+                                    decidedAt: string | null;
+                                };
+                            }[];
+                            total: number;
+                            page: number;
+                            pageSize: number;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/connections/{id}/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Activity of one connection
+         * @description Counts of the credential exchanges, proof exchanges and face checks of one connection, its latest activity, and the wallets registered with the same external id. The exchanges themselves are listed with `connectionId` on the list routes.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            connection: {
+                                id: string;
+                                state: string;
+                                invitationId: string | null;
+                                theirLabel: string | null;
+                                externalId: string | null;
+                                erasedAt: string | null;
+                                /** Format: date-time */
+                                createdAt: string;
+                                /** Format: date-time */
+                                updatedAt: string;
+                            };
+                            credentials: {
+                                total: number;
+                                byState: {
+                                    [key: string]: number;
+                                };
+                            };
+                            proofs: {
+                                total: number;
+                                byState: {
+                                    [key: string]: number;
+                                };
+                                verified: number;
+                                failed: number;
+                            };
+                            faceChecks: {
+                                total: number;
+                                byStatus: {
+                                    [key: string]: number;
+                                };
+                            };
+                            /** Format: date-time */
+                            lastActivityAt: string;
+                            wallets: {
+                                id: string;
+                                externalId: string | null;
+                                hasMediatorInvitation: boolean;
+                                lastSyncRequestedAt: string | null;
+                                /** Format: date-time */
+                                createdAt: string;
+                                connectedAt: string | null;
+                                revokedAt: string | null;
+                                revokedReason: string | null;
+                            }[];
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -5373,7 +5727,7 @@ export interface paths {
         };
         /**
          * Console audit log
-         * @description Newest first, paged. Each change carries its route parameters and request body, with secrets and personal data replaced. `q` matches the route pattern or the actor id, or any of the `qActor` ids (the console resolves names and emails to account ids); `actor` restricts to one or more actor ids.
+         * @description Newest first, paged. Each change carries its route parameters and request body, with secrets and personal data replaced. Sign-ins, account changes and exports are rows with method `EVENT` and their type as the route. `kind` keeps one family: `change` (calls that went through this API), `sign-in`, `account` or `export`. `q` matches the route pattern or event type, the actor id or the actor label (email), or any of the `qActor` ids (the console resolves names and emails to account ids); `actor` restricts to one or more actor ids.
          */
         get: {
             parameters: {
@@ -5388,6 +5742,7 @@ export interface paths {
                     /** @description Case-insensitive contains match. */
                     q?: string;
                     tenantId?: string;
+                    kind?: "change" | "sign-in" | "account" | "export";
                     actor?: string | string[];
                     qActor?: string | string[];
                 };
@@ -5409,6 +5764,7 @@ export interface paths {
                                 /** Format: date-time */
                                 at: string;
                                 actor: string;
+                                actorLabel: string | null;
                                 role: string;
                                 tenantId: string | null;
                                 method: string;
@@ -5514,6 +5870,14 @@ export interface paths {
                                 credentials: number;
                                 proofs: number;
                             }[];
+                            verification: {
+                                proofsRequested: number;
+                                proofsVerified: number;
+                                proofsFailed: number;
+                                faceChecks: number;
+                                faceChecksPassed: number;
+                                faceChecksFailed: number;
+                            };
                             topTenants: {
                                 tenantId: string;
                                 name: string;
@@ -5533,6 +5897,67 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/audit/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record a console event in the audit log
+         * @description A sign-in, an account change or an export, reported by the console server. Stored as an audit row with method `EVENT` and the type as its route.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        type: "auth.sign_in" | "auth.sign_in_failed" | "auth.second_factor_failed" | "auth.sign_out" | "auth.password_reset_requested" | "auth.password_reset" | "auth.two_factor_enrolled" | "account.operator_invited" | "account.operator_updated" | "account.operator_role_changed" | "account.operator_banned" | "account.operator_unbanned" | "account.operator_sessions_revoked" | "account.operator_deleted" | "account.organization_created" | "account.member_invited" | "account.invitation_cancelled" | "account.invitation_accepted" | "account.member_role_changed" | "account.member_removed" | "export.run";
+                        /** @enum {string} */
+                        outcome: "success" | "failure";
+                        /** @description The console user id; absent when nobody is signed in. */
+                        actor?: string;
+                        /** @description The actor's email, or the address a failed sign-in was tried for. */
+                        actorLabel?: string;
+                        role?: string;
+                        /** Format: uuid */
+                        tenantId?: string;
+                        /** @description A few facts about the event. Secrets and personal data are replaced; over 2 KB only the size is kept. */
+                        detail?: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            recorded: boolean;
+                        };
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;

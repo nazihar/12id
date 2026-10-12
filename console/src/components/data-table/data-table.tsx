@@ -32,19 +32,21 @@ interface DataTableProps<TData extends RowData> {
   toolbar?: ReactNode
   /** Shown as a Reset button while any search or filter is set. */
   onReset?: () => void
+  /** Actions on the whole list (the Export button), at the end of the toolbar row. */
+  actions?: ReactNode
   /** A newer page is loading; the current rows stay visible, dimmed. */
   fetching?: boolean
 }
 
 // shadcn's TanStack Table v9 data-table recipe, driven by the server since Phase 4 C9: the page,
 // search and filters live in the URL and platform-api answers one page at a time. No sort controls.
-export function DataTable<TData extends RowData>({ columns, data, paging, search, emptyMessage = 'Nothing here yet.', testId, toolbar, onReset, fetching }: DataTableProps<TData>) {
+export function DataTable<TData extends RowData>({ columns, data, paging, search, emptyMessage = 'Nothing here yet.', testId, toolbar, onReset, actions, fetching }: DataTableProps<TData>) {
   const table = useTable({ features, columns, data })
   const rows = table.getRowModel().rows
 
   return (
     <div className="space-y-3" data-testid={testId}>
-      {(search || toolbar) && (
+      {(search || toolbar || actions) && (
         <div className="flex flex-wrap items-center gap-2">
           {search && <SearchInput value={search.value} placeholder={search.placeholder} onChange={search.onChange} />}
           {toolbar}
@@ -54,6 +56,7 @@ export function DataTable<TData extends RowData>({ columns, data, paging, search
               <XIcon />
             </Button>
           )}
+          {actions && <div className="ml-auto">{actions}</div>}
         </div>
       )}
       {/* The table scrolls inside this box; the page itself never grows wider than the window. */}

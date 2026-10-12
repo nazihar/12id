@@ -5,7 +5,9 @@
  * requires.
  *
  *   authMiddleware      Better Auth session + 2FA enabled (Better Auth makes 2FA opt-in per user)
- *   operatorMiddleware  platform role `operator`, session younger than 12 h, verified TOTP secret
+ *   operatorReadMiddleware  platform role `operator` or `auditor`, session younger than 12 h, verified
+ *                           TOTP secret. For reads only: an auditor changes nothing (implement/22 C14)
+ *   operatorMiddleware      the same, `operator` only. Everything that changes something uses this
  *   tenantMiddleware    membership of the session's active organization (never an id from input),
  *                       optional permission check against the member's role
  */
@@ -14,7 +16,7 @@ import { createMiddleware } from '@tanstack/react-start'
 import { getRequestHeaders, setResponseHeader, setResponseStatus } from '@tanstack/react-start/server'
 import { and, eq } from 'drizzle-orm'
 
-import { OPERATOR_ROLE, type TenantRole, hasPlatformRole, sessionExpired, tenantRoles } from '../lib/permissions'
+import { AUDITOR_ROLE, OPERATOR_ROLE, type StaffRole, type TenantRole, sessionExpired, staffRoleOf, tenantRoles } from '../lib/permissions'
 import { auth } from './auth.server'
 import { consoleDb } from './db.server'
 import { member, organization, twoFactor } from './db/auth-schema'
@@ -26,8 +28,10 @@ export type Principal = {
   readonly [principalBrand]: true
   /** Better Auth user id; sent as `x-console-actor` and recorded in platform-api's audit log. */
   readonly actor: string
-  readonly role: typeof OPERATOR_ROLE | TenantRole
-  /** Platform tenant id for tenant members; null for operators, who name the tenant per call. */
+  /** The account's email; sent as `x-console-actor-label` so an audit row stays readable after the account is deleted. */
+  readonly email: string
+  readonly role: StaffRole | TenantRole
+  /** Platform tenant id for tenant members; null for operators and auditors, who name the tenant per call. */
   readonly tenantId: string | null
 }
 
@@ -70,15 +74,22 @@ export const authMiddleware = createMiddleware({ type: 'function' }).server(asyn
   return next({ context: { session } })
 })
 
-export const operatorMiddleware = createMiddleware({ type: 'function' })
-  .middleware([authMiddleware])
-  .server(async ({ next, context }) => {
-    const { user } = context.session
-    if (!hasPlatformRole(user.role, OPERATOR_ROLE)) refuse(403, 'operator role required')
-    const [totp] = await consoleDb().db.select({ verified: twoFactor.verified }).from(twoFactor).where(eq(twoFactor.userId, user.id))
-    if (!totp?.verified) refuse(403, 'operators must use an authenticator app')
-    return next({ context: { principal: principal({ actor: user.id, role: OPERATOR_ROLE, tenantId: null }) } })
-  })
+const staffMiddleware = (allowed: readonly StaffRole[]) =>
+  createMiddleware({ type: 'function' })
+    .middleware([authMiddleware])
+    .server(async ({ next, context }) => {
+      const { user } = context.session
+      const role = staffRoleOf(user.role)
+      if (!role) refuse(403, 'operator role required')
+      if (!allowed.includes(role)) refuse(403, 'auditors are read-only')
+      const [totp] = await consoleDb().db.select({ verified: twoFactor.verified }).from(twoFactor).where(eq(twoFactor.userId, user.id))
+      if (!totp?.verified) refuse(403, 'operators must use an authenticator app')
+      return next({ context: { principal: principal({ actor: user.id, email: user.email, role, tenantId: null }) } })
+    })
+
+/** Reads of the operator area: operators and auditors. Never on a function that changes something. */
+export const operatorReadMiddleware = staffMiddleware([OPERATOR_ROLE, AUDITOR_ROLE])
+export const operatorMiddleware = staffMiddleware([OPERATOR_ROLE])
 
 export function tenantMiddleware(permissions?: TenantPermissions) {
   return createMiddleware({ type: 'function' })
@@ -102,7 +113,7 @@ export function tenantMiddleware(permissions?: TenantPermissions) {
 
       return next({
         context: {
-          principal: principal({ actor: user.id, role: strongest, tenantId: membership.platformTenantId }),
+          principal: principal({ actor: user.id, email: user.email, role: strongest, tenantId: membership.platformTenantId }),
           organization: { id: organizationId, slug: membership.slug },
         },
       })

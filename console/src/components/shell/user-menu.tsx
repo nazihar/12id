@@ -52,7 +52,7 @@ export function UserMenu() {
             <BuildingIcon />
             Your organizations
           </DropdownMenuItem>
-          {viewer.isOperator && (
+          {viewer.isStaff && (
             <DropdownMenuItem render={<Link to="/ops" />}>
               <ShieldUserIcon />
               Operator console

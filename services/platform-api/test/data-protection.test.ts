@@ -210,6 +210,14 @@ describe('data protection', { skip: database ? false : 'no test database' }, () 
     assert.deepEqual(await inputs(consoleAs('operator')), [[5000, null], [70, null]])
     assert.deepEqual(await inputs({ ...consoleAs('operator'), 'x-console-reveal-reason': 'support ticket 78' }), [[5000, 7200], [70, 20]])
     assert.deepEqual(await inputs(consoleAs('owner')), [[5000, 7200], [70, 20]])
+
+    // An auditor opens every tenant too: the same masks, and no reveal (implement/22 C14).
+    assert.deepEqual((await app.inject({ method: 'GET', url: '/v1/credentials/cred-m', headers: consoleAs('auditor') })).json().attributes, { name: MASK, expiresOn: MASK })
+    assert.equal((await app.inject({ method: 'GET', url: '/v1/connections/conn-1', headers: consoleAs('auditor') })).json().theirLabel, MASK)
+    assert.deepEqual(await inputs(consoleAs('auditor')), [[5000, null], [70, null]])
+    const refusedReveal = await app.inject({ method: 'GET', url: '/v1/credentials/cred-m', headers: { ...consoleAs('auditor'), 'x-console-reveal-reason': 'curious' } })
+    assert.equal(refusedReveal.statusCode, 403, refusedReveal.body)
+    assert.equal(refusedReveal.json().reason, 'auditors cannot reveal personal data')
   })
 
   it('retention scrubs finished exchanges past the period and old delivery bodies; 0 keeps them', async () => {

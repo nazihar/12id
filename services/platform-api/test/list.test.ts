@@ -6,10 +6,11 @@
 import assert from 'node:assert/strict'
 import { before, describe, it } from 'node:test'
 
-import { sql } from 'drizzle-orm'
+import { and, desc, eq, sql } from 'drizzle-orm'
 
-import { connections, consoleAudit, credentials, tenants, wallets, webhookDeliveries } from '../src/db/schema.ts'
+import { apiKeys, connections, consoleAudit, credentials, exchangeGates, proofTemplates, proofs, tenants, wallets, webhookDeliveries } from '../src/db/schema.ts'
 import { buildApp } from '../src/http/app.ts'
+import { newestFirst } from '../src/http/list.ts'
 import { fakeAgent, silentLogger, testConfig, testDatabase } from './helpers.ts'
 
 const db = await testDatabase()
@@ -181,5 +182,43 @@ describe('list routes', { skip: db ? false : 'no test database' }, () => {
       'webhook_deliveries_dead_created_idx',
       'console_audit_actor_idx',
     ]) assert.ok(names.has(name), name)
+  })
+
+  /**
+   * The plan of a list's first page, with the scans a small test table would otherwise prefer
+   * switched off: what is left shows whether the index can deliver the order at all.
+   */
+  async function plan(query: Parameters<typeof sql>[1]): Promise<string> {
+    return db!.db.transaction(async (tx) => {
+      await tx.execute(sql`set local enable_seqscan = off`)
+      await tx.execute(sql`set local enable_bitmapscan = off`)
+      const result = await tx.execute<{ 'QUERY PLAN': string }>(sql`explain (costs off) ${query}`)
+      return result.rows.map((row) => row['QUERY PLAN']).join(' | ')
+    })
+  }
+
+  it('reads every list page in its fixed order straight from the list index, with no sort', async () => {
+    const cases = [
+      { index: 'connections_tenant_created_idx', query: db!.db.select().from(connections).where(eq(connections.tenantId, acme)).orderBy(...newestFirst(connections.createdAt, connections.recordId)).limit(25) },
+      { index: 'credentials_tenant_created_idx', query: db!.db.select().from(credentials).where(eq(credentials.tenantId, acme)).orderBy(...newestFirst(credentials.createdAt, credentials.recordId)).limit(25) },
+      { index: 'proofs_tenant_created_idx', query: db!.db.select().from(proofs).where(eq(proofs.tenantId, acme)).orderBy(...newestFirst(proofs.createdAt, proofs.recordId)).limit(25) },
+      { index: 'connections_tenant_state_created_idx', query: db!.db.select().from(connections).where(and(eq(connections.tenantId, acme), eq(connections.state, 'completed'))).orderBy(...newestFirst(connections.createdAt, connections.recordId)).limit(25) },
+      { index: 'wallets_tenant_created_idx', query: db!.db.select().from(wallets).where(eq(wallets.tenantId, acme)).orderBy(...newestFirst(wallets.createdAt, wallets.id)).limit(25) },
+      { index: 'api_keys_tenant_created_idx', query: db!.db.select().from(apiKeys).where(eq(apiKeys.tenantId, acme)).orderBy(...newestFirst(apiKeys.createdAt, apiKeys.id)).limit(25) },
+      { index: 'proof_templates_tenant_created_idx', query: db!.db.select().from(proofTemplates).where(eq(proofTemplates.tenantId, acme)).orderBy(...newestFirst(proofTemplates.createdAt, proofTemplates.id)).limit(25) },
+      { index: 'webhook_deliveries_tenant_created_idx', query: db!.db.select().from(webhookDeliveries).where(eq(webhookDeliveries.tenantId, acme)).orderBy(...newestFirst(webhookDeliveries.createdAt, webhookDeliveries.id)).limit(25) },
+      { index: 'exchange_gates_tenant_created_idx', query: db!.db.select().from(exchangeGates).where(eq(exchangeGates.tenantId, acme)).orderBy(...newestFirst(exchangeGates.createdAt, exchangeGates.id)).limit(25) },
+      { index: 'exchange_gates_tenant_status_created_idx', query: db!.db.select().from(exchangeGates).where(and(eq(exchangeGates.tenantId, acme), eq(exchangeGates.status, 'failed'))).orderBy(...newestFirst(exchangeGates.createdAt, exchangeGates.id)).limit(25) },
+    ]
+    for (const { index, query } of cases) {
+      const text = await plan(query)
+      assert.match(text, new RegExp(`Index Scan using ${index}`), `${index}: ${text}`)
+      assert.doesNotMatch(text, /Sort/, `${index} still sorts: ${text}`)
+    }
+
+    // Why the order is written with NULLS LAST: the indexes are declared that way, and a plain DESC
+    // (NULLS FIRST) cannot be read from them, so Postgres sorts.
+    const plain = await plan(db!.db.select().from(proofs).where(eq(proofs.tenantId, acme)).orderBy(desc(proofs.createdAt), desc(proofs.recordId)).limit(25))
+    assert.match(plain, /Sort/, plain)
   })
 })

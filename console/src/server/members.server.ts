@@ -31,7 +31,7 @@ export async function listOrganizationMembers(organizationId: string, query: Peo
   const where = and(...filters)
   const [rows, [{ total }]] = await Promise.all([
     db
-      .select({ id: member.id, userId: user.id, name: user.name, email: user.email, role: member.role, since: member.createdAt, twoFactorEnabled: user.twoFactorEnabled })
+      .select({ id: member.id, userId: user.id, name: user.name, email: user.email, role: member.role, since: member.createdAt, twoFactorEnabled: user.twoFactorEnabled, lastSignInAt: user.lastSignInAt })
       .from(member)
       .innerJoin(user, eq(user.id, member.userId))
       .where(where)
@@ -40,7 +40,7 @@ export async function listOrganizationMembers(organizationId: string, query: Peo
       .offset(offset),
     db.select({ total: count() }).from(member).innerJoin(user, eq(user.id, member.userId)).where(where),
   ])
-  const items = rows.map((m) => ({ ...m, since: m.since.toISOString(), twoFactorEnabled: Boolean(m.twoFactorEnabled) }))
+  const items = rows.map((m) => ({ ...m, since: m.since.toISOString(), twoFactorEnabled: Boolean(m.twoFactorEnabled), lastSignInAt: m.lastSignInAt?.toISOString() ?? null }))
   return { items, total, page, pageSize } satisfies Page<(typeof items)[number]>
 }
 

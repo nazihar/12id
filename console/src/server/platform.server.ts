@@ -31,12 +31,12 @@ export function unwrap<T>(result: { data?: T; error?: unknown; response: Respons
 
 /**
  * `revealReason` (operators only, Phase 7 H1): platform-api masks personal data for operators unless
- * a reason is sent; the reason is recorded in its audit log.
+ * a reason is sent; the reason is recorded in its audit log. An auditor sees the masks and cannot reveal.
  */
 export function platformFor(principal: Principal, options: { tenantId?: string; revealReason?: string } = {}) {
   const env = serverEnv()
   let tenantId: string | null
-  if (principal.role === 'operator') {
+  if (principal.role === 'operator' || principal.role === 'auditor') {
     tenantId = options.tenantId ?? null
   } else {
     // Tenant members act for the tenant their membership resolved to, never one named by input.
@@ -48,6 +48,8 @@ export function platformFor(principal: Principal, options: { tenantId?: string; 
     'x-console-actor': principal.actor,
     'x-console-role': principal.role,
   }
+  // URI-encoded: a header cannot carry every character an address may hold.
+  if (principal.email) headers['x-console-actor-label'] = encodeURIComponent(principal.email)
   if (tenantId) headers['x-console-tenant'] = tenantId
   if (options.revealReason && principal.role === 'operator') headers['x-console-reveal-reason'] = encodeURIComponent(options.revealReason)
   return createClient<paths>({ baseUrl: env.PLATFORM_API_URL, headers })

@@ -143,6 +143,13 @@ test('owners run their tenant, members are limited by role and organization', as
   await member.goto(`${memberBase}/members`)
   await expect(member.getByTestId('members-table')).toContainText(ownerA)
   await expect(member.getByRole('button', { name: 'Send invitation' })).toHaveCount(0)
+  // Exports (implement/22 C12) are for owners and admins: a member reads the lists on screen only.
+  await member.goto(`${memberBase}/wallets`)
+  await expect(member.getByTestId('wallets-table')).toBeVisible()
+  await expect(member.getByTestId('export-menu')).toHaveCount(0)
+  await owner.goto(`${memberBase}/wallets`)
+  await expect(owner.getByTestId('export-menu')).toBeVisible()
+  await owner.goto(`${memberBase}/members`)
 
   // Another tenant's organization is refused, however the URL was obtained.
   await member.goto(`/t/${slugFor(nameB, tenantB)}/api-keys`)

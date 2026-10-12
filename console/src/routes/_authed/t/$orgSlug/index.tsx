@@ -35,6 +35,7 @@ function PortalOverviewPage() {
     exchanges: { to: '/t/$orgSlug/exchanges', params },
     wallets: { to: '/t/$orgSlug/wallets', params },
     webhooks: { to: '/t/$orgSlug/webhooks', params },
+    verification: { to: '/t/$orgSlug/verification', params },
   }
   const steps = gettingStartedSteps({
     schemas: catalogue.data ? catalogue.data.schemas.length : null,

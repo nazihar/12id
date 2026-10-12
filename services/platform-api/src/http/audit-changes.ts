@@ -46,6 +46,20 @@ function redact(value: unknown, key: string | null, depth: number): unknown {
   return value
 }
 
+export const MAX_DETAIL_BYTES = 2 * 1024
+
+/**
+ * The audit's `changes` value for an event the console reported (a sign-in, an account change, an
+ * export; `routes/audit-events.ts`): the same replacements, and a smaller cap, since the detail is a
+ * few facts (an address, a list name, a count), never a document.
+ */
+export function auditDetail(detail: unknown): Record<string, unknown> | null {
+  if (!isPlainObject(detail) || Object.keys(detail).length === 0) return null
+  const cleaned = redact(detail, null, 0) as Record<string, unknown>
+  const bytes = Buffer.byteLength(JSON.stringify(cleaned), 'utf8')
+  return bytes > MAX_DETAIL_BYTES ? { truncated: true, bytes } : cleaned
+}
+
 /** The audit's `changes` value for one request, or null when there is nothing to record. */
 export function auditChanges(input: { params?: unknown; body?: unknown; recordBody: boolean }): Record<string, unknown> | null {
   const changes: Record<string, unknown> = {}

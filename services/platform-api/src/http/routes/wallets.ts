@@ -4,7 +4,7 @@
  *   - the app / SDK (wallet token) fetches its mediator invitation and its own status.
  * Wallet endpoints are registered in two scopes by app.ts because the credentials differ.
  */
-import { type SQL, and, desc, eq, isNotNull, isNull } from 'drizzle-orm'
+import { type SQL, and, eq, isNotNull, isNull } from 'drizzle-orm'
 import type { preHandlerAsyncHookHandler } from 'fastify'
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { z } from 'zod'
@@ -16,7 +16,7 @@ import type { MediatorClient } from '../../mediator-client.ts'
 import { toWalletView, walletView } from '../../views.ts'
 import type { TenantContext, WalletContext } from '../auth.ts'
 import { notFound } from '../errors.ts'
-import { containsI, createdBetween, createdRange, listPage, pageOf, pageQuery, searchQuery } from '../list.ts'
+import { containsI, createdBetween, createdRange, listPage, newestFirst, pageOf, pageQuery, searchQuery } from '../list.ts'
 
 const errorBody = z.object({ error: z.string(), reason: z.string() })
 
@@ -80,7 +80,7 @@ export const walletCustomerRoutes = (deps: { db: Database }): FastifyPluginAsync
       if (q) filters.push(containsI(wallets.externalId, q))
       if (status) filters.push(status === 'active' ? isNull(wallets.revokedAt) : isNotNull(wallets.revokedAt))
       const page = await listPage(deps.db, { table: wallets, where: filters, ...request.query }, (where, limit, offset) =>
-        deps.db.select().from(wallets).where(where).orderBy(desc(wallets.createdAt), desc(wallets.id)).limit(limit).offset(offset)
+        deps.db.select().from(wallets).where(where).orderBy(...newestFirst(wallets.createdAt, wallets.id)).limit(limit).offset(offset)
       )
       return { ...page, items: page.items.map(toWalletView) }
     }

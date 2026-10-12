@@ -24,7 +24,7 @@ function AccountPage() {
         title="Your organizations"
         description={`Signed in as ${viewer.email}.`}
         actions={
-          viewer.isOperator && (
+          viewer.isStaff && (
             <Link to="/ops" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
               <ShieldUserIcon />
               Operator console

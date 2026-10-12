@@ -24,11 +24,17 @@ export const CONSOLE_TOKEN_HEADER = 'x-console-token'
 export const CONSOLE_TENANT_HEADER = 'x-console-tenant'
 export const CONSOLE_ACTOR_HEADER = 'x-console-actor'
 export const CONSOLE_ROLE_HEADER = 'x-console-role'
-/** `operator` spans tenants; the other three are organization roles inside one tenant. */
-export const CONSOLE_ROLES = ['operator', 'owner', 'admin', 'member'] as const
+/** The actor's email as the console knows it, URI-encoded; kept on the audit row (implement/22 C13). */
+export const CONSOLE_ACTOR_LABEL_HEADER = 'x-console-actor-label'
+/**
+ * `operator` and `auditor` span tenants; the other three are organization roles inside one tenant.
+ * An auditor reads everything an operator reads and changes nothing (implement/22 C14): only GET and
+ * HEAD pass, and personal data stays masked with no reveal (`personal-data.ts`).
+ */
+export const CONSOLE_ROLES = ['operator', 'auditor', 'owner', 'admin', 'member'] as const
 export type ConsoleRole = (typeof CONSOLE_ROLES)[number]
 
-export type Principal = { kind: 'apiKey'; apiKeyId: string } | { kind: 'console'; actor: string; role: ConsoleRole }
+export type Principal = { kind: 'apiKey'; apiKeyId: string } | { kind: 'console'; actor: string; role: ConsoleRole; actorLabel?: string }
 
 export interface TenantContext {
   id: string
@@ -52,6 +58,7 @@ export interface OperatorContext {
   via: 'console' | 'admin_token'
   /** The console user id, or `admin-token` for the break-glass path. */
   actor: string
+  actorLabel?: string
 }
 
 declare module 'fastify' {
@@ -62,6 +69,9 @@ declare module 'fastify' {
   }
 }
 
+const isRead = (request: FastifyRequest) => request.method === 'GET' || request.method === 'HEAD'
+const AUDITOR_READ_ONLY = 'auditors are read-only'
+
 const unauthorized = (reply: FastifyReply, reason: string) => reply.code(401).send({ error: 'unauthorized', reason })
 const forbidden = (reply: FastifyReply, reason: string) => reply.code(403).send({ error: 'forbidden', reason })
 
@@ -69,6 +79,26 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const ACTOR = /^[A-Za-z0-9_.:@-]{1,200}$/
 
 export const isUuid = (value: unknown): value is string => typeof value === 'string' && UUID.test(value)
+export const isActorId = (value: unknown): value is string => typeof value === 'string' && ACTOR.test(value)
+
+const MAX_ACTOR_LABEL = 320
+const CONTROL_CHARACTERS = /\p{Cc}/gu
+
+/**
+ * The audit keeps who acted by email as well as by id, so a row stays readable after the account is
+ * deleted. A label that cannot be read is dropped, never a reason to refuse the request.
+ */
+export function cleanActorLabel(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  let decoded = value
+  try {
+    decoded = decodeURIComponent(value)
+  } catch {
+    // Not URI-encoded: keep it as sent.
+  }
+  const label = decoded.replace(CONTROL_CHARACTERS, '').trim().slice(0, MAX_ACTOR_LABEL)
+  return label || undefined
+}
 
 function headerValue(request: FastifyRequest, name: string): string | undefined {
   const value = request.headers[name]
@@ -79,7 +109,7 @@ function headerValue(request: FastifyRequest, name: string): string | undefined 
  * null when no console token was presented. A presented token that is wrong (or a scope that is
  * disabled) never falls back to another credential.
  */
-function consoleIdentity(request: FastifyRequest, consoleToken: string | undefined): { actor: string; role: ConsoleRole } | { error: string } | null {
+function consoleIdentity(request: FastifyRequest, consoleToken: string | undefined): { actor: string; role: ConsoleRole; actorLabel?: string } | { error: string } | null {
   const presented = request.headers[CONSOLE_TOKEN_HEADER]
   if (presented === undefined) return null
   if (!consoleToken || !tokenMatches(presented, consoleToken)) return { error: 'missing or invalid console token' }
@@ -87,7 +117,7 @@ function consoleIdentity(request: FastifyRequest, consoleToken: string | undefin
   if (!actor || !ACTOR.test(actor)) return { error: 'missing or malformed console actor' }
   const role = headerValue(request, CONSOLE_ROLE_HEADER)
   if (!role || !(CONSOLE_ROLES as readonly string[]).includes(role)) return { error: 'missing or unknown console role' }
-  return { actor, role: role as ConsoleRole }
+  return { actor, role: role as ConsoleRole, actorLabel: cleanActorLabel(request.headers[CONSOLE_ACTOR_LABEL_HEADER]) }
 }
 
 export function requireApiKey(db: Database) {
@@ -119,7 +149,8 @@ export function requireTenantPrincipal(db: Database, consoleToken: string | unde
     if (!isUuid(tenantId)) return unauthorized(reply, 'missing or malformed console tenant')
     const [row] = await db.select({ id: tenants.id, agentTenantId: tenants.agentTenantId, name: tenants.name, status: tenants.status }).from(tenants).where(eq(tenants.id, tenantId))
     if (!row) return unauthorized(reply, 'unknown console tenant')
-    request.tenant = { ...row, principal: { kind: 'console', actor: identity.actor, role: identity.role } }
+    if (identity.role === 'auditor' && !isRead(request)) return forbidden(reply, AUDITOR_READ_ONLY)
+    request.tenant = { ...row, principal: { kind: 'console', actor: identity.actor, role: identity.role, actorLabel: identity.actorLabel } }
   }
 }
 
@@ -138,18 +169,32 @@ export function requireWalletToken(db: Database) {
   }
 }
 
-/** Operator routes: the console with the operator role, or the break-glass admin token. */
+/** Operator routes: the console with the operator role (or the auditor role, for reads), or the break-glass admin token. */
 export function requireOperator(adminToken: string, consoleToken: string | undefined) {
   return async (request: FastifyRequest, reply: FastifyReply) => {
     const identity = consoleIdentity(request, consoleToken)
     if (identity !== null) {
       if ('error' in identity) return unauthorized(reply, identity.error)
-      if (identity.role !== 'operator') return forbidden(reply, 'operator role required')
-      request.operator = { via: 'console', actor: identity.actor }
+      if (identity.role === 'auditor') {
+        if (!isRead(request)) return forbidden(reply, AUDITOR_READ_ONLY)
+      } else if (identity.role !== 'operator') {
+        return forbidden(reply, 'operator role required')
+      }
+      request.operator = { via: 'console', actor: identity.actor, actorLabel: identity.actorLabel }
       return
     }
     if (!tokenMatches(request.headers['x-admin-token'], adminToken)) return unauthorized(reply, 'missing or invalid admin token')
     request.operator = { via: 'admin_token', actor: 'admin-token' }
+  }
+}
+
+/**
+ * The console's server itself, whoever is signed in (or nobody: a failed sign-in). Only for what the
+ * console reports about itself (`routes/audit-events.ts`); the break-glass token is not accepted.
+ */
+export function requireConsoleToken(consoleToken: string | undefined) {
+  return async (request: FastifyRequest, reply: FastifyReply) => {
+    if (!consoleToken || !tokenMatches(request.headers[CONSOLE_TOKEN_HEADER], consoleToken)) return unauthorized(reply, 'missing or invalid console token')
   }
 }
 

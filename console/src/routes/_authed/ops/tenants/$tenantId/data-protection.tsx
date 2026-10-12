@@ -6,6 +6,7 @@ import { RouteError } from '@/components/route-error'
 import { ErasureLog, RetentionCard } from '@/features/tenant-data/data-protection'
 import { setTenantRetention } from '@/features/tenant-data/tenant-data.functions'
 import { tenantErasuresQuery, tenantRetentionQuery } from '@/features/tenant-data/tenant-data.queries'
+import { useCanOperate } from '@/lib/use-can-operate'
 
 const pageOf = (search: Record<string, unknown>) => {
   const page = Math.floor(Number(search.page))
@@ -25,6 +26,7 @@ function DataProtectionPage() {
   const { tenantId } = Route.useParams()
   const { page } = Route.useSearch()
   const navigate = Route.useNavigate()
+  const canOperate = useCanOperate()
   const { data: retention } = useSuspenseQuery(tenantRetentionQuery(tenantId))
   const { data: erasures } = useSuspenseQuery(tenantErasuresQuery(tenantId, page))
   return (
@@ -33,7 +35,7 @@ function DataProtectionPage() {
         title="Data protection"
         description="The tenant's retention period and its erasure log. Change the period or erase data only when the organisation asks; erasures from Exchanges need a reason and are audited."
       />
-      <RetentionCard retention={retention} invalidateKey={['ops', 'tenant', tenantId, 'data-protection']} save={(retentionDays) => setTenantRetention({ data: { tenantId, retentionDays } })} />
+      <RetentionCard retention={retention} invalidateKey={['ops', 'tenant', tenantId, 'data-protection']} save={canOperate ? (retentionDays) => setTenantRetention({ data: { tenantId, retentionDays } }) : undefined} />
       <ErasureLog data={erasures} onPage={(next) => void navigate({ search: { page: next > 1 ? next : undefined } })} />
     </div>
   )

@@ -12,6 +12,7 @@ import { SecretOnceDialog } from '@/components/secret-once-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { exportPortalList } from '@/features/export/export.functions'
 import { deletePortalWebhook, getPortalDelivery, retryPortalDelivery, rotatePortalWebhookSecret } from '@/features/portal/portal-data.functions'
 import { portalDeliveriesQuery, portalKey, portalWebhookQuery } from '@/features/portal/portal.queries'
 import { WebhookEndpointDialog } from '@/features/portal/webhook-endpoint-dialog'
@@ -58,6 +59,7 @@ function PortalWebhooksPage() {
         invalidateKey={portalKey(orgSlug, 'webhook-deliveries')}
         loadBody={(deliveryId) => getPortalDelivery({ data: { deliveryId } })}
         retryDelivery={canRetry ? (deliveryId) => retryPortalDelivery({ data: { organizationId, deliveryId } }) : undefined}
+        onExport={tenantCan(organization.role, { export: ['run'] }) ? (format) => exportPortalList({ data: { list: 'deliveries', format, search } }) : undefined}
       />
     </div>
   )

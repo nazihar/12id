@@ -4,7 +4,7 @@
  *     owner, admin or operator (review K1: setup is the console's);
  *   - the erasure log: every erasure made on request, with who and why, never the data.
  */
-import { desc, eq } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { z } from 'zod'
 
@@ -13,7 +13,7 @@ import { ERASURE_RECORD_TYPES, erasures, tenants } from '../../db/schema.ts'
 import { effectiveRetentionDays } from '../../retention.ts'
 import { type TenantContext, requireConsolePrincipal } from '../auth.ts'
 import { PlatformError } from '../errors.ts'
-import { listPage, pageOf, pageQuery } from '../list.ts'
+import { listPage, newestFirst, pageOf, pageQuery } from '../list.ts'
 import { CONSOLE_ONLY_TAG } from './console.ts'
 
 const errorBody = z.object({ error: z.string(), reason: z.string() })
@@ -88,7 +88,7 @@ export const dataProtectionRoutes = (deps: { db: Database; defaultRetentionDays:
     async (request) => {
       const where = [eq(erasures.tenantId, tenant(request).id)]
       const page = await listPage(deps.db, { table: erasures, where, ...request.query }, (w, limit, offset) =>
-        deps.db.select().from(erasures).where(w).orderBy(desc(erasures.at), desc(erasures.id)).limit(limit).offset(offset)
+        deps.db.select().from(erasures).where(w).orderBy(...newestFirst(erasures.at, erasures.id)).limit(limit).offset(offset)
       )
       return { ...page, items: page.items.map((r) => ({ ...r, at: r.at.toISOString() })) }
     }

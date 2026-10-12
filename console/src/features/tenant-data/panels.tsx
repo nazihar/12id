@@ -5,12 +5,13 @@
  */
 import { type QueryKey, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createColumnHelper } from '@tanstack/react-table'
-import { EyeIcon, KeyRoundIcon, RotateCwIcon, ScanFaceIcon } from 'lucide-react'
+import { EyeIcon, KeyRoundIcon, RotateCwIcon, ScanFaceIcon, UserSearchIcon } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
 import { DataTable } from '@/components/data-table/data-table'
 import type { DataTableFeatures } from '@/components/data-table/data-table-features'
+import { ExportMenu, type Exporter } from '@/components/data-table/export-menu'
 import { DateRangeFilter, MultiFilter, SelectFilter } from '@/components/data-table/list-toolbar'
 import { PageHeader } from '@/components/page-header'
 import { RowAction, RowActions } from '@/components/row-action'
@@ -20,6 +21,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import type { ExportFormat, ExportResult } from '@/features/export/export.lists'
 import { describeRule } from '@/lib/face-check-rule'
 import { formatDateTime } from '@/lib/format'
 import { type Page, type PageSize, isFiltered, pagingFor, resetFor } from '@/lib/list-search'
@@ -53,8 +55,11 @@ const mono = (value: string | null) => <span className="font-mono text-xs">{valu
 
 // --- exchanges ----------------------------------------------------------------------------
 
+/** Opens the customer page of a connection (implement/22 C11): everything that happened on it. */
+export type CustomerOpener = (connectionId: string) => void
+
 const connectionColumn = createColumnHelper<DataTableFeatures, ConnectionRow>()
-function connectionColumnsWith(eraser?: Eraser) {
+function connectionColumnsWith(eraser?: Eraser, onOpenCustomer?: CustomerOpener) {
   return connectionColumn.columns([
     connectionColumn.accessor('theirLabel', { header: 'Holder label', cell: ({ getValue }) => getValue() ?? '—' }),
     connectionColumn.accessor('state', { header: 'State', cell: ({ row }) => <StateWithErasure state={row.original.state} erasedAt={row.original.erasedAt} /> }),
@@ -64,7 +69,16 @@ function connectionColumnsWith(eraser?: Eraser) {
     connectionColumn.display({
       id: 'actions',
       header: '',
-      cell: ({ row }) => (eraser && !row.original.erasedAt ? <RowActions><EraseAction kind="connection" id={row.original.id} eraser={eraser} /></RowActions> : null),
+      cell: ({ row }) => {
+        const erase = eraser && !row.original.erasedAt
+        if (!erase && !onOpenCustomer) return null
+        return (
+          <RowActions>
+            {onOpenCustomer && <RowAction label="Activity" icon={UserSearchIcon} onClick={() => onOpenCustomer(row.original.id)} />}
+            {erase && <EraseAction kind="connection" id={row.original.id} eraser={eraser} />}
+          </RowActions>
+        )
+      },
     }),
   ])
 }
@@ -95,7 +109,7 @@ function BiometricCell({ biometric, condition }: { biometric: Biometric; conditi
 }
 
 const credentialColumn = createColumnHelper<DataTableFeatures, CredentialRow>()
-function credentialColumnsWith(onLog?: (id: string) => void, eraser?: Eraser) {
+function credentialColumnsWith(onLog?: (id: string) => void, eraser?: Eraser, onOpenCustomer?: CustomerOpener) {
   return credentialColumn.columns([
     credentialColumn.accessor('externalId', { header: 'External id', cell: ({ getValue }) => mono(getValue()) }),
     credentialColumn.accessor('state', { header: 'State', cell: ({ row }) => <StateWithErasure state={row.original.state} erasedAt={row.original.erasedAt} /> }),
@@ -106,13 +120,13 @@ function credentialColumnsWith(onLog?: (id: string) => void, eraser?: Eraser) {
     credentialColumn.display({
       id: 'actions',
       header: '',
-      cell: ({ row }) => <ExchangeActions kind="credential" row={row.original} onLog={onLog} eraser={eraser} />,
+      cell: ({ row }) => <ExchangeActions kind="credential" row={row.original} onLog={onLog} eraser={eraser} onOpenCustomer={onOpenCustomer} />,
     }),
   ])
 }
 
 const proofColumn = createColumnHelper<DataTableFeatures, ProofRow>()
-function proofColumnsWith(onLog?: (id: string) => void, eraser?: Eraser) {
+function proofColumnsWith(onLog?: (id: string) => void, eraser?: Eraser, onOpenCustomer?: CustomerOpener) {
   return proofColumn.columns([
     proofColumn.accessor('externalId', { header: 'External id', cell: ({ getValue }) => mono(getValue()) }),
     proofColumn.accessor('state', { header: 'State', cell: ({ row }) => <StateWithErasure state={row.original.state} erasedAt={row.original.erasedAt} /> }),
@@ -124,19 +138,21 @@ function proofColumnsWith(onLog?: (id: string) => void, eraser?: Eraser) {
     proofColumn.display({
       id: 'actions',
       header: '',
-      cell: ({ row }) => <ExchangeActions kind="proof" row={row.original} onLog={onLog} eraser={eraser} />,
+      cell: ({ row }) => <ExchangeActions kind="proof" row={row.original} onLog={onLog} eraser={eraser} onOpenCustomer={onOpenCustomer} />,
     }),
   ])
 }
 
-/** Biometric log (gated exchanges, and proofs a template rule decided on) and erasure (finished, not yet erased exchanges). */
-function ExchangeActions({ kind, row, onLog, eraser }: { kind: ExchangeKind; row: CredentialRow | ProofRow; onLog?: (id: string) => void; eraser?: Eraser }) {
+/** The customer's page, the biometric log (gated exchanges, and proofs a template rule decided on) and erasure (finished, not yet erased exchanges). */
+function ExchangeActions({ kind, row, onLog, eraser, onOpenCustomer }: { kind: ExchangeKind; row: CredentialRow | ProofRow; onLog?: (id: string) => void; eraser?: Eraser; onOpenCustomer?: CustomerOpener }) {
   const decided = 'biometricCondition' in row && row.biometricCondition !== null
   const log = onLog && (row.biometric || decided) ? onLog : undefined
   const erase = eraser && !row.erasedAt && isFinished(row.state) ? eraser : undefined
-  if (!log && !erase) return null
+  const connectionId = onOpenCustomer ? row.connectionId : null
+  if (!log && !erase && !connectionId) return null
   return (
     <RowActions>
+      {connectionId && <RowAction label="Customer activity" icon={UserSearchIcon} onClick={() => onOpenCustomer?.(connectionId)} />}
       {log && <RowAction label="Biometric log" icon={ScanFaceIcon} onClick={() => log(row.id)} />}
       {erase && <EraseAction kind={kind} id={row.id} eraser={erase} />}
     </RowActions>
@@ -159,15 +175,27 @@ export function ExchangeLists({
   fetching,
   loadBiometricLog,
   eraser,
+  onOpenCustomer,
+  showTabs = true,
+  searchBox = true,
+  onExport,
 }: ListProps<ExchangePage, ExchangeSearch> & {
   loadBiometricLog?: BiometricLogLoader
   /** Phase 7 H1: omit when the viewer may not erase personal data. */
   eraser?: Eraser
+  /** Adds the way to a connection's customer page; omit on that page itself. */
+  onOpenCustomer?: CustomerOpener
+  /** false when the caller has its own tabs and shows one kind (the customer page). */
+  showTabs?: boolean
+  /** false where the list is already narrowed to one person, so a search by reference has nothing to find. */
+  searchBox?: boolean
+  /** Exports the open tab's list under its filters (implement/22 C12); omit when the viewer may not export. */
+  onExport?: (list: ExchangeTab, format: ExportFormat) => Promise<ExportResult>
 }) {
   const [viewing, setViewing] = useState<{ kind: ExchangeKind; id: string } | null>(null)
-  const connectionColumns = useMemo(() => connectionColumnsWith(eraser), [eraser])
-  const credentialColumns = useMemo(() => credentialColumnsWith(loadBiometricLog ? (id) => setViewing({ kind: 'credential', id }) : undefined, eraser), [loadBiometricLog, eraser])
-  const proofColumns = useMemo(() => proofColumnsWith(loadBiometricLog ? (id) => setViewing({ kind: 'proof', id }) : undefined, eraser), [loadBiometricLog, eraser])
+  const connectionColumns = useMemo(() => connectionColumnsWith(eraser, onOpenCustomer), [eraser, onOpenCustomer])
+  const credentialColumns = useMemo(() => credentialColumnsWith(loadBiometricLog ? (id) => setViewing({ kind: 'credential', id }) : undefined, eraser, onOpenCustomer), [loadBiometricLog, eraser, onOpenCustomer])
+  const proofColumns = useMemo(() => proofColumnsWith(loadBiometricLog ? (id) => setViewing({ kind: 'proof', id }) : undefined, eraser, onOpenCustomer), [loadBiometricLog, eraser, onOpenCustomer])
   const tab = search.tab ?? 'connections'
   // While another tab loads, the previous tab's rows must not render under the new tab's columns.
   const loading = data.tab !== tab
@@ -175,8 +203,9 @@ export function ExchangeLists({
   const common = {
     paging: pagingFor(data.page, onSearch),
     onReset: resetFor(search, onSearch),
-    search: { value: search.q, placeholder: tab === 'connections' ? 'Search external id or holder label' : 'Search external id', onChange: (q: string | undefined) => onSearch({ q }) },
+    search: searchBox ? { value: search.q, placeholder: tab === 'connections' ? 'Search external id or holder label' : 'Search external id', onChange: (q: string | undefined) => onSearch({ q }) } : undefined,
     fetching,
+    actions: onExport ? <ExportMenu onExport={(format) => onExport(tab, format)} /> : undefined,
     toolbar: (
       <>
         <MultiFilter label="State" options={stateOptions(EXCHANGE_STATES[tab])} value={search.state} onChange={(state) => onSearch({ state })} testId="state-filter" />
@@ -186,15 +215,17 @@ export function ExchangeLists({
   }
   return (
     <div className="space-y-4">
-      <Tabs value={tab} onValueChange={(next) => onSearch({ tab: next === 'connections' ? undefined : (next as ExchangeTab), q: undefined, state: undefined, from: undefined, to: undefined })}>
-        <TabsList>
-          {EXCHANGE_TABS.map((value) => (
-            <TabsTrigger key={value} value={value}>
-              {TAB_LABELS[value]}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
+      {showTabs && (
+        <Tabs value={tab} onValueChange={(next) => onSearch({ tab: next === 'connections' ? undefined : (next as ExchangeTab), q: undefined, state: undefined, from: undefined, to: undefined })}>
+          <TabsList>
+            {EXCHANGE_TABS.map((value) => (
+              <TabsTrigger key={value} value={value}>
+                {TAB_LABELS[value]}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+      )}
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : data.tab === 'connections' ? (
@@ -221,14 +252,14 @@ const EVENT_LABELS: Record<string, string> = {
   cancelled: 'Check cancelled',
 }
 
-const score = (value: number | null, threshold: number | undefined) =>
+export const score = (value: number | null, threshold: number | undefined) =>
   value === null ? '—' : `${value.toFixed(1)}${threshold === undefined ? '' : ` / ${threshold}`}`
 
 /**
  * The biometric log of one exchange (Phase 6): every step with scores against the thresholds and the
  * vendor session id for cross-checking in the organisation's vendor account. Never shows images.
  */
-function BiometricLogDialog({ target, load, onClose }: { target: { kind: ExchangeKind; id: string } | null; load: BiometricLogLoader; onClose: () => void }) {
+export function BiometricLogDialog({ target, load, onClose }: { target: { kind: ExchangeKind; id: string } | null; load: BiometricLogLoader; onClose: () => void }) {
   const log = useQuery({
     queryKey: ['biometric-log', target?.kind, target?.id],
     queryFn: () => load(target!.kind, target!.id),
@@ -329,7 +360,7 @@ const walletColumns = walletColumn.columns([
   walletColumn.accessor('createdAt', { header: 'Created', cell: ({ getValue }) => formatDateTime(getValue()) }),
 ])
 
-export function WalletsTable({ data, search, onSearch, fetching }: ListProps<Page<WalletRow>, WalletSearch>) {
+export function WalletsTable({ data, search, onSearch, fetching, onExport }: ListProps<Page<WalletRow>, WalletSearch> & { onExport?: Exporter }) {
   return (
     <DataTable
       columns={walletColumns}
@@ -343,6 +374,7 @@ export function WalletsTable({ data, search, onSearch, fetching }: ListProps<Pag
           <DateRangeFilter from={search.from} to={search.to} onChange={(range) => onSearch(range)} />
         </>
       }
+      actions={onExport && <ExportMenu onExport={onExport} />}
       fetching={fetching}
       emptyMessage={isFiltered(search) ? 'No wallets match.' : 'No wallets.'}
       testId="wallets-table"
@@ -456,6 +488,7 @@ export function DeliveriesPanel({
   loadBody,
   revealBody,
   retryDelivery,
+  onExport,
 }: ListProps<Page<DeliveryRow>, DeliverySearch> & {
   invalidateKey: QueryKey
   loadBody: (deliveryId: number) => Promise<DeliveryDetail>
@@ -463,6 +496,8 @@ export function DeliveriesPanel({
   revealBody?: (deliveryId: number, reason: string) => Promise<DeliveryDetail>
   /** Omit when the viewer may not retry. */
   retryDelivery?: (deliveryId: number) => Promise<unknown>
+  /** The deliveries as a file, without their bodies; omit when the viewer may not export. */
+  onExport?: Exporter
 }) {
   const [viewing, setViewing] = useState<number | null>(null)
 
@@ -492,6 +527,7 @@ export function DeliveriesPanel({
         data={data.items}
         paging={pagingFor(data, onSearch)}
         onReset={resetFor(search, onSearch)}
+        actions={onExport && <ExportMenu onExport={onExport} />}
         fetching={fetching}
         emptyMessage={isFiltered(search) ? 'No deliveries match.' : 'No deliveries.'}
         testId="deliveries-table"

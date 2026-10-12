@@ -13,6 +13,8 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { type OperatorDashboard, operatorDashboardQuery } from '@/features/dashboard/dashboard.queries'
 import { parseDashboardSearch, rangeOf } from '@/features/dashboard/dashboard.schemas'
+import { auditAction, auditResult } from '@/features/ops/audit-events'
+import { percent } from '@/features/verification/verification-format'
 import { auditLogQuery } from '@/features/ops/ops.queries'
 import { formatDateTime } from '@/lib/format'
 
@@ -67,7 +69,7 @@ function OperatorDashboardPage() {
   const { data: stats } = useSuspenseQuery(operatorDashboardQuery(days))
   const audit = useQuery(auditLogQuery())
   const recent = audit.data?.items.slice(0, 10)
-  const { platform } = stats
+  const { platform, verification } = stats
 
   return (
     <div className="space-y-4">
@@ -81,6 +83,22 @@ function OperatorDashboardPage() {
         <StatTile testId="stat-proofs" label="Proof exchanges" value={platform.proofs} sub={`${stats.outcomes.proofs.done ?? 0} completed`} />
         <StatTile testId="stat-wallets" label="Active wallets" value={platform.wallets.active} sub={`${platform.wallets.revoked} revoked`} />
         <StatTile testId="stat-api-keys" label="Active API keys" value={platform.apiKeys.active} sub={`${platform.apiKeys.revoked} revoked`} />
+      </StatGrid>
+
+      {/* Outcomes of the window across tenants (implement/22 C10); each tenant's Verification page has the detail. */}
+      <StatGrid className="xl:grid-cols-2">
+        <StatTile
+          testId="stat-proofs-verified"
+          label={`Proof requests verified, last ${stats.days} days`}
+          value={percent(verification.proofsVerified, verification.proofsRequested)}
+          sub={`${verification.proofsVerified} of ${verification.proofsRequested} · ${verification.proofsFailed} failed verification`}
+        />
+        <StatTile
+          testId="stat-face-checks-passed"
+          label={`Face checks passed, last ${stats.days} days`}
+          value={percent(verification.faceChecksPassed, verification.faceChecksPassed + verification.faceChecksFailed)}
+          sub={`${verification.faceChecksPassed} passed · ${verification.faceChecksFailed} failed or expired · ${verification.faceChecks} started`}
+        />
       </StatGrid>
 
       <Card size="sm">
@@ -143,10 +161,8 @@ function OperatorDashboardPage() {
                   <span className="text-muted-foreground tabular-nums">{formatDateTime(entry.at)}</span>
                   <span className="min-w-0 truncate">{entry.actorEmail ?? entry.actor}</span>
                   <StateBadge state={entry.role} />
-                  <span className="font-mono text-xs">
-                    {entry.method} {entry.route}
-                  </span>
-                  <span className="font-mono text-xs text-muted-foreground">{entry.statusCode}</span>
+                  <span className={auditAction(entry).event ? undefined : 'font-mono text-xs'}>{auditAction(entry).text}</span>
+                  <span className="font-mono text-xs text-muted-foreground">{auditResult(entry)}</span>
                 </li>
               ))}
             </ul>

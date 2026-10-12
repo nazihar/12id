@@ -56,5 +56,6 @@ test('operator screens load through the console scope', async ({ page }) => {
   await expect(page.getByRole('dialog').getByRole('alert').first()).toContainText('Enter the organization name.')
   await page.getByLabel('Organization name').fill('Acme E2E')
   await page.getByRole('button', { name: 'Create tenant' }).click()
-  await expect(page.getByRole('dialog').getByRole('alert').or(page.getByText(/onboarding|created|Acme E2E/i).first())).toBeVisible({ timeout: 30_000 })
+  // Either may show first, and both once platform-api has answered: the union needs its own .first().
+  await expect(page.getByRole('dialog').getByRole('alert').or(page.getByText(/onboarding|created|Acme E2E/i)).first()).toBeVisible({ timeout: 30_000 })
 })

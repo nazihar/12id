@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { OPERATOR_ROLE, hasPlatformRole, platformRoles, sessionExpired, tenantRoles } from '../src/lib/permissions'
+import { AUDITOR_ROLE, OPERATOR_ROLE, hasPlatformRole, platformRoles, sessionExpired, staffRoleOf, tenantRoles } from '../src/lib/permissions'
 
 type TenantRequest = Parameters<(typeof tenantRoles)['member']['authorize']>[0]
 
@@ -52,5 +52,29 @@ describe('session caps (review L11)', () => {
 
   it('cuts sessions issued under the old 7-day setting', () => {
     expect(sessionExpired('user', signedIn(6 * 24).toISOString(), now)).toBe(true)
+  })
+})
+
+describe('auditor role (implement/22 C14)', () => {
+  it('carries no user or session permission, so the admin plugin refuses every change', () => {
+    const auditor = platformRoles[AUDITOR_ROLE]
+    for (const action of ['create', 'list', 'set-role', 'ban', 'delete', 'set-password', 'get', 'update'] as const) expect(auditor.authorize({ user: [action] }).success).toBe(false)
+    for (const action of ['list', 'revoke', 'delete'] as const) expect(auditor.authorize({ session: [action] }).success).toBe(false)
+    expect(platformRoles[OPERATOR_ROLE].authorize({ user: ['delete', 'set-role', 'update'] }).success).toBe(true)
+  })
+
+  it('is staff next to the operator, which wins when an account has both', () => {
+    expect(staffRoleOf('auditor')).toBe('auditor')
+    expect(staffRoleOf('operator')).toBe('operator')
+    expect(staffRoleOf('auditor,operator')).toBe('operator')
+    expect(staffRoleOf('user')).toBeNull()
+    expect(staffRoleOf(null)).toBeNull()
+  })
+
+  it('has the operator session cap of 12 hours', () => {
+    const signedIn = Date.now() - 13 * 60 * 60 * 1000
+    expect(sessionExpired('auditor', signedIn)).toBe(true)
+    expect(sessionExpired('user', signedIn)).toBe(false)
+    expect(sessionExpired('auditor', Date.now() - 11 * 60 * 60 * 1000)).toBe(false)
   })
 })

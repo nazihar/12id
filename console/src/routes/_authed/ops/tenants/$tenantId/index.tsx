@@ -17,6 +17,7 @@ import type { getTenantOrganization } from '@/features/tenants/tenant-owner.func
 import { tenantOrganizationQuery, tenantQuery } from '@/features/tenants/tenants.queries'
 import { formatDateTime } from '@/lib/format'
 import { type PageSize, pagingFor } from '@/lib/list-search'
+import { useCanOperate } from '@/lib/use-can-operate'
 
 type MemberRow = NonNullable<Awaited<ReturnType<typeof getTenantOrganization>>>['members']['items'][number]
 
@@ -39,6 +40,7 @@ export const Route = createFileRoute('/_authed/ops/tenants/$tenantId/')({
 })
 
 function TenantOverviewPage() {
+  const canOperate = useCanOperate()
   const { tenantId } = Route.useParams()
   const { data: tenant } = useSuspenseQuery(tenantQuery(tenantId))
   const { data: organization } = useSuspenseQuery(tenantOrganizationQuery(tenantId))
@@ -50,6 +52,7 @@ function TenantOverviewPage() {
     exchanges: { to: '/ops/tenants/$tenantId/exchanges', params },
     wallets: { to: '/ops/tenants/$tenantId/wallets', params },
     webhooks: { to: '/ops/tenants/$tenantId/webhooks', params },
+    verification: { to: '/ops/tenants/$tenantId/verification', params },
   }
 
   return (
@@ -81,7 +84,7 @@ function TenantOverviewPage() {
           <CardDescription>{organization ? `/${organization.slug}` : 'Customer staff sign in to the tenant portal through this organization.'}</CardDescription>
           {!organization && (
             <CardAction>
-              <CreateTenantOrganizationDialog tenantId={tenantId} ready={tenant.status === 'ready'} />
+              {canOperate && <CreateTenantOrganizationDialog tenantId={tenantId} ready={tenant.status === 'ready'} />}
             </CardAction>
           )}
         </CardHeader>

@@ -150,4 +150,41 @@ describe('console scope', { skip: db ? false : 'no test database' }, () => {
     assert.equal(listed.json().total, 3)
     assert.ok(listed.json().items.every((item: { changes: unknown; reason: unknown }) => 'changes' in item && 'reason' in item))
   })
+
+  it('lets an auditor read what an operator reads and change nothing (implement/22 C14)', async () => {
+    const auditor = { ...operator, 'x-console-actor': 'user_aud1', 'x-console-role': 'auditor' }
+    const inTenant = { ...auditor, 'x-console-tenant': tenantA }
+    for (const url of ['/admin/tenants', `/admin/tenants/${tenantA}`, `/admin/tenants/${tenantA}/api-keys`, '/admin/overview', '/admin/webhook-deliveries', '/admin/audit', '/admin/stats']) {
+      const read = await app.inject({ method: 'GET', url, headers: auditor })
+      assert.equal(read.statusCode, 200, `${url}: ${read.body}`)
+    }
+    for (const url of ['/v1/connections', '/v1/credentials', '/v1/proofs', '/v1/wallets', '/v1/api-keys', '/v1/stats', '/v1/webhook/deliveries']) {
+      const read = await app.inject({ method: 'GET', url, headers: inTenant })
+      assert.equal(read.statusCode, 200, `${url}: ${read.body}`)
+    }
+
+    const tenantsBefore = (await app.inject({ method: 'GET', url: '/admin/tenants', headers: operator })).json().length
+    const keysBefore = (await app.inject({ method: 'GET', url: '/v1/api-keys', headers: inTenant })).json().total
+    const changes: Array<{ method: 'POST' | 'PATCH' | 'PUT' | 'DELETE'; url: string; headers: Record<string, string>; payload?: Record<string, unknown> }> = [
+      { method: 'POST', url: '/admin/tenants', headers: auditor, payload: { name: 'Initech' } },
+      { method: 'PATCH', url: `/admin/tenants/${tenantA}`, headers: auditor, payload: { rateLimitPerMin: 0 } },
+      { method: 'POST', url: `/admin/tenants/${tenantA}/onboard`, headers: auditor },
+      { method: 'POST', url: `/admin/tenants/${tenantA}/api-keys`, headers: auditor, payload: { label: 'audit' } },
+      { method: 'DELETE', url: '/admin/api-keys/00000000-0000-4000-8000-000000000000', headers: auditor },
+      { method: 'POST', url: '/v1/api-keys', headers: inTenant, payload: { label: 'audit' } },
+      { method: 'POST', url: '/v1/credentials/offer', headers: inTenant, payload: { connectionId: 'conn-1', credentialDefinitionId: 'ABC:3:CL:12:default', attributes: { name: 'Ada', expiresOn: '20991231' } } },
+      { method: 'POST', url: '/v1/credentials/cred-1/erase', headers: inTenant, payload: { reason: 'tidy up' } },
+      { method: 'PUT', url: '/v1/webhook', headers: inTenant, payload: { url: 'https://auditor.test/hook' } },
+    ]
+    for (const change of changes) {
+      const refused = await app.inject(change)
+      assert.equal(refused.statusCode, 403, `${change.method} ${change.url}: ${refused.body}`)
+      assert.equal(refused.json().reason, 'auditors are read-only')
+    }
+    assert.equal((await app.inject({ method: 'GET', url: '/admin/tenants', headers: operator })).json().length, tenantsBefore)
+    assert.equal((await app.inject({ method: 'GET', url: '/v1/api-keys', headers: inTenant })).json().total, keysBefore)
+    // The console still reports an auditor's own sign-in: that route asks for the console token alone.
+    const signIn = await app.inject({ method: 'POST', url: '/admin/audit/events', headers: { 'x-console-token': token }, payload: { type: 'auth.sign_in', outcome: 'success', actor: 'user_aud1', actorLabel: 'aud1@example.com', role: 'auditor' } })
+    assert.equal(signIn.statusCode, 201, signIn.body)
+  })
 })

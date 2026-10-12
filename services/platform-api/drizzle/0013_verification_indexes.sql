@@ -1,0 +1,3 @@
+CREATE INDEX "exchange_gate_events_attempts_idx" ON "exchange_gate_events" USING btree ("tenant_id","at" DESC NULLS LAST) WHERE "exchange_gate_events"."type" = 'attempt_completed';--> statement-breakpoint
+CREATE INDEX "exchange_gates_tenant_created_idx" ON "exchange_gates" USING btree ("tenant_id","created_at" DESC NULLS LAST,"id" DESC NULLS LAST);--> statement-breakpoint
+CREATE INDEX "exchange_gates_tenant_status_created_idx" ON "exchange_gates" USING btree ("tenant_id","status","created_at" DESC NULLS LAST,"id" DESC NULLS LAST);

@@ -48,6 +48,7 @@
     "sonner": "2.0.8",
     "srvx": "1.0.4",
     "tailwind-merge": "3.7.0",
+    "write-excel-file": "4.1.1",
     "zod": "4.6.4"
   },
   "devDependencies": {

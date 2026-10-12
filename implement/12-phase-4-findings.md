@@ -383,6 +383,8 @@ Scratch `platform_api` database migrated through `0008`, holding 90 k connection
 | Total, `count(*)` | 9.7 ms, seq scan | 10.4 ms, seq scan |
 | Tenant B (10 k): first page / total | 0.14 / 2.2 ms | 0.11 / 1.5 ms |
 
+> **Correction (2026-10-12, console feedback set 1; [`23-console-feedback-findings.md`](23-console-feedback-findings.md), "List order"):** the "After" column for the first-page and state rows does not describe what the routes ran. The probe's `ORDER BY` matched the indexes; the routes' did not (plain `DESC` against `DESC NULLS LAST` indexes), so in the running service every list page was a scan of the tenant's rows and a sort. Measured on 2026-10-12 with the routes' own ordering on a 30,000-row tenant: 4.3 ms with a sort before the fix, 0.13 ms from the index after it. The contains-search and count rows are not affected.
+
 What this shows:
 - The trigram index is the one that matters: the contains search fell by two orders of magnitude.
 - The total for a tenant that holds most of the table stays a sequential scan of about 10 ms. That is the price of showing "of N". A cursor without a total (the option not chosen) would avoid it.

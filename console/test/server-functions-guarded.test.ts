@@ -1,6 +1,7 @@
 /**
- * The data-boundary rule (plan C2): every server function is guarded by `operatorMiddleware` or
- * `tenantMiddleware(...)`. Route guards are UX only, so an unguarded `createServerFn` is an open
+ * The data-boundary rule (plan C2): every server function is guarded by `operatorMiddleware`,
+ * `operatorReadMiddleware` or `tenantMiddleware(...)`. `operatorReadMiddleware` also admits auditors,
+ * who change nothing (implement/22 C14), so only a GET function may carry it. Route guards are UX only, so an unguarded `createServerFn` is an open
  * endpoint. A function that must work without a session (invitation acceptance, for example) is
  * listed in PUBLIC_SERVER_FUNCTIONS with the reason it is safe.
  */
@@ -43,25 +44,28 @@ describe('server functions', () => {
     expect(misplaced.map((file) => relative(root, file))).toEqual([])
   })
 
-  it('each carry operatorMiddleware or tenantMiddleware', () => {
+  it('each carry operatorMiddleware, operatorReadMiddleware or tenantMiddleware', () => {
     const unguarded: string[] = []
+    const writableByAuditors: string[] = []
     let declarations = 0
     let calls = 0
     for (const file of files.filter((f) => f.endsWith('.functions.ts'))) {
       const text = readFileSync(file, 'utf8')
       calls += text.split('createServerFn(').length - 1
-      for (const match of text.matchAll(/export const (\w+) = createServerFn\([^)]*\)([\s\S]*?)\.handler\(/g)) {
+      for (const match of text.matchAll(/export const (\w+) = createServerFn\(([^)]*)\)([\s\S]*?)\.handler\(/g)) {
         declarations += 1
-        const [, name, chain] = match
+        const [, name, options, chain] = match
+        if (/\.middleware\(\[\s*operatorReadMiddleware\b/.test(chain) && !/method: 'GET'/.test(options)) writableByAuditors.push(key(file, name))
         if (PUBLIC_SERVER_FUNCTIONS.has(key(file, name))) continue
         if (SESSION_SERVER_FUNCTIONS.has(key(file, name))) {
           if (!/\.middleware\(\[\s*authMiddleware\b/.test(chain)) unguarded.push(key(file, name))
           continue
         }
-        if (!/\.middleware\(\[\s*(operatorMiddleware|tenantMiddleware\()/.test(chain)) unguarded.push(key(file, name))
+        if (!/\.middleware\(\[\s*(operatorMiddleware\b|operatorReadMiddleware\b|tenantMiddleware\()/.test(chain)) unguarded.push(key(file, name))
       }
     }
     expect(unguarded).toEqual([])
+    expect(writableByAuditors).toEqual([])
     // Every createServerFn must match the declaration shape above, or the check would skip it.
     expect(declarations).toBe(calls)
     expect(declarations).toBeGreaterThan(0)

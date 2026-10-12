@@ -4,7 +4,7 @@
  * every area declares its navigation here and nowhere else.
  */
 import { useMatchRoute, useMatches, useRouteContext } from '@tanstack/react-router'
-import { BuildingIcon, FileBadgeIcon, GlobeIcon, KeyRoundIcon, LayoutDashboardIcon, type LucideIcon, ScanFaceIcon, ScrollTextIcon, ShieldCheckIcon, ShieldUserIcon, SmartphoneIcon, UsersIcon, WalletIcon, WebhookIcon } from 'lucide-react'
+import { BuildingIcon, ChartColumnIcon, FileBadgeIcon, GlobeIcon, KeyRoundIcon, LayoutDashboardIcon, type LucideIcon, ScanFaceIcon, ScrollTextIcon, ShieldCheckIcon, ShieldUserIcon, SmartphoneIcon, UsersIcon, WalletIcon, WebhookIcon } from 'lucide-react'
 
 import type { TenantRole } from '@/lib/permissions'
 
@@ -56,6 +56,7 @@ function tenantItems(tenantId: string): NavItem[] {
     { label: 'Proof templates', to: '/ops/tenants/$tenantId/templates', params, icon: ScrollTextIcon },
     { label: 'Wallets', to: '/ops/tenants/$tenantId/wallets', params, icon: WalletIcon },
     { label: 'Exchanges', to: '/ops/tenants/$tenantId/exchanges', params, icon: GlobeIcon },
+    { label: 'Verification', to: '/ops/tenants/$tenantId/verification', params, icon: ChartColumnIcon },
     { label: 'Webhooks', to: '/ops/tenants/$tenantId/webhooks', params, icon: WebhookIcon },
     { label: 'Biometrics', to: '/ops/tenants/$tenantId/biometrics', params, icon: ScanFaceIcon },
     { label: 'Data protection', to: '/ops/tenants/$tenantId/data-protection', params, icon: ShieldCheckIcon },
@@ -70,6 +71,7 @@ function portalItems(orgSlug: string): NavItem[] {
     { label: 'Proof templates', to: '/t/$orgSlug/templates', params, icon: ScrollTextIcon },
     { label: 'Wallets', to: '/t/$orgSlug/wallets', params, icon: SmartphoneIcon },
     { label: 'Exchanges', to: '/t/$orgSlug/exchanges', params, icon: GlobeIcon },
+    { label: 'Verification', to: '/t/$orgSlug/verification', params, icon: ChartColumnIcon },
     { label: 'Webhooks', to: '/t/$orgSlug/webhooks', params, icon: WebhookIcon },
     { label: 'Biometrics', to: '/t/$orgSlug/biometrics', params, icon: ScanFaceIcon },
     { label: 'Data protection', to: '/t/$orgSlug/data-protection', params, icon: ShieldCheckIcon },

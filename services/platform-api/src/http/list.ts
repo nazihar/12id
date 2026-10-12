@@ -55,6 +55,17 @@ export function createdBetween(col: AnyPgColumn, range: { from?: string; to?: st
   return filters
 }
 
+/**
+ * The fixed order of every list: newest first, the primary key as tie-break.
+ *
+ * Written with NULLS LAST because that is how the list indexes are declared: drizzle's `.desc()` in
+ * an index is `DESC NULLS LAST`, while a plain `ORDER BY … DESC` means NULLS FIRST. Postgres reads a
+ * page's order straight from an index only when the two agree; with a plain `desc()` it fetched and
+ * sorted every row of the tenant for each page (found in implement/23, 2026-10-11). The columns are
+ * NOT NULL, so the rows and their order are the same either way.
+ */
+export const newestFirst = (createdAt: AnyPgColumn, id: AnyPgColumn): [SQL, SQL] => [sql`${createdAt} desc nulls last`, sql`${id} desc nulls last`]
+
 /** Rows of one page (the callback applies the order) and the total under the same filter, in parallel. */
 export async function listPage<TRow>(
   db: Database,
