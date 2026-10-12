@@ -1,6 +1,6 @@
 # Console feedback, set 1 — findings
 
-**Plan:** [22-console-feedback.md](22-console-feedback.md). **Status (2026-10-12): set 1 (C10–C14) is committed (`7cb5f44`) and runs on staging as `v0.4.0-rc.1`. The checks that need no webhook receiver pass there; `smoke:platform-credo` and `smoke:biometric-credo` are not run yet, and `v0.4.0` is not tagged until they are** (see "On staging" below).
+**Plan:** [22-console-feedback.md](22-console-feedback.md). **Status (2026-10-12): set 1 (C10–C14) is released as platform `v0.4.0`** (commit `7cb5f44`, the release candidate's digests). Staging runs `0.4.0-rc.1`; every check and both Credo smokes passed there (see "On staging" and "Released as `v0.4.0`" below).
 
 | Item | State |
 |---|---|
@@ -12,7 +12,7 @@
 | List order (found on the way) | **fixed, local.** Every list page is read from its index again |
 | Biometric log without the gate engine (found on the way) | **fixed, local** |
 | Final local run | **2026-10-12, all green.** platform-api: `tsc` clean, `npm test` 131/131 (111 before this work), `openapi.json` 34 paths (unchanged), `openapi.console.json` 55 → 59. Console: `tsc` clean, Vitest 75/75 (44 before), `vite build` and `check:client` clean, the Excel writer is a 71 KB chunk of its own. Playwright against a local platform-api, one run: 9/9 (`auth` 2, `export`, `lists`, `ops`, `ops-audit`, `ops-auditor`, `portal`, `verification`). Not run: `biometrics.spec.ts`, any staging smoke, the phone |
-| Staging | **2026-10-12, `0.4.0-rc.1`.** Deployed clean; `console-feedback-check` 19/19, `e2e:staging` 4/4 (one spec is new), `conditional-gate-check` 7/7. Not run: the two Credo smokes, the phone |
+| Staging | **2026-10-12, `0.4.0-rc.1`.** Deployed clean; `console-feedback-check` 19/19, `e2e:staging` 4/4 (one spec is new), `conditional-gate-check` 7/7, `smoke:platform-credo` passed, `smoke:biometric-credo` 30/30. Not run: the phone |
 
 Every claim below comes from a local run on 2026-10-11 or 2026-10-12, or a read of the installed source on those dates; the section "On staging" comes from staging on 2026-10-12.
 
@@ -222,7 +222,7 @@ Not taken: the npm `xlsx` package (stale on the registry) and `exceljs` (a large
 ---
 
 ## Open, for the owner
-1. **Audit retention: separate from the organisation's retention period (owner question, 2026-10-12).**
+1. **Audit retention: separate from the organisation's retention period (owner question, 2026-10-12). Decided the same day: the owner took the proposal below as written; it is built with set 2.**
    - Today the audit log keeps everything. The organisation's retention period (90 days by default) does not touch it: that period scrubs end users' personal data from finished exchanges, and the audit holds none of that (it is replaced before a row is written).
    - The owner asked whether the audit should follow that period, set by the client the same way.
    - **Recommendation: the same place and the same mechanism, but its own period, and a longer one.** The audit exists to outlast the data it describes. With one shared 90-day period, the record that an operator revealed someone's data, or that an owner erased it, would disappear together with the data, and a failed sign-in from three months ago could no longer be looked up. What the audit holds about people is staff data (email, network address, browser), for which one to two years is the usual period.
@@ -231,7 +231,7 @@ Not taken: the npm `xlsx` package (stale on the registry) and `exceljs` (a large
 2. **Tenant suspension** does not exist (statuses are provisioning, ready, failed). Not in the checklist; likely to come up with it.
 3. **"3D liveness":** the provider is AWS Rekognition Face Liveness; FaceTec is designed for and not built.
 4. **Set 2 comes after this release** (owner, 2026-10-12). It needs decisions before any build: which changes need a second person (maker–checker), what counts as a security event, who is notified of what, and the audit period above.
-5. **Not run in this work:** `biometrics.spec.ts` (needs a local biometric-service), `smoke:platform-credo` and `smoke:biometric-credo` on staging (they need the `-R 3200` tunnel, which the owner opens), and the phone. Nothing here changes the SDK, agent-service or biometric-service. `v0.4.0` waits for the two smokes.
+5. **Not run in this work:** `biometrics.spec.ts` (needs a local biometric-service), and the phone. Nothing here changes the SDK, agent-service or biometric-service.
 
 ## On staging (2026-10-12, `v0.4.0-rc.1`)
 Commit `7cb5f44` on `master` (owner: "Commit and release"); CI green (`ci-services`, `ci-console`, `docs`). Tag `v0.4.0-rc.1` on that commit; `release-images` built it (run 38207514881). Deployed the same day with `deploy.sh`, seven stacks, 254 s, no failed step.
@@ -251,14 +251,18 @@ Commit `7cb5f44` on `master` (owner: "Commit and release"); CI green (`ci-servic
 | Audit log after the browser runs | every sign-in is there as `auth.sign_in` with the email, the method ("authenticator app"), the network address and the browser; the changes made by the specs carry the actor's email; `export.run` rows say list, format, filters and row count (`checks`, 95, `csv` and `xlsx`) |
 | Last sign-in | set for the two accounts that signed in since the deploy (2 of 10); the others read "never" until they do |
 | `conditional-gate-check` (regression) | 7/7 |
+| `smoke:platform-credo` (regression; the owner opened the `-R 3200` tunnel) | **passed**: wallet, mediation, connection, credential done, proof verified with its disclosed values, one wake-up, every webhook signature valid |
+| `smoke:biometric-credo` (regression, mock provider) | **30/30**, steps 1 to 6 |
+| The new pages after the smokes | `console-feedback-check` again 19/19; the face checks went from 95 to 101 (74 passed, 20 failed, 3 expired, 4 cancelled), so the Verification numbers follow what happens |
 
 **Seen on real data, not a defect:** the "By template" table lists nine rows named "biometric proof". They are nine templates, one per smoke run, that share a name; the table counts per template, not per name.
 
 **How `release.env` was made this time.** `release.sh` writes it from the registry digests of the commit's `sha-<short>` tags, and the release page carries the result. The GitHub token for downloading that asset comes from `git credential fill`, and on 2026-10-12 the credential helper stopped answering there (it wanted a window; `git push` kept working). So the nine digests of `sha-7cb5f44` were read from the registry on the VM and written in the same form. The method was checked first against the 0.3.0 release, whose file is known.
 
-**Not run on staging, and why.**
-- `smoke:platform-credo` and `smoke:biometric-credo`: their webhook receiver sits behind the `-R 3200` tunnel, which the owner opens. Every earlier release ran both before its final tag, so `v0.4.0` is not tagged yet.
-- The phone: nothing in this release reaches the SDK, agent-service or biometric-service code.
+**Not run on staging, and why.** The phone: nothing in this release reaches the SDK, agent-service or biometric-service code.
+
+## Released as `v0.4.0` (2026-10-12)
+`v0.4.0` is on the release candidate's commit (`7cb5f44`) and carries its digests: CI gives the nine images of `v0.4.0-rc.1` the name `0.4.0` and builds nothing (checked in the registry after the tag: each of the nine `0.4.0` tags has the digest of its `0.4.0-rc.1` tag). The release page's `release-0.4.0.env` was not read back, for the credential reason above. Staging keeps running `0.4.0-rc.1`. Production deploys `release-0.4.0.env` with the 0.4.0 bundle. On `master` only, not in the tag: the two staging checks and this evidence (`9dbaf24` and later).
 
 ## Deploy notes
 - One platform release (`v0.4.0-rc.1`): platform-api and console images both change.

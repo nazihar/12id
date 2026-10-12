@@ -1,6 +1,6 @@
 # Console feedback, set 1 — verification dashboards, customer activity, Excel/CSV export, audit, operator accounts
 
-**Status (2026-10-12):** planned and approved by the owner on 2026-10-11 (export as both Excel and CSV, owner question the same day). Set 1 is committed (`7cb5f44`) and on staging as `v0.4.0-rc.1`; `v0.4.0` waits for the two Credo smokes. Results are in
+**Status (2026-10-12):** planned and approved by the owner on 2026-10-11 (export as both Excel and CSV, owner question the same day). Set 1 is released as platform `v0.4.0` (commit `7cb5f44`; staging runs `0.4.0-rc.1`). Results are in
 [`23-console-feedback-findings.md`](23-console-feedback-findings.md).
 
 ## Context
@@ -254,7 +254,7 @@ After the `v0.4.0` release (owner, 2026-10-12).
   sees the business data.
 - **In-console notifications (10, 11):** a bell plus mail, fed by the attention lists and the security
   events.
-- **Audit log period (12):** its own retention period per organisation on the Data protection page (proposed default 2 years, not below 1), separate from the 90-day period for end users' data; the reasoning is in the findings, "Open, for the owner" 1.
+- **Audit log period (12):** its own retention period per organisation on the Data protection page (default 2 years, not below 1), separate from the 90-day period for end users' data, plus one deployment setting for the entries that belong to no organisation. **Decided by the owner on 2026-10-12**; the reasoning is in the findings, "Open, for the owner" 1.
 - **System health page for operators (17, part of 10):** service status and firing alerts read from
   Prometheus and Alertmanager; a read-only "what is running" panel (covers the useful part of 16).
 
