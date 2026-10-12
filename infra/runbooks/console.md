@@ -123,7 +123,8 @@ set-password link; the link works once and expires in one hour).
   and `deploy.sh monitoring` (the platform stack mounts the monitoring stack's file). Without the
   secret the page says "monitoring is not connected". If it says "monitoring has stopped reporting",
   the heartbeat (`Watchdog`, every five minutes) is not arriving: check that Prometheus and
-  Alertmanager are up (`deploy.sh monitoring ps`) and Alertmanager's log for a refused notification.
+  Alertmanager are up (`deploy.sh monitoring ps`) and Alertmanager's log for a refused notification
+  (it repeats one every minute while platform-api answers 401 or 404).
   To rotate the secret, generate it again and deploy both stacks; alerts sent between the two
   deploys are refused and repeated by Alertmanager within the hour.
 - **Lost authenticator.** Backup codes were shown at enrollment. Without them, an operator disables

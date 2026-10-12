@@ -6,7 +6,7 @@
 # SMTP password; optional, an empty file means alerts show in the UI only), ALERT_WEBHOOK_SECRET (the
 # bearer secret of platform-api's POST /internal/alerts, which feeds the console's System health page;
 # compose.platform.yml mounts the same file; optional, without it the page says monitoring is not
-# connected and Alertmanager logs a refused notification every five minutes), MONITORING_DB_PASSWORD: the
+# connected and Alertmanager logs a refused notification every minute), MONITORING_DB_PASSWORD: the
 # Postgres exporters connect as `monitoring_ro` (pg_monitor + SELECT on the tables their queries read;
 # infra/scripts/pg-roles.sh), never as the superuser (Phase 7 H3).
 #

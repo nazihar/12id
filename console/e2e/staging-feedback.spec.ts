@@ -1,14 +1,16 @@
 /**
- * Console feedback set 1 (implement/22-console-feedback.md) against staging, as an enrolled operator
+ * Console feedback sets 1 and 2 (implement/22-console-feedback.md) against staging, as an enrolled operator
  * (`npm run e2e:staging`): the Verification page and a customer page on a tenant that has run face
  * checks, an export in both formats under the deployed Content-Security-Policy (csp.ts fails the
- * test on any refusal), and the sign-in and the exports in the audit log.
+ * test on any refusal), the sign-in and the exports in the audit log, the System health page with
+ * monitoring's heartbeat, and the audit log's own period set for the tenant and put back.
  *
  *   STAGING_EMAIL/PASSWORD   an enrolled operator (as staging.spec.ts; TOTP secret from the same file)
  *   STAGING_FEEDBACK_TENANT  a tenant with face checks in the last 90 days (default: the biometric
  *                            smoke tenant)
  *
- * It reads, and leaves audit rows only (the sign-in, the opened log, the two exports). The operator
+ * It reads, and leaves audit rows only (the sign-in, the opened log, the two exports, the period set
+ * and reset). The operator
  * must be enrolled already: staging.spec.ts does that on its first run and keeps the secret.
  */
 import { existsSync, readFileSync } from 'node:fs'
@@ -106,6 +108,30 @@ test('staging: verification page, customer page, export in both formats, audit e
   await expect(page.getByTestId('stat-customer-proofs')).toBeVisible()
 
   await shot(page, 'staging-customer')
+
+  // Set 2: system health. Monitoring pushes to platform-api, so a fresh heartbeat proves the whole path.
+  await page.goto('/ops/health')
+  await expect(page.getByRole('heading', { name: 'System health', exact: true })).toBeVisible()
+  await expect(page.getByTestId('health-check-database')).toContainText('answering')
+  await expect(page.getByTestId('health-check-agent')).toContainText('answering')
+  await expect(page.getByTestId('health-check-agent')).not.toContainText('not answering')
+  await expect(page.getByTestId('monitoring-signal')).toHaveAttribute('data-silent', 'false')
+  await expect(page.getByTestId('alerts-firing')).not.toContainText('Watchdog')
+  await expect(page.getByTestId('health-settings')).toContainText('Version')
+  await shot(page, 'staging-health')
+
+  // Set 2: the audit log's own period, set for the tenant and put back to the platform default.
+  await page.goto(`/ops/tenants/${tenantId}/data-protection`)
+  const inForce = page.getByTestId('audit-retention-in-force')
+  await expect(inForce).toContainText('the platform default')
+  const period = page.getByTestId('audit-retention-form')
+  await period.getByLabel('Days').fill('365')
+  await period.getByRole('button', { name: 'Save' }).click()
+  await expect(inForce).toContainText('365 days (1 year)')
+  await period.getByLabel('Days').fill('')
+  await period.getByRole('button', { name: 'Save' }).click()
+  await expect(inForce).toContainText('the platform default')
+  await shot(page, 'staging-data-protection')
 
   // The audit log holds this sign-in and the exports, under the operator's email.
   await page.goto('/ops/audit?kind=sign-in')

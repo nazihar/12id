@@ -1,7 +1,8 @@
 /**
- * Console feedback set 1 (implement/22-console-feedback.md), the checks a deployed platform-api can
+ * Console feedback sets 1 and 2 (implement/22-console-feedback.md), the checks a deployed platform-api can
  * answer without creating anything: the Verification routes, the face-checks list, one connection's
- * activity, the headline numbers on the dashboard, and the read-only auditor role. Reads only, plus
+ * activity, the headline numbers on the dashboard, the read-only auditor role, the audit log's period
+ * and the system health (set 2: it expects monitoring to be connected, with a fresh heartbeat). Reads only, plus
  * changes that must be refused; nothing is written, not even to the audit log (a refused auditor
  * request is not audited, and reads of these routes are not either).
  *
@@ -106,6 +107,50 @@ const keysAfter = (await owner.must<Page<unknown>>('GET', '/v1/api-keys')).total
 check('an auditor cannot create an API key', minted.status === 403 && minted.json.reason === 'auditors are read-only' && keysAfter === keysBefore, `${minted.status} ${minted.json.reason}; keys ${keysBefore} -> ${keysAfter}`)
 const revealed = await auditor.call<{ reason?: string }>('GET', '/v1/connections?pageSize=25', undefined, { 'x-console-reveal-reason': 'check' })
 check('an auditor cannot reveal masked data', revealed.status === 403, `${revealed.status} ${revealed.json.reason}`)
+
+// --- set 2: the audit log's period (C15) ----------------------------------------------------------
+interface AuditRetention {
+  auditRetentionDays: number
+  tenantSetting: number | null
+  platformDefault: number
+  minimumDays: number
+}
+const period = await owner.call<AuditRetention>('GET', '/v1/audit-retention')
+check('the audit log has a period of its own, a year at least', period.status === 200 && period.json.minimumDays === 365 && (period.json.auditRetentionDays === 0 || period.json.auditRetentionDays >= 365), JSON.stringify(period.json))
+const periodByKey = await api.call('GET', '/v1/audit-retention')
+check('an API key is refused on the audit log period', periodByKey.status === 403, `${periodByKey.status}`)
+const periodByAuditor = await auditor.call('PUT', '/v1/audit-retention', { auditRetentionDays: 365 })
+const periodAfter = await owner.must<AuditRetention>('GET', '/v1/audit-retention')
+check('an auditor cannot set the period, and nothing changed', periodByAuditor.status === 403 && periodAfter.tenantSetting === period.json.tenantSetting, `${periodByAuditor.status}`)
+const dataPeriod = await api.must<Record<string, unknown>>('GET', '/v1/data-retention')
+check('the customer route for the data period says nothing about the audit log', !Object.keys(dataPeriod).some((key) => /audit/i.test(key)), Object.keys(dataPeriod).join(', '))
+
+// --- set 2: system health (C16) -------------------------------------------------------------------
+interface Health {
+  version: string | null
+  environment: string | null
+  checks: Record<string, boolean>
+  monitoring: { connected: boolean; lastSignalAt: string | null; silent: boolean }
+  alerts: { firing: Array<{ name: string; severity: string | null }>; resolved: Array<{ name: string }> }
+  settings: Array<{ group: string; label: string; value: string }>
+}
+const operator = consoleClient(undefined, 'operator')
+const health = await operator.call<Health>('GET', '/admin/health')
+check('an operator reads the system health, with the version it runs', health.status === 200 && Boolean(health.json.version) && Boolean(health.json.environment), `${health.status} ${health.json.version} ${health.json.environment}`)
+check('every service platform-api calls is answering', health.status === 200 && Object.keys(health.json.checks).length >= 3 && Object.values(health.json.checks).every(Boolean), JSON.stringify(health.json.checks))
+check('monitoring is connected and its heartbeat is fresh', health.status === 200 && health.json.monitoring.connected && !health.json.monitoring.silent && health.json.monitoring.lastSignalAt !== null, JSON.stringify(health.json.monitoring))
+check('the heartbeat is not listed as an alert', health.status === 200 && ![...health.json.alerts.firing, ...health.json.alerts.resolved].some((alert) => alert.name === 'Watchdog'), `${health.json.alerts?.firing.length} firing: ${health.json.alerts?.firing.map((alert) => alert.name).join(', ')}`)
+// A secret here would be a long random token; the longest honest value is a URL.
+const settings = health.json.settings ?? []
+check('the settings read as settings, none as a secret', settings.length >= 15 && settings.every((s) => !/[A-Za-z0-9_-]{32,}/.test(s.value) && !/password|token|secret/i.test(s.label)), `${settings.length} settings`)
+const healthByAuditor = await auditor.call('GET', '/admin/health')
+const healthByOwner = await owner.call('GET', '/admin/health')
+check('an auditor reads it too, and an organization owner does not', healthByAuditor.status === 200 && healthByOwner.status === 403, `${healthByAuditor.status}, ${healthByOwner.status}`)
+const platformStats = await operator.must<{ health: { alertsFiring: number } }>('GET', '/admin/stats')
+check('the dashboard carries the same count of firing alerts', platformStats.health.alertsFiring === health.json.alerts?.firing.length, `${platformStats.health.alertsFiring}`)
+// From outside: the edge answers 404 for /internal/* whatever is sent.
+const fromOutside = await fetch(`${env('PLATFORM_API', 'https://api.12id.naziharitsolution.com')}/internal/alerts`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${'x'.repeat(64)}` }, body: JSON.stringify({ alerts: [] }) })
+check('the alerts webhook is not reachable from the internet', fromOutside.status === 404, `${fromOutside.status}`)
 
 const ok = checks.every(([, passedCheck]) => passedCheck)
 console.log(`\n=== console-feedback-check ${ok ? 'PASSED' : 'FAILED'} (${checks.filter(([, passedCheck]) => passedCheck).length}/${checks.length}) ===`)

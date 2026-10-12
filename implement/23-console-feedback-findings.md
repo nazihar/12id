@@ -1,6 +1,6 @@
 # Console feedback, set 1 — findings
 
-**Plan:** [22-console-feedback.md](22-console-feedback.md). **Set 2 is at the end of this file ("Set 2 — findings"): C15 and C16 are built and pass locally, uncommitted.** **Status (2026-10-12): set 1 (C10–C14) is released as platform `v0.4.0`** (commit `7cb5f44`, the release candidate's digests). Staging runs `0.4.0-rc.1`; every check and both Credo smokes passed there (see "On staging" and "Released as `v0.4.0`" below).
+**Plan:** [22-console-feedback.md](22-console-feedback.md). **Set 2 is at the end of this file ("Set 2 — findings"): C15 and C16 are released as platform `v0.5.0`.** **Status (2026-10-12): set 1 (C10–C14) is released as platform `v0.4.0`** (commit `7cb5f44`, the release candidate's digests). Staging runs `0.4.0-rc.1`; every check and both Credo smokes passed there (see "On staging" and "Released as `v0.4.0`" below).
 
 | Item | State |
 |---|---|
@@ -274,16 +274,17 @@ Commit `7cb5f44` on `master` (owner: "Commit and release"); CI green (`ci-servic
 
 # Set 2 — findings
 
-**Plan:** [22-console-feedback.md](22-console-feedback.md), "Set 2". **Status (2026-10-12): C15 and C16 are built and pass locally. Nothing of set 2 is committed or deployed. C17–C19 (approval by a second person) are not started.**
+**Plan:** [22-console-feedback.md](22-console-feedback.md), "Set 2". **Status (2026-10-12): C15 and C16 are released as platform `v0.5.0`** (commit `86845a3`; staging runs `0.5.0-rc.1`; see "On staging" and "Released as `v0.5.0`" below). **C17–C19 (approval by a second person) are not started.**
 
 | Item | State |
 |---|---|
-| C15 audit log period | **done, local.** Migration `0014_audit_retention` |
-| C16 system health page | **done, local.** Migration `0015_platform_alerts`; one new secret, `ALERT_WEBHOOK_SECRET` |
+| C15 audit log period | **released in `v0.5.0`.** Migration `0014_audit_retention` |
+| C16 system health page | **released in `v0.5.0`.** Migration `0015_platform_alerts`; one new secret, `ALERT_WEBHOOK_SECRET` |
 | C17–C19 approval by a second person | not started; planned for `v0.6.0` |
-| Local run, 2026-10-12 | platform-api: `tsc` clean, `npm test` **144/144** (131 before set 2), `openapi.json` 34 paths (unchanged), `openapi.console.json` 59 → 61. Console: `tsc` clean, Vitest **80/80** (75 before), `vite build` and `check:client` clean. Playwright against a local platform-api, one run: **11/11** (the nine of set 1 and the two of `health-retention.spec.ts`). An earlier run was 10/11: the local database container's clock stepped back 23 seconds between two audit rows (ids 473 and 474 carry it), so the export spec found the two exports in the wrong order; alone it passed, and so did the next full run. Monitoring config: `promtool check rules` 27 rules, `amtool check-config` clean, and a real Alertmanager 0.34.0 delivered to the local platform-api. Not run: `biometrics.spec.ts`, anything on staging |
+| Local run, 2026-10-12 | platform-api: `tsc` clean, `npm test` **144/144** (131 before set 2), `openapi.json` 34 paths (unchanged), `openapi.console.json` 59 → 61. Console: `tsc` clean, Vitest **80/80** (75 before), `vite build` and `check:client` clean. Playwright against a local platform-api, one run: **11/11** (the nine of set 1 and the two of `health-retention.spec.ts`). An earlier run was 10/11: the local database container's clock stepped back 23 seconds between two audit rows (ids 473 and 474 carry it), so the export spec found the two exports in the wrong order; alone it passed, and so did the next full run. Monitoring config: `promtool check rules` 27 rules, `amtool check-config` clean, and a real Alertmanager 0.34.0 delivered to the local platform-api. Not run: `biometrics.spec.ts` |
+| Staging, 2026-10-12, `0.5.0-rc.1` | deploy clean; `console-feedback-check` 31/31, `e2e:staging` 4/4, both Credo smokes passed (30/30), `conditional-gate-check` 7/7; a test alert through the real Alertmanager appeared, was mailed and cleared |
 
-Every claim in this part comes from a local run on 2026-10-12.
+Every claim in this part comes from a local run on 2026-10-12, except the sections "On staging" and "Released", which come from staging the same day.
 
 ## C15 — Audit log period (done, local)
 
@@ -330,8 +331,37 @@ Every claim in this part comes from a local run on 2026-10-12.
 - **A real Alertmanager** (the pinned 0.34.0 image, the new routing, the secret from a file) delivered a Watchdog and a test alert to the local platform-api; both were stored with Alertmanager's own fingerprints.
 - Looked at on desktop, dark and phone width: no overflow; the alert tables scroll inside their own box on a phone.
 
+## On staging (2026-10-12, `v0.5.0-rc.1`)
+Commit `86845a3` on `master` (owner: "commit and release"). Tag `v0.5.0-rc.1` on that commit; CI built the nine images. CI's test jobs could not be read (the credential helper still does not answer); the same suites passed locally. Deployed the same day: seven stacks, 300 s, no failed step.
+
+| Check on `0.5.0-rc.1` | Result |
+|---|---|
+| Bundle against the VM's tree | three compose files differ as expected (`compose.monitoring.yml`, `compose.platform.yml`, `monitoring/alerts.yml`), plus two documents; installed from `git archive` of the tag, no CR in any file. The old files are in `/opt/12id/infra.prev-20261012-v050/`, the old pins in `release.env.prev-0.4.0-rc.1` |
+| Containers, secrets in configuration | 29 running, none unhealthy; `check-inspect-clean`: 32 secret values, 36 containers, 0 found |
+| Monitoring | 22/22 targets up; 27 rules loaded; the only alert firing in Prometheus is the `Watchdog` |
+| Migrations | `0014_audit_retention` and `0015_platform_alerts` applied (16 in all); `refuse_audit_change()` is still owned by `platform_api` and carries the new condition: the service role replaced its own function |
+| Append-only, on the real table | a plain `DELETE` refused; with `app.audit_purge` set, `UPDATE` and `TRUNCATE` still refused and a `DELETE` goes through (each tried in a transaction and rolled back; 810 rows before and after) |
+| The first audit pass | ran with the sweep two minutes after the start: `scopes 0, deleted 0`. The oldest audit row on staging is from 2026-09-14, so nothing is older than a period yet |
+| From outside | `POST https://api.<domain>/internal/alerts` → 404; `GET /admin/health` with a console token header → 404; `GET /v1/audit-retention` without credentials → 401 |
+| Without the secret (the first deploy) | the stacks deployed with an empty secret file; platform-api answered Alertmanager's heartbeat with 404 once a minute, the health page said "monitoring is not connected", and the two checks failed on exactly that. Everything else passed |
+| With the secret | the owner ran `set-secret.sh monitoring ALERT_WEBHOOK_SECRET --generate`; `platform` and `monitoring` redeployed (12 s). The first heartbeat arrived 36 s after Alertmanager started; no notification failed afterwards |
+| A test alert through the real Alertmanager | `amtool alert add ConsoleHealthReleaseCheck … --end=+3 min`: on the health page as "1 alert firing" with its summary 30 s later, and resolved on the page at its end. It also went to the mail receiver: Alertmanager logged no error for either receiver (the mailbox itself was not looked at) |
+| `infra/smoke/console-feedback-check.ts` (now sets 1 and 2, still writes nothing) | **31/31**: the 19 of set 1, and 12 new: the audit period (default 730, a year at least; an API key and an auditor refused; the customer route says nothing about it) and the system health (version and environment, every service answering, monitoring connected with a fresh heartbeat, the heartbeat not listed, 18 settings and none shaped like a secret, auditor yes and owner no, the dashboard's count, the webhook unreachable from outside) |
+| `e2e:staging` | **4/4** in one run. `staging-feedback.spec.ts` now also opens System health (five services answering, heartbeat fresh, version shown) and sets the audit period of the smoke tenant to 365 days and back to the default, under the deployed Content-Security-Policy |
+| `smoke:platform-credo`, `smoke:biometric-credo` (regression, the owner's tunnel) | **passed**, and **30/30** |
+| `conditional-gate-check` (regression) | 7/7 |
+
+**Seen on staging:**
+- **A refused notification is repeated every minute, not every five.** While the secret was missing Alertmanager retried the heartbeat at each `group_interval` (1 minute). The runbook and the compose comment said five; corrected on `master` (the comment in the 0.5.0 bundle still says five).
+- **`amtool alert add --end` without `--start` makes Alertmanager set the start to the end.** The test alert therefore showed "since 11:02" while it was 11:00. A real alert from Prometheus always carries its start.
+
+**Not run:** the phone (nothing here reaches the SDK, agent-service or biometric-service), and a real resolve of a real alert (the test alert's resolve went through the same path).
+
+## Released as `v0.5.0` (2026-10-12)
+`v0.5.0` is on the release candidate's commit (`86845a3`) and carries its digests. Staging keeps running `0.5.0-rc.1`. Production deploys `release-0.5.0.env` with the 0.5.0 bundle, after `set-secret.sh monitoring ALERT_WEBHOOK_SECRET --generate`, and `platform` before `monitoring`. On `master` only, not in the tag: the extended staging checks and this evidence.
+
 ## Deploy notes for `v0.5.0`
-- **Before the deploy, the owner sets one secret:** `infra/scripts/set-secret.sh monitoring ALERT_WEBHOOK_SECRET --generate`. Without it everything still deploys; the page says monitoring is not connected and Alertmanager logs a refused notification every five minutes.
+- **Before the deploy, the owner sets one secret:** `infra/scripts/set-secret.sh monitoring ALERT_WEBHOOK_SECRET --generate`. Without it everything still deploys; the page says monitoring is not connected and Alertmanager logs a refused notification every minute.
 - **Stacks that change:** `platform` (two migrations, three new environment values, the mounted secret), `console`, `monitoring` (Alertmanager's routing and receiver, the Watchdog rule). Deploy `platform` before `monitoring`, so the webhook exists when Alertmanager starts sending.
 - **Migrations:** platform-api `0014_audit_retention` (one column; replaces the trigger function) and `0015_platform_alerts` (one table). The service role owns the function it replaces (checked on staging for `0012`).
 - **The first audit pass** runs with the sweep, two minutes after platform-api starts. The console has existed on staging since September 2026, so on the default of 730 days it deletes nothing there.
