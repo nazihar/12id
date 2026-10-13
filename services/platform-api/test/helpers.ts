@@ -39,7 +39,7 @@ export async function testDatabase(): Promise<{ db: Database; close: () => Promi
     }
   }
   if (!shared) return null
-  const tables = [schema.platformAlerts, schema.erasures, schema.exchangeGateEvents, schema.exchangeGates, schema.credentialDefinitionPolicies, schema.biometricSettings, schema.consoleAudit, schema.webhookDeliveries, schema.webhookEndpoints, schema.idempotencyKeys, schema.proofTemplates, schema.proofs, schema.credentials, schema.connections, schema.wallets, schema.apiKeys, schema.outboxCursor, schema.tenants]
+  const tables = [schema.changeRequests, schema.platformAlerts, schema.erasures, schema.exchangeGateEvents, schema.exchangeGates, schema.credentialDefinitionPolicies, schema.biometricSettings, schema.consoleAudit, schema.webhookDeliveries, schema.webhookEndpoints, schema.idempotencyKeys, schema.proofTemplates, schema.proofs, schema.credentials, schema.connections, schema.wallets, schema.apiKeys, schema.outboxCursor, schema.tenants]
   // The audit and the erasure log refuse DELETE (migration 0012); only this cleanup switches that off.
   const appendOnly = ['console_audit', 'erasures']
   for (const name of appendOnly) await shared.db.execute(sql.raw(`alter table ${name} disable trigger user`))
@@ -91,6 +91,7 @@ export const testConfig: PlatformConfig = {
   MEDIATOR_QUEUE_TTL_DAYS: 30,
   RETENTION_DAYS: 90,
   AUDIT_RETENTION_DAYS: 730,
+  OPERATOR_APPROVALS: 'off',
   IDEMPOTENCY_TTL_MS: 60_000,
   DRAIN_DEADLINE_MS: 1000,
   BIOMETRIC_EXPIRY_POLL_MS: 30_000,
@@ -160,6 +161,7 @@ export function fakeBiometric(options: { providerStatus?: 'ok' | 'untested' | 'f
   const calls: Array<{ method: string; args: unknown[] }> = []
   const checks = new Map<string, { tenantId: string; status: string; attempts: number; maxAttempts: number; referenceImage: string }>()
   const sessions = new Map<string, { checkId: string; attempt: number; completed: boolean }>()
+  const pending = new Map<string, { providerId: string; config: unknown }>()
   let n = 0
   const uuid = () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}`
   const provider = { id: 'mock', publicConfig: {}, status: options.providerStatus ?? 'ok', lastTestedAt: null, lastError: null, updatedAt: new Date().toISOString() }
@@ -167,8 +169,29 @@ export function fakeBiometric(options: { providerStatus?: 'ok' | 'untested' | 'f
   const client: BiometricClient = {
     providers: async () => ({ providers: [{ id: 'mock', displayName: 'Mock', configSchema: { type: 'object' }, captureModule: { provider: 'mock', minVersion: 1 } }] }),
     getProvider: async (tenantId) => ({ tenantId, externalId: '12id-ext', provider }),
-    putProvider: async (tenantId) => ({ tenantId, externalId: '12id-ext', provider }),
-    deleteProvider: async () => undefined,
+    putProvider: async (tenantId, providerId, config) => {
+      calls.push({ method: 'putProvider', args: [tenantId, providerId, config] })
+      return { tenantId, externalId: '12id-ext', provider }
+    },
+    deleteProvider: async (tenantId) => {
+      calls.push({ method: 'deleteProvider', args: [tenantId] })
+    },
+    // The waiting slot (implement/22 C17): the configuration stays here; only its public part is answered.
+    putPendingProvider: async (tenantId, providerId, config) => {
+      calls.push({ method: 'putPendingProvider', args: [tenantId, providerId, config] })
+      if (providerId === 'unknown') throw new BiometricError(400, 'unknown_provider', "provider 'unknown' is not offered by this deployment")
+      pending.set(tenantId, { providerId, config })
+      return { providerId, publicConfig: { region: (config as { region?: string }).region ?? null } }
+    },
+    activatePendingProvider: async (tenantId) => {
+      calls.push({ method: 'activatePendingProvider', args: [tenantId] })
+      if (!pending.delete(tenantId)) throw new BiometricError(404, 'no_pending_provider', 'no provider configuration is waiting for this tenant')
+      return { tenantId, externalId: '12id-ext', provider }
+    },
+    deletePendingProvider: async (tenantId) => {
+      calls.push({ method: 'deletePendingProvider', args: [tenantId] })
+      pending.delete(tenantId)
+    },
     testProvider: async () => ({ status: 'ok', error: null }),
     createCheck: async (body) => {
       calls.push({ method: 'createCheck', args: [body] })

@@ -6,6 +6,7 @@ import { RouteError } from '@/components/route-error'
 import { AdoptionCard, ProviderCard, SettingsCard } from '@/features/portal/biometrics-panels'
 import { portalBiometricAdoptionQuery, portalBiometricsQuery } from '@/features/portal/portal.queries'
 import { tenantCan } from '@/lib/permissions'
+import { PortalPendingChanges } from '@/features/approvals/pending-changes'
 
 /** Phase 6: the organization's biometric gate (liveness + face match) and its vendor account. */
 export const Route = createFileRoute('/_authed/t/$orgSlug/biometrics')({
@@ -29,6 +30,7 @@ function PortalBiometricsPage() {
         title="Biometrics"
         description="Require a liveness check and a face match before a credential is issued or a proof result is released. Set per credential definition in the catalogue and per proof template."
       />
+      <PortalPendingChanges orgSlug={orgSlug} types={['biometrics.provider', 'biometrics.settings']} />
       <ProviderCard settings={data.settings} providers={data.providers} organizationId={organization.id} orgSlug={orgSlug} canUpdate={canUpdate} />
       <SettingsCard key={JSON.stringify(data.settings.defaultPolicy) + data.settings.enabled} settings={data.settings} organizationId={organization.id} orgSlug={orgSlug} canUpdate={canUpdate} />
       <AdoptionCard adoption={adoption} captureProvider={captureProvider} />

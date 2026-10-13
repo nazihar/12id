@@ -9,6 +9,7 @@ import { portalCatalogueQuery, portalKey } from '@/features/portal/portal.querie
 import { TemplateBuilder } from '@/features/portal/template-builder'
 import { tenantCan } from '@/lib/permissions'
 import type { TemplateDefinition } from '@/lib/template-schema'
+import { announceHeld } from '@/lib/held'
 
 export const Route = createFileRoute('/_authed/t/$orgSlug/templates/new')({
   beforeLoad: ({ context, params }) => {
@@ -28,6 +29,7 @@ function NewTemplatePage() {
   const create = useMutation({
     mutationFn: (definition: TemplateDefinition) => createPortalTemplate({ data: { organizationId: organization.id, definition } }),
     onSuccess: async (template) => {
+      if (announceHeld(template, queryClient)) return
       toast.success(`Saved ${template.name}.`)
       await queryClient.invalidateQueries({ queryKey: portalKey(orgSlug, 'templates') })
     },

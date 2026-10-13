@@ -8,7 +8,8 @@ import { createApiKeyInput, createTenantInput, rateLimitInput, tenantInput, tena
 import { pageParams } from '@/lib/list-search'
 import { operatorMiddleware, operatorReadMiddleware } from '@/server/middleware'
 import { notifyOwnersOfOperatorKey } from '@/server/data-protection.server'
-import { platformFor, unwrap } from '@/server/platform.server'
+import { isHeld } from '@/lib/held'
+import { platformFor, unwrap, unwrapHeld } from '@/server/platform.server'
 
 /** One page of tenants with their activity, newest first (Phase 4 C9). */
 export const getTenantOverview = createServerFn({ method: 'GET' })
@@ -56,7 +57,9 @@ export const createApiKey = createServerFn({ method: 'POST' })
   .middleware([operatorMiddleware])
   .validator(tenantInput.extend(createApiKeyInput.shape))
   .handler(async ({ context, data }) => {
-    const created = unwrap(await platformFor(context.principal, { tenantId: data.tenantId }).POST('/v1/api-keys', { body: { label: data.label } }))
+    const created = unwrapHeld(await platformFor(context.principal, { tenantId: data.tenantId }).POST('/v1/api-keys', { body: { label: data.label } }))
+    // Held for a second person (implement/22 C17): no key exists yet, so there is nothing to tell the owners.
+    if (isHeld(created)) return created
     // The tenant's owners hear about every key an operator creates (Phase 7 H1).
     await notifyOwnersOfOperatorKey({ tenantId: data.tenantId, label: data.label, operatorUserId: context.principal.actor })
     return created

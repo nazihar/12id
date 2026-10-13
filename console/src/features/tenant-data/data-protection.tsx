@@ -26,6 +26,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { formatDateTime } from '@/lib/format'
+import { announceHeld } from '@/lib/held'
 import type { Page } from '@/lib/list-search'
 
 import { AUDIT_RETENTION_MAX_DAYS, validAuditRetentionDays } from './retention.schemas'
@@ -148,7 +149,8 @@ function PeriodCard({ title, description, inForce, tenantSetting, platformDefaul
   const [value, setValue] = useState(tenantSetting === null ? '' : String(tenantSetting))
   const mutation = useMutation({
     mutationFn: (days: number | null) => save!(days),
-    onSuccess: async () => {
+    onSuccess: async (result) => {
+      if (announceHeld(result, queryClient)) return
       toast.success(saved)
       await queryClient.invalidateQueries({ queryKey: invalidateKey })
     },

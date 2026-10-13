@@ -2,7 +2,8 @@
  * Console feedback sets 1 and 2 (implement/22-console-feedback.md), the checks a deployed platform-api can
  * answer without creating anything: the Verification routes, the face-checks list, one connection's
  * activity, the headline numbers on the dashboard, the read-only auditor role, the audit log's period
- * and the system health (set 2: it expects monitoring to be connected, with a fresh heartbeat). Reads only, plus
+ * and the system health (set 2: it expects monitoring to be connected, with a fresh heartbeat), and what
+ * the approvals routes answer to a read. Reads only, plus
  * changes that must be refused; nothing is written, not even to the audit log (a refused auditor
  * request is not audited, and reads of these routes are not either).
  *
@@ -151,6 +152,21 @@ check('the dashboard carries the same count of firing alerts', platformStats.hea
 // From outside: the edge answers 404 for /internal/* whatever is sent.
 const fromOutside = await fetch(`${env('PLATFORM_API', 'https://api.12id.naziharitsolution.com')}/internal/alerts`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${'x'.repeat(64)}` }, body: JSON.stringify({ alerts: [] }) })
 check('the alerts webhook is not reachable from the internet', fromOutside.status === 404, `${fromOutside.status}`)
+
+// --- set 2: approval by a second person (C17), what can be read without changing anything ----------
+// The full flow, which writes, is approvals-check.ts.
+const approvals = await owner.call<{ required: boolean; types: Array<{ id: string; apply: string }> }>('GET', '/v1/approvals')
+check('the tenant says whether a second person is required, and for what', approvals.status === 200 && typeof approvals.json.required === 'boolean' && approvals.json.types.length >= 15 && approvals.json.types.some((t) => t.id === 'api_key.create' && t.apply === 'by_requester'), `required ${approvals.json.required}, ${approvals.json.types?.length} kinds`)
+const approvalsByKey = await api.call('GET', '/v1/approvals')
+const requestsByKey = await api.call('GET', '/v1/change-requests')
+check('an API key is refused on the approvals routes', approvalsByKey.status === 403 && requestsByKey.status === 403, `${approvalsByKey.status}, ${requestsByKey.status}`)
+const requestsByAuditor = await auditor.call<{ total: number }>('GET', '/v1/change-requests')
+const switchByAuditor = await auditor.call('PUT', '/v1/approvals', { required: true })
+check('an auditor reads the requests and cannot switch the requirement', requestsByAuditor.status === 200 && switchByAuditor.status === 403, `${requestsByAuditor.status}, ${switchByAuditor.status}`)
+const operatorApprovals = await operator.call<{ required: boolean; types: Array<{ id: string }> }>('GET', '/admin/approvals')
+check('the operator area says whether operator accounts need a second operator', operatorApprovals.status === 200 && typeof operatorApprovals.json.required === 'boolean' && operatorApprovals.json.types.every((t) => t.id.startsWith('operator.')), `required ${operatorApprovals.json.required}`)
+const activate = await owner.call('POST', '/v1/biometrics/provider/pending/activate')
+check('a waiting biometric provider cannot be activated by calling the route', activate.status === 403, `${activate.status}`)
 
 const ok = checks.every(([, passedCheck]) => passedCheck)
 console.log(`\n=== console-feedback-check ${ok ? 'PASSED' : 'FAILED'} (${checks.filter(([, passedCheck]) => passedCheck).length}/${checks.length}) ===`)

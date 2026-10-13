@@ -21,6 +21,8 @@ import type { TemplateRow } from '@/features/tenant-data/types'
 import { isFiltered, pagingFor, resetFor, parseListSearch, searchPatcher } from '@/lib/list-search'
 import { formatDateTime } from '@/lib/format'
 import { tenantCan } from '@/lib/permissions'
+import { announceHeld } from '@/lib/held'
+import { PortalPendingChanges } from '@/features/approvals/pending-changes'
 
 export const Route = createFileRoute('/_authed/t/$orgSlug/templates/')({
   validateSearch: parseListSearch(templateSearch),
@@ -63,7 +65,8 @@ function PortalTemplatesPage() {
 
   const remove = useMutation({
     mutationFn: (template: TemplateRow) => deletePortalTemplate({ data: { organizationId: organization.id, templateId: template.id } }),
-    onSuccess: async () => {
+    onSuccess: async (removed) => {
+      if (announceHeld(removed, queryClient)) return
       toast.success('Template deleted.')
       await queryClient.invalidateQueries({ queryKey: portalKey(orgSlug, 'templates') })
     },
@@ -124,6 +127,7 @@ function PortalTemplatesPage() {
           )
         }
       />
+      <PortalPendingChanges orgSlug={orgSlug} types={['template.']} />
       <DataTable
         columns={columns}
         data={templates.items}

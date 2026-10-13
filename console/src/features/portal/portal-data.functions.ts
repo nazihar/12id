@@ -17,7 +17,8 @@ import { allPages, pageParams } from '@/lib/list-search'
 import { apiKeyLabel } from '@/features/tenants/tenants.schemas'
 import { EXPIRY_ATTRIBUTE, templateDefinitionInput } from '@/lib/template-schema'
 import { tenantMiddleware } from '@/server/middleware'
-import { PlatformCallError, platformFor, unwrap } from '@/server/platform.server'
+import { isHeld } from '@/lib/held'
+import { PlatformCallError, platformFor, unwrap, unwrapHeld } from '@/server/platform.server'
 
 import { assertSameOrganization, organizationInput } from './organization-input'
 
@@ -62,7 +63,7 @@ export const publishSchema = createServerFn({ method: 'POST' })
   .handler(async ({ context, data }) => {
     assertSameOrganization(context.organization.id, data.organizationId)
     const attributes = [...new Set([...data.attributes.filter((a) => a !== EXPIRY_ATTRIBUTE), EXPIRY_ATTRIBUTE])]
-    return unwrap(await platformFor(context.principal).POST('/v1/schemas', { body: { name: data.name, version: data.version, attributes } }))
+    return unwrapHeld(await platformFor(context.principal).POST('/v1/schemas', { body: { name: data.name, version: data.version, attributes } }))
   })
 
 export const publishCredentialDefinition = createServerFn({ method: 'POST' })
@@ -70,7 +71,7 @@ export const publishCredentialDefinition = createServerFn({ method: 'POST' })
   .validator(organizationInput.extend({ schemaId: z.uuid(), tag: z.string().regex(/^[A-Za-z0-9_-]{1,32}$/).default('default') }))
   .handler(async ({ context, data }) => {
     assertSameOrganization(context.organization.id, data.organizationId)
-    return unwrap(await platformFor(context.principal).POST('/v1/credential-definitions', { body: { schemaId: data.schemaId, tag: data.tag } }))
+    return unwrapHeld(await platformFor(context.principal).POST('/v1/credential-definitions', { body: { schemaId: data.schemaId, tag: data.tag } }))
   })
 
 export const setSchemaDeprecated = createServerFn({ method: 'POST' })
@@ -105,7 +106,7 @@ export const createPortalTemplate = createServerFn({ method: 'POST' })
   .validator(organizationInput.extend({ definition: templateDefinitionInput }))
   .handler(async ({ context, data }) => {
     assertSameOrganization(context.organization.id, data.organizationId)
-    return unwrap(await platformFor(context.principal).POST('/v1/proof-templates', { body: data.definition }))
+    return unwrapHeld(await platformFor(context.principal).POST('/v1/proof-templates', { body: data.definition }))
   })
 
 export const updatePortalTemplate = createServerFn({ method: 'POST' })
@@ -113,7 +114,7 @@ export const updatePortalTemplate = createServerFn({ method: 'POST' })
   .validator(organizationInput.extend({ templateId: z.uuid(), definition: templateDefinitionInput }))
   .handler(async ({ context, data }) => {
     assertSameOrganization(context.organization.id, data.organizationId)
-    return unwrap(await platformFor(context.principal).PUT('/v1/proof-templates/{id}', { params: { path: { id: data.templateId } }, body: data.definition }))
+    return unwrapHeld(await platformFor(context.principal).PUT('/v1/proof-templates/{id}', { params: { path: { id: data.templateId } }, body: data.definition }))
   })
 
 export const deletePortalTemplate = createServerFn({ method: 'POST' })
@@ -121,7 +122,7 @@ export const deletePortalTemplate = createServerFn({ method: 'POST' })
   .validator(organizationInput.extend({ templateId: z.uuid() }))
   .handler(async ({ context, data }) => {
     assertSameOrganization(context.organization.id, data.organizationId)
-    return unwrap(await platformFor(context.principal).DELETE('/v1/proof-templates/{id}', { params: { path: { id: data.templateId } } }))
+    return unwrapHeld(await platformFor(context.principal).DELETE('/v1/proof-templates/{id}', { params: { path: { id: data.templateId } } }))
   })
 
 // --- exchanges and wallets ------------------------------------------------------------------
@@ -171,7 +172,7 @@ export const setPortalWebhook = createServerFn({ method: 'POST' })
   .validator(organizationInput.extend(webhookEndpointInput.shape))
   .handler(async ({ context, data }) => {
     assertSameOrganization(context.organization.id, data.organizationId)
-    return unwrap(await platformFor(context.principal).PUT('/v1/webhook', { body: { url: data.url, events: data.events } }))
+    return unwrapHeld(await platformFor(context.principal).PUT('/v1/webhook', { body: { url: data.url, events: data.events } }))
   })
 
 export const rotatePortalWebhookSecret = createServerFn({ method: 'POST' })
@@ -179,7 +180,7 @@ export const rotatePortalWebhookSecret = createServerFn({ method: 'POST' })
   .validator(organizationInput)
   .handler(async ({ context, data }) => {
     assertSameOrganization(context.organization.id, data.organizationId)
-    return unwrap(await platformFor(context.principal).POST('/v1/webhook/rotate-secret'))
+    return unwrapHeld(await platformFor(context.principal).POST('/v1/webhook/rotate-secret'))
   })
 
 export const deletePortalWebhook = createServerFn({ method: 'POST' })
@@ -187,7 +188,7 @@ export const deletePortalWebhook = createServerFn({ method: 'POST' })
   .validator(organizationInput)
   .handler(async ({ context, data }) => {
     assertSameOrganization(context.organization.id, data.organizationId)
-    return unwrap(await platformFor(context.principal).DELETE('/v1/webhook'))
+    return unwrapHeld(await platformFor(context.principal).DELETE('/v1/webhook'))
   })
 
 export const listPortalDeliveries = createServerFn({ method: 'GET' })
@@ -220,7 +221,7 @@ export const createPortalApiKey = createServerFn({ method: 'POST' })
   .validator(organizationInput.extend({ label: apiKeyLabel }))
   .handler(async ({ context, data }) => {
     assertSameOrganization(context.organization.id, data.organizationId)
-    return unwrap(await platformFor(context.principal).POST('/v1/api-keys', { body: { label: data.label } }))
+    return unwrapHeld(await platformFor(context.principal).POST('/v1/api-keys', { body: { label: data.label } }))
   })
 
 export const revokePortalApiKey = createServerFn({ method: 'POST' })
@@ -282,7 +283,8 @@ export const savePortalBiometricProvider = createServerFn({ method: 'POST' })
   .handler(async ({ context, data }) => {
     assertSameOrganization(context.organization.id, data.organizationId)
     // Write-only: platform-api stores nothing; biometric-service keeps the config encrypted.
-    return serializableSettings(unwrap(await platformFor(context.principal).PUT('/v1/biometrics/provider', { body: { providerId: data.providerId, config: data.config } })))
+    const saved = unwrapHeld(await platformFor(context.principal).PUT('/v1/biometrics/provider', { body: { providerId: data.providerId, config: data.config } }))
+    return isHeld(saved) ? saved : serializableSettings(saved)
   })
 
 export const testPortalBiometricProvider = createServerFn({ method: 'POST' })
@@ -298,7 +300,8 @@ export const removePortalBiometricProvider = createServerFn({ method: 'POST' })
   .validator(organizationInput)
   .handler(async ({ context, data }) => {
     assertSameOrganization(context.organization.id, data.organizationId)
-    return serializableSettings(unwrap(await platformFor(context.principal).DELETE('/v1/biometrics/provider')))
+    const removed = unwrapHeld(await platformFor(context.principal).DELETE('/v1/biometrics/provider'))
+    return isHeld(removed) ? removed : serializableSettings(removed)
   })
 
 export const savePortalBiometricSettings = createServerFn({ method: 'POST' })
@@ -306,7 +309,8 @@ export const savePortalBiometricSettings = createServerFn({ method: 'POST' })
   .validator(organizationInput.extend(biometricSettingsInput.shape))
   .handler(async ({ context, data }) => {
     assertSameOrganization(context.organization.id, data.organizationId)
-    return serializableSettings(unwrap(await platformFor(context.principal).PUT('/v1/biometrics/settings', { body: { enabled: data.enabled, defaultPolicy: data.defaultPolicy } })))
+    const saved = unwrapHeld(await platformFor(context.principal).PUT('/v1/biometrics/settings', { body: { enabled: data.enabled, defaultPolicy: data.defaultPolicy } }))
+    return isHeld(saved) ? saved : serializableSettings(saved)
   })
 
 export const getPortalBiometricAdoption = createServerFn({ method: 'GET' })
@@ -325,7 +329,7 @@ export const savePortalCredentialDefinitionPolicy = createServerFn({ method: 'PO
   .validator(organizationInput.extend({ credentialDefinitionId: z.string().min(1).max(300), policy: biometricOverride }))
   .handler(async ({ context, data }) => {
     assertSameOrganization(context.organization.id, data.organizationId)
-    return unwrap(
+    return unwrapHeld(
       await platformFor(context.principal).PUT('/v1/credential-definitions/{id}/biometric-policy', { params: { path: { id: data.credentialDefinitionId } }, body: data.policy })
     )
   })
@@ -340,7 +344,7 @@ export const savePortalTemplatePolicy = createServerFn({ method: 'POST' })
   .validator(organizationInput.extend({ templateId: z.uuid(), policy: templateBiometricOverride }))
   .handler(async ({ context, data }) => {
     assertSameOrganization(context.organization.id, data.organizationId)
-    return unwrap(await platformFor(context.principal).PUT('/v1/proof-templates/{id}/biometric-policy', { params: { path: { id: data.templateId } }, body: data.policy }))
+    return unwrapHeld(await platformFor(context.principal).PUT('/v1/proof-templates/{id}/biometric-policy', { params: { path: { id: data.templateId } }, body: data.policy }))
   })
 
 // --- data protection (Phase 7 H1) -----------------------------------------------------------
@@ -367,7 +371,7 @@ export const setPortalRetention = createServerFn({ method: 'POST' })
   .validator(organizationInput.extend({ retentionDays: z.number().int().min(0).max(3650).nullable() }))
   .handler(async ({ context, data }) => {
     assertSameOrganization(context.organization.id, data.organizationId)
-    return unwrap(await platformFor(context.principal).PUT('/v1/data-retention', { body: { retentionDays: data.retentionDays } }))
+    return unwrapHeld(await platformFor(context.principal).PUT('/v1/data-retention', { body: { retentionDays: data.retentionDays } }))
   })
 
 /** The audit log's own period (implement/22 C15): longer than the one above, because the log outlasts the data it describes. */
@@ -380,7 +384,7 @@ export const setPortalAuditRetention = createServerFn({ method: 'POST' })
   .validator(organizationInput.extend({ auditRetentionDays: auditRetentionDaysInput }))
   .handler(async ({ context, data }) => {
     assertSameOrganization(context.organization.id, data.organizationId)
-    return unwrap(await platformFor(context.principal).PUT('/v1/audit-retention', { body: { auditRetentionDays: data.auditRetentionDays } }))
+    return unwrapHeld(await platformFor(context.principal).PUT('/v1/audit-retention', { body: { auditRetentionDays: data.auditRetentionDays } }))
   })
 
 export const listPortalErasures = createServerFn({ method: 'GET' })

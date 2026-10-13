@@ -22,6 +22,7 @@ import {
 } from '@/features/portal/portal-data.functions'
 import { portalKey } from '@/features/portal/portal.queries'
 import { formatDateTime } from '@/lib/format'
+import { announceHeld } from '@/lib/held'
 
 export interface ProviderForm {
   id: string
@@ -108,7 +109,8 @@ export function ProviderCard({ settings, providers, organizationId, orgSlug, can
                 confirmLabel="Remove provider"
                 destructive
                 onConfirm={async () => {
-                  await removePortalBiometricProvider({ data: { organizationId } })
+                  const removed = await removePortalBiometricProvider({ data: { organizationId } })
+                  if (announceHeld(removed, queryClient)) return
                   toast.success('Biometric provider removed.')
                   await refresh()
                 }}
@@ -178,7 +180,8 @@ function ProviderFormBody({ providers, settings, organizationId, orgSlug, onDone
       const config = Object.fromEntries((provider?.fields ?? []).map((field) => [field.key, value.config[field.key] ?? '']))
       return savePortalBiometricProvider({ data: { organizationId, providerId: value.providerId, config } })
     },
-    onSuccess: async () => {
+    onSuccess: async (saved) => {
+      if (announceHeld(saved, queryClient)) return
       toast.success('Provider saved. Run the connection test next.')
       await queryClient.invalidateQueries({ queryKey: portalKey(orgSlug, 'biometrics') })
     },
@@ -227,7 +230,8 @@ export function SettingsCard({ settings, organizationId, orgSlug, canUpdate }: {
   const queryClient = useQueryClient()
   const save = useMutation({
     mutationFn: (value: { enabled: boolean; defaultPolicy: Settings['defaultPolicy'] }) => savePortalBiometricSettings({ data: { organizationId, ...value } }),
-    onSuccess: async () => {
+    onSuccess: async (saved) => {
+      if (announceHeld(saved, queryClient)) return
       toast.success('Biometric settings saved.')
       await queryClient.invalidateQueries({ queryKey: portalKey(orgSlug, 'biometrics') })
     },

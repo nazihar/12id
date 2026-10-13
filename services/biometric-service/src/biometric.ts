@@ -23,7 +23,7 @@ import type { Logger } from 'pino'
 
 import { KeyRing, aad, open, seal } from './crypto.ts'
 import type { Database } from './db/client.ts'
-import { checks, providerConfigs, results, sessions, tenantKeys } from './db/schema.ts'
+import { checks, providerConfigs, providerConfigsPending, results, sessions, tenantKeys } from './db/schema.ts'
 import { catalogueEntry } from './providers/registry.ts'
 import { type BiometricProvider, type ProviderContext, ProviderError, type SessionOutcome } from './providers/types.ts'
 
@@ -99,6 +99,22 @@ export function createBiometricService({ db, keyRing, providers, logger }: Biome
     throw error
   }
 
+  /** Validates a provider configuration and encrypts it with the tenant's key. */
+  async function sealedConfig(tenantId: string, providerId: string, rawConfig: Record<string, unknown>) {
+    const provider = providers.get(providerId)
+    if (!provider) throw new ServiceError(400, 'unknown_provider', `provider '${providerId}' is not offered by this deployment`)
+    const parsed = provider.configSchema.safeParse(rawConfig)
+    if (!parsed.success) {
+      throw new ServiceError(400, 'invalid_provider_config', parsed.error.issues.map((i) => `${i.path.join('.') || 'config'}: ${i.message}`).join('; '))
+    }
+    const { dataKey } = await tenantKey(tenantId)
+    return {
+      providerId,
+      configCiphertext: seal(dataKey, Buffer.from(JSON.stringify(parsed.data)), aad.providerConfig(tenantId)),
+      publicConfig: provider.publicConfig(parsed.data),
+    }
+  }
+
   async function wipeReference(checkId: string) {
     await db.update(checks).set({ referenceCiphertext: null }).where(eq(checks.id, checkId))
   }
@@ -128,24 +144,36 @@ export function createBiometricService({ db, keyRing, providers, logger }: Biome
     },
 
     async putTenantProvider(tenantId: string, providerId: string, rawConfig: Record<string, unknown>) {
-      const provider = providers.get(providerId)
-      if (!provider) throw new ServiceError(400, 'unknown_provider', `provider '${providerId}' is not offered by this deployment`)
-      const parsed = provider.configSchema.safeParse(rawConfig)
-      if (!parsed.success) {
-        throw new ServiceError(400, 'invalid_provider_config', parsed.error.issues.map((i) => `${i.path.join('.') || 'config'}: ${i.message}`).join('; '))
-      }
-      const { dataKey } = await tenantKey(tenantId)
-      const values = {
-        providerId,
-        configCiphertext: seal(dataKey, Buffer.from(JSON.stringify(parsed.data)), aad.providerConfig(tenantId)),
-        publicConfig: provider.publicConfig(parsed.data),
-        status: 'untested' as const,
-        lastTestedAt: null,
-        lastError: null,
-        updatedAt: new Date(),
-      }
+      const sealed = await sealedConfig(tenantId, providerId, rawConfig)
+      const values = { ...sealed, status: 'untested' as const, lastTestedAt: null, lastError: null, updatedAt: new Date() }
       await db.insert(providerConfigs).values({ tenantId, ...values }).onConflictDoUpdate({ target: providerConfigs.tenantId, set: values })
       return this.getTenantProvider(tenantId)
+    },
+
+    /**
+     * A configuration that waits for a second person (platform-api holds the request). Validated and
+     * encrypted now, exactly as an active one; nothing uses it until it is activated.
+     */
+    async putPendingProvider(tenantId: string, providerId: string, rawConfig: Record<string, unknown>) {
+      const sealed = await sealedConfig(tenantId, providerId, rawConfig)
+      const values = { ...sealed, createdAt: new Date() }
+      await db.insert(providerConfigsPending).values({ tenantId, ...values }).onConflictDoUpdate({ target: providerConfigsPending.tenantId, set: values })
+      return { providerId: sealed.providerId, publicConfig: sealed.publicConfig }
+    },
+
+    /** The waiting configuration becomes the active one (untested, like any new configuration). */
+    async activatePendingProvider(tenantId: string) {
+      await db.transaction(async (tx) => {
+        const [pending] = await tx.delete(providerConfigsPending).where(eq(providerConfigsPending.tenantId, tenantId)).returning()
+        if (!pending) throw new ServiceError(404, 'no_pending_provider', 'no provider configuration is waiting for this tenant')
+        const values = { providerId: pending.providerId, configCiphertext: pending.configCiphertext, publicConfig: pending.publicConfig, status: 'untested' as const, lastTestedAt: null, lastError: null, updatedAt: new Date() }
+        await tx.insert(providerConfigs).values({ tenantId, ...values }).onConflictDoUpdate({ target: providerConfigs.tenantId, set: values })
+      })
+      return this.getTenantProvider(tenantId)
+    },
+
+    async deletePendingProvider(tenantId: string) {
+      await db.delete(providerConfigsPending).where(eq(providerConfigsPending.tenantId, tenantId))
     },
 
     async deleteTenantProvider(tenantId: string) {

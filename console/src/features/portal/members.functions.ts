@@ -1,6 +1,10 @@
 /**
  * Organization members and invitations (tenant portal). Owners manage people; Better Auth re-checks
  * the organization permissions on every call because the member's own session is passed along.
+ *
+ * Where the organization requires a second person (implement/22 C18), inviting a member and changing
+ * a role are stored as a request and answer `{ held }`; removing a member and cancelling an
+ * invitation never wait, because they only close access.
  */
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
@@ -8,20 +12,16 @@ import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { inviteMemberInput, memberSearch, tenantRole } from '@/features/portal/members.schemas'
+import { memberEmail, performAccountChange } from '@/server/account-changes.server'
+import { askForAccountChange } from '@/server/approvals.server'
 import { principalActor, recordEvent } from '@/server/audit.server'
 import { auth } from '@/server/auth.server'
 import { consoleDb } from '@/server/db.server'
-import { invitation, member, user } from '@/server/db/auth-schema'
+import { invitation } from '@/server/db/auth-schema'
 import { listOrganizationInvitations, listOrganizationMembers } from '@/server/members.server'
 import { tenantMiddleware } from '@/server/middleware'
 
 import { assertSameOrganization, organizationInput } from './organization-input'
-
-/** The audit names the account an action was taken on by its email. */
-async function memberEmail(memberId: string) {
-  const [row] = await consoleDb().db.select({ email: user.email }).from(member).innerJoin(user, eq(user.id, member.userId)).where(eq(member.id, memberId))
-  return row?.email ?? null
-}
 
 /** One page of members or of pending invitations (`tab`), newest first (Phase 4 C9). */
 export const listMembers = createServerFn({ method: 'GET' })
@@ -39,8 +39,10 @@ export const inviteMember = createServerFn({ method: 'POST' })
   .validator(organizationInput.extend(inviteMemberInput.shape))
   .handler(async ({ context, data }) => {
     assertSameOrganization(context.organization.id, data.organizationId)
-    await auth.api.createInvitation({ headers: getRequestHeaders(), body: { email: data.email, role: data.role, organizationId: data.organizationId } })
-    await recordEvent({ type: 'account.member_invited', actor: principalActor(context.principal), tenantId: context.principal.tenantId, detail: { account: data.email, role: data.role } })
+    const change = { email: data.email, role: data.role, organizationId: data.organizationId }
+    const held = await askForAccountChange(context.principal, context.principal.tenantId, 'member.invite', change)
+    if (held) return held
+    await performAccountChange(context.principal, 'member.invite', change, { organizationId: context.organization.id })
     return { email: data.email }
   })
 
@@ -60,8 +62,11 @@ export const changeMemberRole = createServerFn({ method: 'POST' })
   .validator(organizationInput.extend({ memberId: z.string().min(1).max(100), role: tenantRole }))
   .handler(async ({ context, data }) => {
     assertSameOrganization(context.organization.id, data.organizationId)
-    await auth.api.updateMemberRole({ headers: getRequestHeaders(), body: { memberId: data.memberId, role: data.role, organizationId: data.organizationId } })
-    await recordEvent({ type: 'account.member_role_changed', actor: principalActor(context.principal), tenantId: context.principal.tenantId, detail: { account: await memberEmail(data.memberId), memberId: data.memberId, role: data.role } })
+    // `account` is only for the person who decides: the request names who it is about.
+    const change = { organizationId: data.organizationId, memberId: data.memberId, role: data.role }
+    const held = await askForAccountChange(context.principal, context.principal.tenantId, 'member.role', { ...change, account: await memberEmail(data.memberId) })
+    if (held) return held
+    await performAccountChange(context.principal, 'member.role', change, { organizationId: context.organization.id })
     return { role: data.role }
   })
 

@@ -9,6 +9,7 @@ import { portalApiKeysQuery, portalKey } from '@/features/portal/portal.queries'
 import { ApiKeysPanel } from '@/features/tenant-data/panels'
 import { parseListSearch, searchPatcher } from '@/lib/list-search'
 import { tenantCan } from '@/lib/permissions'
+import { PortalPendingChanges } from '@/features/approvals/pending-changes'
 
 export const Route = createFileRoute('/_authed/t/$orgSlug/api-keys')({
   validateSearch: parseListSearch(apiKeySearch),
@@ -27,14 +28,17 @@ function PortalApiKeysPage() {
   const { data: keys } = useSuspenseQuery(portalApiKeysQuery(orgSlug, search))
   const organizationId = organization.id
   return (
-    <ApiKeysPanel
-      data={keys}
-      search={search}
-      onSearch={onSearch}
-      fetching={fetching}
-      invalidateKey={portalKey(orgSlug, 'api-keys')}
-      createKey={tenantCan(organization.role, { apiKey: ['create'] }) ? (label) => createPortalApiKey({ data: { organizationId, label } }) : undefined}
-      revokeKey={tenantCan(organization.role, { apiKey: ['revoke'] }) ? (apiKeyId) => revokePortalApiKey({ data: { organizationId, apiKeyId } }) : undefined}
-    />
+    <div className="space-y-4">
+      <PortalPendingChanges orgSlug={orgSlug} types={['api_key.']} />
+      <ApiKeysPanel
+        data={keys}
+        search={search}
+        onSearch={onSearch}
+        fetching={fetching}
+        invalidateKey={portalKey(orgSlug, 'api-keys')}
+        createKey={tenantCan(organization.role, { apiKey: ['create'] }) ? (label) => createPortalApiKey({ data: { organizationId, label } }) : undefined}
+        revokeKey={tenantCan(organization.role, { apiKey: ['revoke'] }) ? (apiKeyId) => revokePortalApiKey({ data: { organizationId, apiKeyId } }) : undefined}
+      />
+    </div>
   )
 }

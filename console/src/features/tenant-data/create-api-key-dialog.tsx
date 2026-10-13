@@ -8,9 +8,10 @@ import { SecretOnceDialog } from '@/components/secret-once-dialog'
 import { Button } from '@/components/ui/button'
 import { DialogClose, DialogFooter } from '@/components/ui/dialog'
 import { type CreateApiKeyInput, createApiKeyInput } from '@/features/tenants/tenants.schemas'
+import { type Held, announceHeld, isHeld } from '@/lib/held'
 
 /** Shared by the operator and portal API-key pages; the caller supplies the server function to use. */
-export function CreateApiKeyDialog({ createKey, invalidateKey }: { createKey: (label: string) => Promise<{ apiKey: string }>; invalidateKey: QueryKey }) {
+export function CreateApiKeyDialog({ createKey, invalidateKey }: { createKey: (label: string) => Promise<{ apiKey: string } | Held>; invalidateKey: QueryKey }) {
   const [secret, setSecret] = useState<string | null>(null)
   return (
     <>
@@ -30,7 +31,8 @@ export function CreateApiKeyDialog({ createKey, invalidateKey }: { createKey: (l
             invalidateKey={invalidateKey}
             onCreated={(apiKey) => {
               close()
-              setSecret(apiKey)
+              // null: the key waits for a second person and does not exist yet (implement/22 C17).
+              if (apiKey) setSecret(apiKey)
             }}
           />
         )}
@@ -45,17 +47,20 @@ export function CreateApiKeyDialog({ createKey, invalidateKey }: { createKey: (l
   )
 }
 
-function CreateApiKeyForm({ createKey, invalidateKey, onCreated }: { createKey: (label: string) => Promise<{ apiKey: string }>; invalidateKey: QueryKey; onCreated: (apiKey: string) => void }) {
+function CreateApiKeyForm({ createKey, invalidateKey, onCreated }: { createKey: (label: string) => Promise<{ apiKey: string } | Held>; invalidateKey: QueryKey; onCreated: (apiKey: string | null) => void }) {
   const queryClient = useQueryClient()
   const create = useMutation({
     mutationFn: (input: CreateApiKeyInput) => createKey(input.label),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: invalidateKey }),
+    onSuccess: (created) => {
+      announceHeld(created, queryClient)
+      return queryClient.invalidateQueries({ queryKey: invalidateKey })
+    },
   })
   const form = useAppForm({
     defaultValues: { label: '' } satisfies CreateApiKeyInput,
     validationLogic: formValidation,
     validators: { onDynamic: createApiKeyInput },
-    onSubmit: ({ value }) => submitMutation(create, value, (created) => onCreated(created.apiKey)),
+    onSubmit: ({ value }) => submitMutation(create, value, (created) => onCreated(isHeld(created) ? null : created.apiKey)),
   })
   return (
     <Form form={form}>

@@ -10,6 +10,7 @@ import { DialogClose, DialogFooter } from '@/components/ui/dialog'
 import { type PublishSchemaForm, parseAttributeList, publishSchemaForm } from '@/features/portal/catalogue.schemas'
 import { publishSchema } from '@/features/portal/portal-data.functions'
 import { portalKey } from '@/features/portal/portal.queries'
+import { announceHeld } from '@/lib/held'
 import { EXPIRY_ATTRIBUTE } from '@/lib/template-schema'
 
 export function PublishSchemaDialog({ organizationId, orgSlug }: { organizationId: string; orgSlug: string }) {
@@ -35,6 +36,7 @@ function PublishSchemaFormBody({ organizationId, orgSlug, onDone }: { organizati
   const publish = useMutation({
     mutationFn: (input: PublishSchemaForm) => publishSchema({ data: { organizationId, ...publishSchemaForm.parse(input) } }),
     onSuccess: async (schema) => {
+      if (announceHeld(schema, queryClient)) return
       toast.success(`${schema.name} ${schema.version} published. Publish its credential definition to start issuing.`)
       await queryClient.invalidateQueries({ queryKey: portalKey(orgSlug, 'catalogue') })
     },

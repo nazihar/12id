@@ -30,6 +30,20 @@ export const providerConfigs = pgTable('provider_configs', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
+/**
+ * A provider configuration that waits for a second person (implement/22-console-feedback.md C17).
+ * platform-api holds the request; the configuration itself may carry vendor secrets, so it waits
+ * here, encrypted like the active one, and platform-api keeps only its name and public part.
+ * Activating it replaces the active configuration; discarding it deletes the row.
+ */
+export const providerConfigsPending = pgTable('provider_configs_pending', {
+  tenantId: text('tenant_id').primaryKey(),
+  providerId: text('provider_id').notNull(),
+  configCiphertext: bytea('config_ciphertext').notNull(),
+  publicConfig: jsonb('public_config').$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
 export const checks = pgTable('checks', {
   id: uuid('id').primaryKey(),
   tenantId: text('tenant_id').notNull(),

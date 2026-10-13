@@ -7,6 +7,7 @@ import { setPortalAuditRetention, setPortalRetention } from '@/features/portal/p
 import { portalAuditRetentionQuery, portalErasuresQuery, portalKey, portalRetentionQuery } from '@/features/portal/portal.queries'
 import { AuditRetentionCard, ErasureLog, RetentionCard } from '@/features/tenant-data/data-protection'
 import { tenantCan } from '@/lib/permissions'
+import { PortalPendingChanges } from '@/features/approvals/pending-changes'
 
 const pageOf = (search: Record<string, unknown>) => {
   const page = Math.floor(Number(search.page))
@@ -41,6 +42,7 @@ function PortalDataProtectionPage() {
         title="Data protection"
         description="How long 12iD keeps your users' personal data and the audit log, and every erasure made on request. To erase one person's data, use Erase on the connection or exchange in Exchanges, or the erase endpoints of the API."
       />
+      <PortalPendingChanges orgSlug={orgSlug} types={['retention.']} />
       <RetentionCard
         retention={retention}
         invalidateKey={portalKey(orgSlug, 'data-protection')}

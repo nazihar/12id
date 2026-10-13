@@ -23,6 +23,8 @@ import { type CatalogueSearch, catalogueSearch, catalogueStatusOptions } from '@
 import type { CredentialDefinitionRow, SchemaRow } from '@/features/tenant-data/types'
 import { isFiltered, pagingFor, resetFor, parseListSearch, searchPatcher } from '@/lib/list-search'
 import { tenantCan } from '@/lib/permissions'
+import { announceHeld } from '@/lib/held'
+import { PortalPendingChanges } from '@/features/approvals/pending-changes'
 
 export const Route = createFileRoute('/_authed/t/$orgSlug/catalogue')({
   validateSearch: parseListSearch(catalogueSearch),
@@ -117,6 +119,7 @@ function PortalCataloguePage() {
         description="The schemas and credential definitions this organization has published on the ledger, newest first. Offers and proof requests use the wire identifier. One credential definition per schema; publishing it lets your backend issue credentials of that schema."
         actions={canPublish && <PublishSchemaDialog organizationId={organization.id} orgSlug={orgSlug} />}
       />
+      <PortalPendingChanges orgSlug={orgSlug} types={['catalogue.', 'biometrics.cred_def_policy']} />
       <Tabs value={tab} onValueChange={(next) => onSearch({ tab: next === 'schemas' ? undefined : 'definitions', q: undefined, status: undefined })}>
         <TabsList>
           <TabsTrigger value="schemas">Schemas</TabsTrigger>
@@ -139,7 +142,8 @@ function SchemaActions({ schema, organizationId, orgSlug, canPublishDefinition, 
   const refresh = () => queryClient.invalidateQueries({ queryKey: portalKey(orgSlug, 'catalogue') })
   const define = useMutation({
     mutationFn: () => publishCredentialDefinition({ data: { organizationId, schemaId: schema.id, tag: 'default' } }),
-    onSuccess: async () => {
+    onSuccess: async (published) => {
+      if (announceHeld(published, queryClient)) return
       toast.success(`Credential definition for ${schema.name} ${schema.version} published.`)
       await refresh()
     },

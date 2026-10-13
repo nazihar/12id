@@ -50,6 +50,13 @@ export type AuditEventType = (typeof AUDIT_EVENT_TYPES)[number]
 /** The audit viewer's kinds: a change made through platform-api, or one family of events. */
 export const AUDIT_KINDS = { change: null, 'sign-in': 'auth.', account: 'account.', export: 'export.' } as const
 export type AuditKind = keyof typeof AUDIT_KINDS
+/**
+ * One more kind, which is not a family of events (implement/22 C17): everything about approval by a
+ * second person. That is the calls that were held or that applied an approved request (their
+ * `changes` carry `approval`), and the calls that asked, decided, cancelled or applied a request.
+ */
+export const APPROVAL_AUDIT_KIND = 'approval'
+export const AUDIT_KIND_NAMES = [...(Object.keys(AUDIT_KINDS) as AuditKind[]), APPROVAL_AUDIT_KIND] as const
 
 const ANONYMOUS = 'anonymous'
 const eventBody = z.object({

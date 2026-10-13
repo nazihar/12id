@@ -64,6 +64,10 @@ export const tenantProviderResponse = z.object({
 })
 export type TenantProviderResponse = z.infer<typeof tenantProviderResponse>
 
+/** A configuration that waits for a second person: its name and its non-secret part, never the rest. */
+export const pendingProviderResponse = z.object({ providerId: z.string(), publicConfig: z.record(z.string(), z.unknown()) })
+export type PendingProviderResponse = z.infer<typeof pendingProviderResponse>
+
 export const putTenantProviderBody = z.object({
   providerId: z.string().min(1).max(100),
   config: z.record(z.string(), z.unknown()),

@@ -34,6 +34,11 @@ export const tenants = pgTable('tenants', {
    * the data it describes.
    */
   auditRetentionDays: integer('audit_retention_days'),
+  /**
+   * Sensitive configuration changes need a second person (implement/22 C17; `approvals/types.ts` lists
+   * them). Off by default: an organisation with one owner could not use it.
+   */
+  approvalsRequired: boolean('approvals_required').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [uniqueIndex('tenants_agent_tenant_unique').on(table.agentTenantId)])
@@ -295,6 +300,62 @@ export const consoleAudit = pgTable('console_audit', {
    */
   changes: jsonb('changes').$type<Record<string, unknown>>(),
 }, (table) => [index('console_audit_at_idx').on(table.at), index('console_audit_tenant_idx').on(table.tenantId, table.at), index('console_audit_actor_idx').on(table.actor, table.at.desc())])
+
+// --- Approval by a second person (implement/22-console-feedback.md C17) ------------------------
+export const CHANGE_REQUEST_STATUSES = ['pending', 'approved', 'applied', 'rejected', 'cancelled', 'expired', 'failed'] as const
+export type ChangeRequestStatus = (typeof CHANGE_REQUEST_STATUSES)[number]
+/** A request in one of these is still open: it holds its subject. */
+export const OPEN_CHANGE_REQUEST_STATUSES = ['pending', 'approved'] as const
+
+/**
+ * A change that waits for a second person. `tenant_id` null: a change to an operator account.
+ *
+ *   pending → approved → applied | failed      (approved and applied in one step for most types)
+ *   pending → rejected | cancelled | expired
+ *   approved → expired                          (nobody pressed Apply in time)
+ *
+ * For a platform change, `method`, `route` and `body` are the call as it was made; applying it makes
+ * the same call again. For a console change (a Better Auth action), `payload` is what the console
+ * needs to perform it. Bodies that may carry secrets are never stored here.
+ */
+export const changeRequests = pgTable('change_requests', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').references(() => tenants.id),
+  /** A key of APPROVAL_TYPES (approvals/types.ts). */
+  type: text('type').notNull(),
+  executor: text('executor', { enum: ['platform', 'console'] }).notNull(),
+  apply: text('apply', { enum: ['on_approval', 'by_requester'] }).notNull(),
+  /** What the change is about; one open request per subject. Null: something new each time. */
+  subject: text('subject'),
+  summary: text('summary').notNull(),
+  method: text('method'),
+  route: text('route'),
+  body: jsonb('body').$type<unknown>(),
+  payload: jsonb('payload').$type<Record<string, unknown>>(),
+  /** The value in force when the request was made, for the person who decides. */
+  before: jsonb('before').$type<unknown>(),
+  status: text('status', { enum: CHANGE_REQUEST_STATUSES }).notNull().default('pending'),
+  requestedBy: text('requested_by').notNull(),
+  requestedByLabel: text('requested_by_label'),
+  requestedByRole: text('requested_by_role').notNull(),
+  requestedAt: timestamp('requested_at', { withTimezone: true }).notNull().defaultNow(),
+  decidedBy: text('decided_by'),
+  decidedByLabel: text('decided_by_label'),
+  decidedByRole: text('decided_by_role'),
+  decidedAt: timestamp('decided_at', { withTimezone: true }),
+  /** Why it was rejected. */
+  decisionReason: text('decision_reason'),
+  appliedAt: timestamp('applied_at', { withTimezone: true }),
+  /** Why applying it failed (the change no longer fits). */
+  applyError: text('apply_error'),
+  /** A pending request expires here; an approved one that waits for Apply, a week after the approval. */
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+}, (table) => [
+  index('change_requests_tenant_idx').on(table.tenantId, table.requestedAt.desc(), table.id.desc()),
+  index('change_requests_tenant_status_idx').on(table.tenantId, table.status, table.requestedAt.desc(), table.id.desc()),
+  uniqueIndex('change_requests_open_subject_unique').on(table.tenantId, table.subject).where(sql`${table.status} in ('pending', 'approved') and ${table.subject} is not null and ${table.tenantId} is not null`),
+  uniqueIndex('change_requests_open_operator_subject_unique').on(table.subject).where(sql`${table.status} in ('pending', 'approved') and ${table.subject} is not null and ${table.tenantId} is null`),
+])
 
 // --- Monitoring alerts (implement/22-console-feedback.md C16) --------------------------------
 export const ALERT_STATUSES = ['firing', 'resolved'] as const

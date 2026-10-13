@@ -22,6 +22,8 @@ import type { WebhookEndpoint } from '@/features/tenant-data/types'
 import { formatDateTime } from '@/lib/format'
 import { parseListSearch, searchPatcher } from '@/lib/list-search'
 import { tenantCan } from '@/lib/permissions'
+import { announceHeld } from '@/lib/held'
+import { PortalPendingChanges } from '@/features/approvals/pending-changes'
 
 export const Route = createFileRoute('/_authed/t/$orgSlug/webhooks')({
   validateSearch: parseListSearch(deliverySearch),
@@ -49,6 +51,7 @@ function PortalWebhooksPage() {
     <div className="space-y-8">
       <section className="space-y-4">
         <PageHeader title="Webhooks" description="Where the platform sends connection, credential, proof and wallet events for this organization." />
+        <PortalPendingChanges orgSlug={orgSlug} types={['webhook.']} />
         <EndpointCard endpoint={endpoint} organizationId={organizationId} orgSlug={orgSlug} canUpdate={canUpdate} canRotate={canRotate} />
       </section>
       <DeliveriesPanel
@@ -72,11 +75,14 @@ function EndpointCard({ endpoint, organizationId, orgSlug, canUpdate, canRotate 
 
   const rotate = useMutation({
     mutationFn: () => rotatePortalWebhookSecret({ data: { organizationId } }),
-    onSuccess: (rotated) => setSecret(rotated.secret),
+    onSuccess: (rotated) => {
+      if (!announceHeld(rotated, queryClient)) setSecret(rotated.secret)
+    },
   })
   const remove = useMutation({
     mutationFn: () => deletePortalWebhook({ data: { organizationId } }),
-    onSuccess: async () => {
+    onSuccess: async (removed) => {
+      if (announceHeld(removed, queryClient)) return
       toast.success('Webhook endpoint removed. Events are no longer delivered.')
       await refresh()
     },

@@ -13,6 +13,7 @@ import { apiKeys } from '../../db/schema.ts'
 import { type TenantContext, requireConsolePrincipal } from '../auth.ts'
 import { notFound } from '../errors.ts'
 import { containsI, listPage, newestFirst, pageOf, pageQuery, searchQuery } from '../list.ts'
+import { held } from '../../approvals/requests.ts'
 
 /** Routes with this tag are left out of the customer OpenAPI document (app.ts `hiddenTag`). */
 export const CONSOLE_ONLY_TAG = 'console-only'
@@ -45,8 +46,8 @@ export const consoleRoutes = (deps: { db: Database }): FastifyPluginAsyncZod => 
   app.post(
     '/v1/api-keys',
     {
-      config: { idempotency: false },
-      schema: { tags, summary: 'Create an API key', description: 'The plaintext key is returned once.', body: z.object({ label: z.string().min(1).max(100) }), response: { 201: apiKeyView.extend({ apiKey: z.string() }), 403: errorBody } },
+      config: { idempotency: false, approval: 'api_key.create' },
+      schema: { tags, summary: 'Create an API key', description: 'The plaintext key is returned once.', body: z.object({ label: z.string().min(1).max(100) }), response: { 201: apiKeyView.extend({ apiKey: z.string() }), ...held, 403: errorBody } },
     },
     async (request, reply) => {
       const t = tenant(request)

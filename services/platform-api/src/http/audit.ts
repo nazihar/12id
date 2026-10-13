@@ -6,6 +6,10 @@
  * secrets and personal data replaced (review L10, `audit-changes.ts`). Customer API-key traffic is not
  * audited here.
  *
+ * A call that was held for a second person (implement/22 C17) is recorded like any other, with its
+ * `202` and the id of the request it became; the call that applies an approved request names the
+ * person who approved it. So the audit shows both people.
+ *
  * Written after the response is sent, so a failed audit write is logged, never surfaced to the caller.
  */
 import type { FastifyReply, FastifyRequest } from 'fastify'
@@ -33,7 +37,9 @@ export function consoleAuditHook(db: Database) {
     const paramId = (request.params as { id?: unknown } | undefined)?.id
     const tenantId = request.tenant?.id ?? (route.startsWith('/admin/tenants/:id') && isUuid(paramId) ? paramId : null)
     // Reads record no body; a mutating call records what it changed (review L10).
-    const changes = mutating ? auditChanges({ params: request.params, body: request.body, recordBody: request.routeOptions.config?.auditBody !== false }) : null
+    const recorded = mutating ? auditChanges({ params: request.params, body: request.body, recordBody: request.routeOptions.config?.auditBody !== false }) : null
+    const approval = request.approvedChange ? { request: request.approvedChange.id, approvedBy: request.approvedChange.approvedBy } : request.heldChange ? { request: request.heldChange, waiting: true } : null
+    const changes = approval ? { ...(recorded ?? {}), approval } : recorded
     try {
       await db.insert(consoleAudit).values({ actor: who.actor, actorLabel: who.label ?? null, role: who.role, tenantId, method: request.method, route, statusCode: reply.statusCode, requestId: String(request.id), reason: request.auditReason ?? null, changes })
     } catch (error) {

@@ -36,6 +36,23 @@ describe('biometric-service HTTP API', () => {
     assert.deepEqual(body.providers[0].captureModule, { provider: 'mock', minVersion: 1 })
   })
 
+  it('stores, activates and drops a provider configuration that waits for approval', async (t) => {
+    if (!db) return t.skip()
+    const app = api()
+    const pending = '/tenants/t1/provider/pending'
+    assert.equal((await app.inject({ method: 'PUT', url: pending, payload: { providerId: 'mock', config: {} } })).statusCode, 401)
+    const stored = await app.inject({ method: 'PUT', url: pending, headers: auth, payload: { providerId: 'mock', config: {} } })
+    assert.deepEqual([stored.statusCode, stored.json()], [200, { providerId: 'mock', publicConfig: {} }])
+    assert.equal((await app.inject({ url: '/tenants/t1/provider', headers: auth })).json().provider, null)
+    const activated = await app.inject({ method: 'POST', url: `${pending}/activate`, headers: auth })
+    assert.deepEqual([activated.statusCode, activated.json().provider.status], [200, 'untested'])
+    const again = await app.inject({ method: 'POST', url: `${pending}/activate`, headers: auth })
+    assert.deepEqual([again.statusCode, again.json().error], [404, 'no_pending_provider'])
+    await app.inject({ method: 'PUT', url: pending, headers: auth, payload: { providerId: 'mock', config: {} } })
+    assert.equal((await app.inject({ method: 'DELETE', url: pending, headers: auth })).statusCode, 204)
+    assert.equal((await app.inject({ method: 'POST', url: `${pending}/activate`, headers: auth })).statusCode, 404)
+  })
+
   it('runs a check end to end and never echoes the image', async (t) => {
     if (!db) return t.skip()
     const app = api()

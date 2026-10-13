@@ -3,7 +3,7 @@
  * the console (console token + operator role + actor) and the break-glass `x-admin-token` over an
  * SSH tunnel. The edge answers 404 for /admin/*; both callers are audited (audit.ts).
  */
-import { type SQL, and, desc, eq, inArray, like, ne, or } from 'drizzle-orm'
+import { type SQL, and, desc, eq, inArray, like, ne, or, sql } from 'drizzle-orm'
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { z } from 'zod'
 
@@ -12,9 +12,9 @@ import { API_KEY_PREFIX, generateSecret, hashSecret, lookupPrefix } from '../../
 import type { Database } from '../../db/client.ts'
 import { DELIVERY_STATUSES, apiKeys, consoleAudit, tenants, webhookDeliveries } from '../../db/schema.ts'
 import { requireOperator } from '../auth.ts'
-import { notFound } from '../errors.ts'
+import { PlatformError, notFound } from '../errors.ts'
 import { containsI, createdBetween, createdRange, listPage, many, newestFirst, oneOrMany, pageOf, pageQuery, searchQuery } from '../list.ts'
-import { AUDIT_EVENT_METHOD, AUDIT_KINDS, type AuditKind } from './audit-events.ts'
+import { AUDIT_EVENT_METHOD, AUDIT_KINDS, APPROVAL_AUDIT_KIND, AUDIT_KIND_NAMES } from './audit-events.ts'
 import { CONSOLE_ONLY_TAG } from './console.ts'
 import { activeRevokedByTenant, deadDeliveriesByTenant, exchangeActivityByTenant } from './stats.ts'
 import { deliveryFilters, deliveryListQuery, deliveryView, toDeliveryView } from './webhook.ts'
@@ -129,8 +129,11 @@ export const adminRoutes = (deps: AdminDeps): FastifyPluginAsyncZod => async (ap
     '/admin/tenants/:id/api-keys',
     { schema: { tags, params: z.object({ id: z.uuid() }), body: z.object({ label: z.string().min(1).max(100) }), response: { 201: z.object({ id: z.string(), label: z.string(), apiKey: z.string(), createdAt: z.iso.datetime() }), 404: errorBody } } },
     async (request, reply) => {
-      const [tenant] = await deps.db.select({ id: tenants.id }).from(tenants).where(eq(tenants.id, request.params.id))
+      const [tenant] = await deps.db.select({ id: tenants.id, approvalsRequired: tenants.approvalsRequired }).from(tenants).where(eq(tenants.id, request.params.id))
       if (!tenant) throw notFound('tenant')
+      // Where the tenant requires a second person (implement/22 C17), the console creates keys through
+      // POST /v1/api-keys, which is held. This route stays what it was made for: the break-glass token.
+      if (tenant.approvalsRequired && request.operator?.via === 'console') throw new PlatformError(403, 'approval_required', 'this tenant requires a second person for a new API key; create it through the tenant route')
       const apiKey = generateSecret(API_KEY_PREFIX)
       // Flagged as an operator's key in the tenant's list (Phase 7 H1).
       const [row] = await deps.db.insert(apiKeys).values({ tenantId: tenant.id, prefix: lookupPrefix(apiKey), keyHash: hashSecret(apiKey), label: request.body.label, createdBy: request.operator?.actor ?? 'admin-token', createdByRole: 'operator' }).returning()
@@ -219,11 +222,11 @@ export const adminRoutes = (deps: AdminDeps): FastifyPluginAsyncZod => async (ap
         tags,
         summary: 'Console audit log',
         description:
-          'Newest first, paged. Each change carries its route parameters and request body, with secrets and personal data replaced. Sign-ins, account changes and exports are rows with method `EVENT` and their type as the route. `kind` keeps one family: `change` (calls that went through this API), `sign-in`, `account` or `export`. `q` matches the route pattern or event type, the actor id or the actor label (email), or any of the `qActor` ids (the console resolves names and emails to account ids); `actor` restricts to one or more actor ids.',
+          'Newest first, paged. Each change carries its route parameters and request body, with secrets and personal data replaced. Sign-ins, account changes and exports are rows with method `EVENT` and their type as the route. `kind` keeps one family: `change` (calls that went through this API), `sign-in`, `account`, `export`, or `approval` (everything about a change that waited for a second person). `q` matches the route pattern or event type, the actor id or the actor label (email), or any of the `qActor` ids (the console resolves names and emails to account ids); `actor` restricts to one or more actor ids.',
         querystring: pageQuery
           .extend(createdRange.shape)
           .extend(searchQuery.shape)
-          .extend({ tenantId: z.uuid().optional(), kind: z.enum(Object.keys(AUDIT_KINDS) as [AuditKind, ...AuditKind[]]).optional(), actor: oneOrMany(z.string().min(1).max(200)), qActor: oneOrMany(z.string().min(1).max(200)) }),
+          .extend({ tenantId: z.uuid().optional(), kind: z.enum(AUDIT_KIND_NAMES).optional(), actor: oneOrMany(z.string().min(1).max(200)), qActor: oneOrMany(z.string().min(1).max(200)) }),
         response: { 200: pageOf(auditView) },
       },
     },
@@ -232,7 +235,9 @@ export const adminRoutes = (deps: AdminDeps): FastifyPluginAsyncZod => async (ap
       const actors = many(request.query.actor)
       const filters: SQL[] = createdBetween(consoleAudit.at, request.query)
       if (tenantId) filters.push(eq(consoleAudit.tenantId, tenantId))
-      if (kind) {
+      if (kind === APPROVAL_AUDIT_KIND) {
+        filters.push(or(like(consoleAudit.route, '%/change-requests%'), sql`jsonb_exists(${consoleAudit.changes}, 'approval')`)!)
+      } else if (kind) {
         const prefix = AUDIT_KINDS[kind]
         filters.push(prefix === null ? ne(consoleAudit.method, AUDIT_EVENT_METHOD) : and(eq(consoleAudit.method, AUDIT_EVENT_METHOD), like(consoleAudit.route, `${prefix}%`))!)
       }

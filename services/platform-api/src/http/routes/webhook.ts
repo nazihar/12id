@@ -17,6 +17,7 @@ import { PlatformError, notFound } from '../errors.ts'
 import { maskBody, masked } from '../personal-data.ts'
 import { createdBetween, createdRange, listPage, newestFirst, pageOf, pageQuery } from '../list.ts'
 import { CONSOLE_ONLY_TAG } from './console.ts'
+import { held } from '../../approvals/requests.ts'
 
 const errorBody = z.object({ error: z.string(), reason: z.string() })
 const endpointView = z.object({ url: z.string(), events: z.array(z.enum(EVENT_TYPES)).nullable(), createdAt: z.iso.datetime(), updatedAt: z.iso.datetime() })
@@ -71,12 +72,13 @@ export const webhookRoutes = (deps: { db: Database }): FastifyPluginAsyncZod => 
   app.put(
     '/v1/webhook',
     {
+      config: { approval: 'webhook.set' },
       schema: {
         tags: writeTags,
         summary: 'Set the webhook endpoint',
         description: 'One endpoint per tenant. The signing `secret` is returned only when it is created or rotated. Events are POSTed as `{ id, type, createdAt, tenantId, data }` with `X-12id-Signature: t=<unix>,v1=<hex HMAC-SHA256(secret, "<t>.<body>")>`. During a secret rotation the header carries one `v1` per secret for 24 h; accept a match on any of them. Answer 2xx within 10 s; failures are retried with exponential backoff (12 attempts over about 2.5 hours) and then dead-lettered. Each attempt goes to the URL set at that moment.',
         body: z.object({ url: httpsUrl, events: z.array(z.enum(EVENT_TYPES)).min(1).optional() }),
-        response: { 200: endpointView.extend({ secret: z.string().optional() }), 403: errorBody },
+        response: { 200: endpointView.extend({ secret: z.string().optional() }), ...held, 403: errorBody },
       },
     },
     async (request) => {
@@ -108,9 +110,9 @@ export const webhookRoutes = (deps: { db: Database }): FastifyPluginAsyncZod => 
         tags: writeTags,
         summary: 'Rotate the signing secret',
         description: 'For 24 hours after a rotation every delivery carries two signatures, `v1=<new>,v1=<previous>`, so a receiver still on the previous secret keeps accepting them. Switch within that window.',
-        response: { 200: z.object({ secret: z.string() }), 403: errorBody, 404: errorBody },
+        response: { 200: z.object({ secret: z.string() }), ...held, 403: errorBody, 404: errorBody },
       },
-      config: { idempotency: false },
+      config: { idempotency: false, approval: 'webhook.rotate_secret' },
     },
     async (request) => {
       const t = editor(request)
@@ -126,7 +128,7 @@ export const webhookRoutes = (deps: { db: Database }): FastifyPluginAsyncZod => 
     }
   )
 
-  app.delete('/v1/webhook', { schema: { tags: writeTags, summary: 'Remove the webhook endpoint', response: { 200: z.object({ deleted: z.boolean() }), 403: errorBody, 404: errorBody } } }, async (request) => {
+  app.delete('/v1/webhook', { config: { approval: 'webhook.remove' }, schema: { tags: writeTags, summary: 'Remove the webhook endpoint', response: { 200: z.object({ deleted: z.boolean() }), ...held, 403: errorBody, 404: errorBody } } }, async (request) => {
     const rows = await deps.db.delete(webhookEndpoints).where(eq(webhookEndpoints.tenantId, editor(request).id)).returning({ tenantId: webhookEndpoints.tenantId })
     if (rows.length === 0) throw notFound('webhook endpoint')
     return { deleted: true }

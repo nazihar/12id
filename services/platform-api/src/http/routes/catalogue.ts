@@ -13,6 +13,7 @@ import { assertTenantReady, type TenantContext, requireConsolePrincipal } from '
 import { notFound } from '../errors.ts'
 import { pageOf, pageQuery, searchQuery } from '../list.ts'
 import { CONSOLE_ONLY_TAG } from './console.ts'
+import { held } from '../../approvals/requests.ts'
 
 export interface CatalogueDeps {
   agent: AgentClient
@@ -70,12 +71,13 @@ export const catalogueRoutes = (deps: CatalogueDeps): FastifyPluginAsyncZod => a
   app.post(
     '/v1/schemas',
     {
+      config: { approval: 'catalogue.schema' },
       schema: {
         tags: writeTags,
         summary: 'Publish a schema',
         description: 'Attributes are strings on the wire (no nested values, no native numbers). `expiresOn` (the expiry date as `YYYYMMDD`, UTC) is mandatory: v1 has no revocation, so every credential carries an expiry that every proof request checks.',
         body: z.object({ name: z.string().min(1).max(200), version: z.string().regex(/^\d+(\.\d+){0,2}$/, 'version like 1.0'), attributes: z.array(z.string().min(1).max(100)).min(1).max(125) }),
-        response: { 201: schemaView, 400: errorBody, 403: errorBody, 409: errorBody, 422: errorBody },
+        response: { 201: schemaView, ...held, 400: errorBody, 403: errorBody, 409: errorBody, 422: errorBody },
       },
     },
     async (request, reply) => reply.code(201).send(toSchemaView(await deps.agent.publishSchema(publisher(request).agentTenantId, request.body)))
@@ -108,12 +110,13 @@ export const catalogueRoutes = (deps: CatalogueDeps): FastifyPluginAsyncZod => a
   app.post(
     '/v1/credential-definitions',
     {
+      config: { approval: 'catalogue.cred_def' },
       schema: {
         tags: writeTags,
         summary: 'Publish a credential definition',
         description: 'Published without revocation support (v1 decision, cannot be changed later for this definition).',
         body: z.object({ schemaId: z.uuid(), tag: z.string().regex(/^[A-Za-z0-9_-]{1,32}$/).default('default') }),
-        response: { 201: credentialDefinitionView, 400: errorBody, 403: errorBody, 404: errorBody, 409: errorBody, 422: errorBody },
+        response: { 201: credentialDefinitionView, ...held, 400: errorBody, 403: errorBody, 404: errorBody, 409: errorBody, 422: errorBody },
       },
     },
     async (request, reply) =>

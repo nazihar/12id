@@ -3,7 +3,8 @@
  * (`npm run e2e:staging`): the Verification page and a customer page on a tenant that has run face
  * checks, an export in both formats under the deployed Content-Security-Policy (csp.ts fails the
  * test on any refusal), the sign-in and the exports in the audit log, the System health page with
- * monitoring's heartbeat, and the audit log's own period set for the tenant and put back.
+ * monitoring's heartbeat, the audit log's own period set for the tenant and put back, and the
+ * Approvals pages (read only; infra/smoke/approvals-check.ts runs a change through approval).
  *
  *   STAGING_EMAIL/PASSWORD   an enrolled operator (as staging.spec.ts; TOTP secret from the same file)
  *   STAGING_FEEDBACK_TENANT  a tenant with face checks in the last 90 days (default: the biometric
@@ -132,6 +133,16 @@ test('staging: verification page, customer page, export in both formats, audit e
   await period.getByRole('button', { name: 'Save' }).click()
   await expect(inForce).toContainText('the platform default')
   await shot(page, 'staging-data-protection')
+
+  // Set 2: approvals. The operator area's page (a server setting, no switch) and the tenant's.
+  await page.getByRole('navigation', { name: 'Operator sections' }).getByRole('link', { name: 'Approvals', exact: true }).click()
+  await expect(page.getByTestId('approval-requirement')).toContainText('Set on the server (OPERATOR_APPROVALS)')
+  await page.goto(`/ops/tenants/${tenantId}/approvals`)
+  await expect(page.getByTestId('approval-requirement')).toBeVisible()
+  await page.getByTestId('approval-requirement').getByText('What waits for a second person').click()
+  await expect(page.getByTestId('approval-types')).toContainText('Set the webhook endpoint')
+  await expect(page.getByTestId('change-requests')).toBeVisible()
+  await shot(page, 'staging-approvals')
 
   // The audit log holds this sign-in and the exports, under the operator's email.
   await page.goto('/ops/audit?kind=sign-in')

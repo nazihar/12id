@@ -20,6 +20,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { formatDateTime } from '@/lib/format'
 import { isFiltered, pagingFor, resetFor, parseListSearch, searchPatcher } from '@/lib/list-search'
 import { type TenantRole, tenantCan } from '@/lib/permissions'
+import { PortalPendingChanges } from '@/features/approvals/pending-changes'
 
 type MembersData = Awaited<ReturnType<typeof listMembers>>
 type MemberRow = Extract<MembersData, { tab: 'members' }>['page']['items'][number]
@@ -132,6 +133,7 @@ function MembersPage() {
   return (
     <section className="space-y-4">
       <PageHeader title="Members" description="People who can sign in to this organization, and what their role allows." actions={canInvite && <InviteMemberDialog organizationId={organizationId} orgSlug={orgSlug} />} />
+      <PortalPendingChanges orgSlug={orgSlug} types={['member.']} />
       <Tabs value={tab} onValueChange={(next) => onSearch({ tab: next === 'members' ? undefined : 'invitations', q: undefined, role: undefined })}>
         <TabsList>
           <TabsTrigger value="members">Members</TabsTrigger>

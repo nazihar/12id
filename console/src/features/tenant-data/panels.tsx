@@ -42,6 +42,7 @@ import {
   stateOptions,
 } from './list.schemas'
 import type { ApiKeyRow, BiometricLog, BiometricLogEvent, ConnectionRow, CredentialRow, DeliveryDetail, DeliveryRow, ExchangeKind, ProofRow, WalletRow } from './types'
+import type { Held } from '@/lib/held'
 
 /** A server-paged list: one page, its URL search, and a way to change that search. */
 export interface ListProps<TData, TSearch> {
@@ -397,7 +398,7 @@ export function ApiKeysPanel({
 }: ListProps<Page<ApiKeyRow>, ApiKeySearch> & {
   invalidateKey: QueryKey
   /** Omit when the viewer may not create keys. */
-  createKey?: (label: string) => Promise<{ apiKey: string }>
+  createKey?: (label: string) => Promise<{ apiKey: string } | Held>
   /** Omit when the viewer may not revoke keys. */
   revokeKey?: (apiKeyId: string) => Promise<unknown>
 }) {

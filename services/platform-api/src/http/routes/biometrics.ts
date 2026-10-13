@@ -23,6 +23,8 @@ import { type TenantContext, type WalletContext, requireConsolePrincipal } from 
 import { PlatformError } from '../errors.ts'
 import { resolveCredentialDefinition } from './catalogue.ts'
 import { CONSOLE_ONLY_TAG } from './console.ts'
+import { createRequest, held, toChangeRequestView } from '../../approvals/requests.ts'
+import { changeRequests } from '../../db/schema.ts'
 
 const errorBody = z.object({ error: z.string(), reason: z.string() })
 
@@ -167,12 +169,13 @@ export const biometricRoutes = (deps: { db: Database; agent: AgentClient; biomet
   app.put(
     '/v1/biometrics/settings',
     {
+      config: { approval: 'biometrics.settings' },
       schema: {
         tags,
         summary: 'Switch biometrics on or off and set the default policy',
         description: 'Switching on needs a provider whose connection test passed.',
         body: z.object({ enabled: z.boolean(), defaultPolicy: biometricDefaultPolicy }),
-        response: { 200: settingsView, 409: errorBody },
+        response: { 200: settingsView, ...held, 409: errorBody },
       },
     },
     async (request) => {
@@ -210,19 +213,61 @@ export const biometricRoutes = (deps: { db: Database; agent: AgentClient; biomet
         summary: 'Configure the biometric provider',
         description: 'Write-only: the configuration is stored encrypted in biometric-service and only its non-secret part is ever returned. A new configuration must pass its connection test before gating resumes.',
         body: z.object({ providerId: z.string().min(1).max(100), config: z.record(z.string(), z.unknown()) }),
-        response: { 200: settingsView, 400: errorBody },
+        response: { 200: settingsView, ...held, 400: errorBody },
       },
       // The body may carry vendor secrets: never store it for idempotency replays or in the audit (L10).
-      config: { idempotency: false, auditBody: false },
+      config: { idempotency: false, auditBody: false, approval: 'biometrics.provider.set' },
+    },
+    async (request, reply) => {
+      const t = consoleTenant(request)
+      const hold = request.approvalHold
+      if (!hold) {
+        await deps.biometric.putProvider(t.id, request.body.providerId, request.body.config).catch(passThrough)
+        return view(t.id)
+      }
+      // Held for a second person (implement/22 C17). The configuration must not be stored here, so it
+      // waits in biometric-service, encrypted like an active one; the request keeps the provider's
+      // name and, once biometric-service has accepted the configuration, its non-secret part.
+      const current = await deps.biometric.getProvider(t.id).catch(passThrough)
+      const row = await createRequest(deps.db, {
+        tenantId: t.id,
+        typeId: hold.typeId,
+        call: { params: {}, body: { providerId: request.body.providerId } },
+        actor: hold.actor,
+        replay: { method: 'POST', route: '/v1/biometrics/provider/pending/activate', storeBody: false },
+        payload: { providerId: request.body.providerId },
+        before: current.provider ? { providerId: current.provider.id, publicConfig: current.provider.publicConfig } : null,
+      })
+      try {
+        const pending = await deps.biometric.putPendingProvider(t.id, request.body.providerId, request.body.config)
+        const [stored] = await deps.db.update(changeRequests).set({ payload: { providerId: pending.providerId, publicConfig: pending.publicConfig } }).where(eq(changeRequests.id, row.id)).returning()
+        request.heldChange = row.id
+        return reply.code(202).send({ approval: toChangeRequestView(stored ?? row) })
+      } catch (error) {
+        // The configuration was refused: there is nothing to approve.
+        await deps.db.delete(changeRequests).where(eq(changeRequests.id, row.id))
+        return passThrough(error)
+      }
+    }
+  )
+
+  // Only the approval of the request above reaches this: it makes the waiting configuration the
+  // active one. Called directly it is refused, whether or not the tenant requires approval.
+  app.post(
+    '/v1/biometrics/provider/pending/activate',
+    {
+      config: { idempotency: false, approval: 'biometrics.provider.set' },
+      schema: { tags, summary: 'Activate the provider configuration that waited for approval', description: 'Made by platform-api itself when the change request is approved; any other caller is refused.', response: { 200: settingsView, 403: errorBody, 404: errorBody } },
     },
     async (request) => {
       const t = consoleTenant(request)
-      await deps.biometric.putProvider(t.id, request.body.providerId, request.body.config).catch(passThrough)
+      if (!request.approvedChange) throw new PlatformError(403, 'forbidden', 'a provider that waits for approval becomes active when its request is approved')
+      await deps.biometric.activatePendingProvider(t.id).catch(passThrough)
       return view(t.id)
     }
   )
 
-  app.delete('/v1/biometrics/provider', { schema: { tags, summary: 'Remove the biometric provider', description: 'Also switches biometrics off.', response: { 200: settingsView } } }, async (request) => {
+  app.delete('/v1/biometrics/provider', { config: { approval: 'biometrics.provider.remove' }, schema: { tags, summary: 'Remove the biometric provider', description: 'Also switches biometrics off.', response: { 200: settingsView, ...held } } }, async (request) => {
     const t = consoleTenant(request)
     await deps.db.update(biometricSettings).set({ enabled: false, updatedAt: new Date() }).where(eq(biometricSettings.tenantId, t.id))
     await deps.biometric.deleteProvider(t.id).catch(passThrough)
@@ -275,13 +320,14 @@ export const biometricRoutes = (deps: { db: Database; agent: AgentClient; biomet
   app.put(
     '/v1/credential-definitions/:id/biometric-policy',
     {
+      config: { approval: 'biometrics.cred_def_policy' },
       schema: {
         tags: ['catalogue', CONSOLE_ONLY_TAG],
         summary: 'Set the biometric policy of a credential definition',
         description: '`inherit` follows the tenant default, `off` never gates, `required` gates with the given thresholds (missing values come from the tenant default). Applies to offers made after the change.',
         params: z.object({ id: z.string().min(1).max(300) }),
         body: biometricOverride,
-        response: { 200: policyView, 404: errorBody },
+        response: { 200: policyView, ...held, 404: errorBody },
       },
     },
     async (request) => {

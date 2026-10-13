@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { DialogClose, DialogFooter } from '@/components/ui/dialog'
 import { setPortalWebhook } from '@/features/portal/portal-data.functions'
 import { portalKey } from '@/features/portal/portal.queries'
+import { announceHeld, isHeld } from '@/lib/held'
 import { type WebhookEndpointForm, toWebhookEndpointInput, webhookEndpointForm } from '@/features/portal/webhook.schemas'
 import { WEBHOOK_EVENT_TYPES, type WebhookEndpoint, type WebhookEventType } from '@/features/tenant-data/types'
 
@@ -56,6 +57,7 @@ function WebhookEndpointFormBody({
   const save = useMutation({
     mutationFn: (input: WebhookEndpointForm) => setPortalWebhook({ data: { organizationId, ...toWebhookEndpointInput(webhookEndpointForm.parse(input)) } }),
     onSuccess: async (saved) => {
+      if (announceHeld(saved, queryClient)) return
       if (!saved.secret) toast.success('Webhook endpoint updated.')
       await queryClient.invalidateQueries({ queryKey: portalKey(orgSlug, 'webhook') })
     },
@@ -71,7 +73,7 @@ function WebhookEndpointFormBody({
     onSubmit: ({ value }) =>
       submitMutation(save, value, (saved) => {
         onDone()
-        if (saved.secret) onSecret(saved.secret)
+        if (!isHeld(saved) && saved.secret) onSecret(saved.secret)
       }),
   })
   return (

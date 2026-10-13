@@ -12,6 +12,7 @@ import {
   errorResponse,
   providerCatalogueResponse,
   providerTestResponse,
+  pendingProviderResponse,
   putTenantProviderBody,
   startSessionResponse,
   tenantIdSchema,
@@ -76,6 +77,22 @@ export function buildBiometricApi(options: BiometricApiOptions) {
 
   app.delete('/tenants/:tenantId/provider', { schema: { params: tenantParams } }, async (request, reply) => {
     await service.deleteTenantProvider(request.params.tenantId)
+    return reply.code(204).send()
+  })
+
+  // A configuration that waits for a second person (implement/22 C17): stored, activated or dropped.
+  app.put(
+    '/tenants/:tenantId/provider/pending',
+    { schema: { params: tenantParams, body: putTenantProviderBody, response: { 200: pendingProviderResponse, ...errors } } },
+    async (request) => service.putPendingProvider(request.params.tenantId, request.body.providerId, request.body.config)
+  )
+
+  app.post('/tenants/:tenantId/provider/pending/activate', { schema: { params: tenantParams, response: { 200: tenantProviderResponse, ...errors } } }, async (request) =>
+    service.activatePendingProvider(request.params.tenantId)
+  )
+
+  app.delete('/tenants/:tenantId/provider/pending', { schema: { params: tenantParams } }, async (request, reply) => {
+    await service.deletePendingProvider(request.params.tenantId)
     return reply.code(204).send()
   })
 

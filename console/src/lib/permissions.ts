@@ -36,6 +36,8 @@ export const tenantStatements = {
   retention: ['update'],
   // implement/22 C12: take a list out of the console as a file.
   export: ['run'],
+  // implement/22 C19: decide a change another person asked for, and switch the requirement on or off.
+  approval: ['decide', 'configure'],
 } as const
 
 export const tenantAc = createAccessControl(tenantStatements)
@@ -53,6 +55,8 @@ const consoleResources = {
   retention: ['update'],
   // implement/22 C12: take a list out of the console as a file.
   export: ['run'],
+  // implement/22 C19: decide a change another person asked for, and switch the requirement on or off.
+  approval: ['decide', 'configure'],
 } as const
 
 export const tenantRoles = {

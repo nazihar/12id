@@ -81,6 +81,11 @@ export function createBiometricClient(options: BiometricClientOptions) {
     putProvider: (tenantId: string, providerId: string, config: Record<string, unknown>) =>
       call<TenantProviderResponse>('PUT', `${t(tenantId)}/provider`, { providerId, config }),
     deleteProvider: (tenantId: string) => call<void>('DELETE', `${t(tenantId)}/provider`),
+    /** Approval by a second person (implement/22 C17): a new configuration waits in biometric-service, encrypted. */
+    putPendingProvider: (tenantId: string, providerId: string, config: Record<string, unknown>) =>
+      call<{ providerId: string; publicConfig: Record<string, unknown> }>('PUT', `${t(tenantId)}/provider/pending`, { providerId, config }),
+    activatePendingProvider: (tenantId: string) => call<TenantProviderResponse>('POST', `${t(tenantId)}/provider/pending/activate`),
+    deletePendingProvider: (tenantId: string) => call<void>('DELETE', `${t(tenantId)}/provider/pending`),
     testProvider: (tenantId: string) => call<{ status: 'ok' | 'failed' | 'untested'; error: string | null }>('POST', `${t(tenantId)}/provider/test`),
 
     createCheck: (body: CreateCheckBody) => call<{ checkId: string; providerId: string; expiresAt: string }>('POST', '/checks', body),

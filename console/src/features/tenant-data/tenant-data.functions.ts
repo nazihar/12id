@@ -9,7 +9,7 @@ import { z } from 'zod'
 
 import { operatorMiddleware, operatorReadMiddleware } from '@/server/middleware'
 import { pageParams } from '@/lib/list-search'
-import { PlatformCallError, platformFor, unwrap } from '@/server/platform.server'
+import { PlatformCallError, platformFor, unwrap, unwrapHeld } from '@/server/platform.server'
 
 import { catalogueSearch, exchangeSearch, templateSearch, walletSearch, deliverySearch } from './list.schemas'
 import { catalogueQueryParams, deliveryQueryParams, exchangeQueryParams, walletQueryParams } from './list.params'
@@ -135,7 +135,7 @@ export const getTenantRetention = createServerFn({ method: 'GET' })
 export const setTenantRetention = createServerFn({ method: 'POST' })
   .middleware([operatorMiddleware])
   .validator(tenantInput.extend({ retentionDays: z.number().int().min(0).max(3650).nullable() }))
-  .handler(async ({ context, data }) => unwrap(await platformFor(context.principal, { tenantId: data.tenantId }).PUT('/v1/data-retention', { body: { retentionDays: data.retentionDays } })))
+  .handler(async ({ context, data }) => unwrapHeld(await platformFor(context.principal, { tenantId: data.tenantId }).PUT('/v1/data-retention', { body: { retentionDays: data.retentionDays } })))
 
 /** The audit log's own period for this tenant's entries (implement/22 C15). */
 export const getTenantAuditRetention = createServerFn({ method: 'GET' })
@@ -146,7 +146,7 @@ export const getTenantAuditRetention = createServerFn({ method: 'GET' })
 export const setTenantAuditRetention = createServerFn({ method: 'POST' })
   .middleware([operatorMiddleware])
   .validator(tenantInput.extend({ auditRetentionDays: auditRetentionDaysInput }))
-  .handler(async ({ context, data }) => unwrap(await platformFor(context.principal, { tenantId: data.tenantId }).PUT('/v1/audit-retention', { body: { auditRetentionDays: data.auditRetentionDays } })))
+  .handler(async ({ context, data }) => unwrapHeld(await platformFor(context.principal, { tenantId: data.tenantId }).PUT('/v1/audit-retention', { body: { auditRetentionDays: data.auditRetentionDays } })))
 
 export const listTenantErasures = createServerFn({ method: 'GET' })
   .middleware([operatorReadMiddleware])

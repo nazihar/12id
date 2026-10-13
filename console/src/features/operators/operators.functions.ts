@@ -8,6 +8,10 @@
  * Every change is reported to the audit log (C13), naming the account by its email: after a deletion
  * that is all that is left of it.
  *
+ * Where the deployment requires a second operator (`OPERATOR_APPROVALS`, implement/22 C18), adding an
+ * account, changing a role and unbanning are stored as a request and answer `{ held }`. Banning,
+ * signing out and deleting never wait: they only close access.
+ *
  * Nobody acts on their own account here. That also keeps the platform operable: whoever makes a
  * change is an operator who can sign in, and stays one afterwards.
  */
@@ -20,6 +24,8 @@ import { type SQL, and, count, desc, eq, ilike, inArray, isNull, or } from 'driz
 import { editOperatorInput, inviteOperatorInput, operatorSearch } from '@/features/operators/operators.schemas'
 import { likeContains, pageParams } from '@/lib/list-search'
 import { STAFF_ROLES, staffRoleOf } from '@/lib/permissions'
+import { performAccountChange, staffAccount } from '@/server/account-changes.server'
+import { askForAccountChange } from '@/server/approvals.server'
 import { principalActor, recordEvent } from '@/server/audit.server'
 import { auth } from '@/server/auth.server'
 import { consoleDb } from '@/server/db.server'
@@ -32,14 +38,6 @@ const userInput = z.object({ userId: z.string().min(1).max(100) })
 async function emailOf(userId: string) {
   const [row] = await consoleDb().db.select({ email: user.email }).from(user).where(eq(user.id, userId))
   return row?.email ?? null
-}
-
-/** An account of the operator area. Editing and deleting never reach a tenant member's account from here. */
-async function staffAccount(userId: string) {
-  const [row] = await consoleDb().db.select({ id: user.id, email: user.email, name: user.name, role: user.role }).from(user).where(eq(user.id, userId))
-  const role = staffRoleOf(row?.role)
-  if (!row || !role) throw new Error('This is not an operator or auditor account.')
-  return { ...row, role }
 }
 
 /** One page of operator and auditor accounts, newest first (Phase 4 C9): search by name or email, filter by role and status. */
@@ -81,9 +79,9 @@ export const inviteOperator = createServerFn({ method: 'POST' })
   .middleware([operatorMiddleware])
   .validator(inviteOperatorInput)
   .handler(async ({ context, data }) => {
-    await auth.api.createUser({ headers: getRequestHeaders(), body: { email: data.email, name: data.name, role: data.role } })
-    await recordEvent({ type: 'account.operator_invited', actor: principalActor(context.principal), detail: { account: data.email, name: data.name, role: data.role } })
-    await auth.api.requestPasswordReset({ body: { email: data.email, redirectTo: '/reset-password' } })
+    const held = await askForAccountChange(context.principal, null, 'operator.invite', data)
+    if (held) return held
+    await performAccountChange(context.principal, 'operator.invite', data)
     return { email: data.email }
   })
 
@@ -99,9 +97,12 @@ export const editOperator = createServerFn({ method: 'POST' })
       await auth.api.adminUpdateUser({ headers: getRequestHeaders(), body: { userId: account.id, data: { name: data.name } } })
       await recordEvent({ type: 'account.operator_updated', actor, detail: { account: account.email, userId: account.id, name: data.name, previousName: account.name } })
     }
+    // A name is not access; a role is. Only the role can wait for a second operator.
     if (data.role !== account.role) {
-      await auth.api.setRole({ headers: getRequestHeaders(), body: { userId: account.id, role: data.role } })
-      await recordEvent({ type: 'account.operator_role_changed', actor, detail: { account: account.email, userId: account.id, role: data.role, previousRole: account.role } })
+      const change = { userId: account.id, role: data.role }
+      const held = await askForAccountChange(context.principal, null, 'operator.role', { ...change, account: account.email })
+      if (held) return held
+      await performAccountChange(context.principal, 'operator.role', change)
     }
     return { name: data.name, role: data.role }
   })
@@ -133,8 +134,9 @@ export const unbanOperator = createServerFn({ method: 'POST' })
   .middleware([operatorMiddleware])
   .validator(userInput)
   .handler(async ({ context, data }) => {
-    await auth.api.unbanUser({ headers: getRequestHeaders(), body: { userId: data.userId } })
-    await recordEvent({ type: 'account.operator_unbanned', actor: principalActor(context.principal), detail: { account: await emailOf(data.userId), userId: data.userId } })
+    const held = await askForAccountChange(context.principal, null, 'operator.unban', { userId: data.userId, account: await emailOf(data.userId) })
+    if (held) return held
+    await performAccountChange(context.principal, 'operator.unban', { userId: data.userId })
     return { banned: false }
   })
 

@@ -55,6 +55,7 @@ export function runningSettings(config: PlatformConfig): Array<z.infer<typeof se
     row('Webhooks', 'Time a receiver has to answer', `${Math.round(config.WEBHOOK_TIMEOUT_MS / 1000)} s`),
     row('Wallets', 'A wallet that never connected is revoked after', days(config.WALLET_UNCONNECTED_REVOKE_DAYS, 'never')),
     row('Wallets', "A revoked wallet's mediator records are removed after", days(config.WALLET_REVOKED_GRACE_DAYS, 'at once')),
+    row('Accounts', 'Changes to operator accounts need a second operator', config.OPERATOR_APPROVALS === 'on' ? 'yes' : 'no'),
     row('Connected services', 'Console', config.CONSOLE_TOKEN ? 'enabled' : 'disabled'),
     row('Connected services', 'Biometric service', config.BIOMETRIC_SERVICE_URL && config.BIOMETRIC_SERVICE_TOKEN ? 'connected' : 'not configured'),
     row('Connected services', 'Monitoring alerts', config.ALERT_WEBHOOK_SECRET ? 'accepted' : 'not configured'),

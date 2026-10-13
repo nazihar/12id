@@ -38,6 +38,12 @@ const configSchema = z.object({
    * (implement/22 C16). Unset: the route answers 404 and the health page says monitoring is not connected.
    */
   ALERT_WEBHOOK_SECRET: secret.optional(),
+  /**
+   * Changes to operator accounts (add, change role, unban) wait for a second operator
+   * (implement/22 C17). Off by default: a deployment with one operator could not use it. Organisations
+   * switch approval on for themselves in the console.
+   */
+  OPERATOR_APPROVALS: z.enum(['on', 'off']).default('off'),
   /** Shown on the operators' health page: the release this deployment runs, and which environment it is. */
   PLATFORM_VERSION: z.string().min(1).max(100).optional(),
   PLATFORM_ENVIRONMENT: z.string().min(1).max(50).optional(),

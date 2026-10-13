@@ -3,9 +3,11 @@
  * or the account page), the sidebar groups and the breadcrumb. Derived from the matched routes, so
  * every area declares its navigation here and nowhere else.
  */
+import { useQuery } from '@tanstack/react-query'
 import { useMatchRoute, useMatches, useRouteContext } from '@tanstack/react-router'
-import { ActivityIcon, BuildingIcon, ChartColumnIcon, FileBadgeIcon, GlobeIcon, KeyRoundIcon, LayoutDashboardIcon, type LucideIcon, ScanFaceIcon, ScrollTextIcon, ShieldCheckIcon, ShieldUserIcon, SmartphoneIcon, UsersIcon, WalletIcon, WebhookIcon } from 'lucide-react'
+import { ActivityIcon, BuildingIcon, CheckCheckIcon, ChartColumnIcon, FileBadgeIcon, GlobeIcon, KeyRoundIcon, LayoutDashboardIcon, type LucideIcon, ScanFaceIcon, ScrollTextIcon, ShieldCheckIcon, ShieldUserIcon, SmartphoneIcon, UsersIcon, WalletIcon, WebhookIcon } from 'lucide-react'
 
+import { opsOpenChangesQuery, portalOpenChangesQuery } from '@/features/approvals/approvals.queries'
 import type { TenantRole } from '@/lib/permissions'
 
 export interface NavItem {
@@ -15,6 +17,8 @@ export interface NavItem {
   icon: LucideIcon
   /** Only the exact path counts as active (index routes). */
   exact?: boolean
+  /** A count shown beside the label when it is above zero (what waits for approval). */
+  badge?: number
 }
 
 export interface NavGroup {
@@ -45,6 +49,7 @@ const OPS_ITEMS: NavItem[] = [
   { label: 'Dead deliveries', to: '/ops/deliveries', icon: WebhookIcon },
   { label: 'Audit log', to: '/ops/audit', icon: ScrollTextIcon },
   { label: 'System health', to: '/ops/health', icon: ActivityIcon },
+  { label: 'Approvals', to: '/ops/approvals', icon: CheckCheckIcon },
   { label: 'Operators', to: '/ops/operators', icon: ShieldUserIcon },
 ]
 
@@ -61,6 +66,7 @@ function tenantItems(tenantId: string): NavItem[] {
     { label: 'Webhooks', to: '/ops/tenants/$tenantId/webhooks', params, icon: WebhookIcon },
     { label: 'Biometrics', to: '/ops/tenants/$tenantId/biometrics', params, icon: ScanFaceIcon },
     { label: 'Data protection', to: '/ops/tenants/$tenantId/data-protection', params, icon: ShieldCheckIcon },
+    { label: 'Approvals', to: '/ops/tenants/$tenantId/approvals', params, icon: CheckCheckIcon },
   ]
 }
 
@@ -78,6 +84,7 @@ function portalItems(orgSlug: string): NavItem[] {
     { label: 'Data protection', to: '/t/$orgSlug/data-protection', params, icon: ShieldCheckIcon },
     { label: 'API keys', to: '/t/$orgSlug/api-keys', params, icon: KeyRoundIcon },
     { label: 'Members', to: '/t/$orgSlug/members', params, icon: UsersIcon },
+    { label: 'Approvals', to: '/t/$orgSlug/approvals', params, icon: CheckCheckIcon },
   ]
 }
 
@@ -89,10 +96,19 @@ export function useShellModel(): ShellModel {
   const activeLabel = (items: NavItem[]) => items.find(isActive)?.label
 
   const portal = matches.find((match) => match.routeId === '/_authed/t/$orgSlug')
+  const opsMatch = matches.find((match) => match.routeId === '/_authed/ops')
+  const opsTenantId = (matches.find((match) => match.routeId === '/_authed/ops/tenants/$tenantId')?.params as { tenantId?: string } | undefined)?.tenantId
+  const portalSlug = (portal?.params as { orgSlug?: string } | undefined)?.orgSlug
+  // What waits for a second person (implement/22 C19), beside each Approvals entry. The queries run
+  // in the browser after the page is there, so a slow or failing count never holds the shell up.
+  const portalOpen = useQuery({ ...portalOpenChangesQuery(portalSlug ?? ''), enabled: Boolean(portal && portalSlug) })
+  const operatorsOpen = useQuery({ ...opsOpenChangesQuery(), enabled: Boolean(opsMatch) })
+  const tenantOpen = useQuery({ ...opsOpenChangesQuery(opsTenantId), enabled: Boolean(opsMatch && opsTenantId) })
+  const withCount = (items: NavItem[], count: number | undefined) => items.map((item) => (item.label === 'Approvals' ? { ...item, badge: count } : item))
   // A refused organization (beforeLoad threw) still matches, without an organization in its context.
   const organization = (portal?.context as { organization?: { name: string; slug: string; role: TenantRole } } | undefined)?.organization
   if (portal && organization) {
-    const items = portalItems(organization.slug)
+    const items = withCount(portalItems(organization.slug), portalOpen.data?.total)
     const params = { orgSlug: organization.slug }
     const workspace: Workspace = { kind: 'organization', name: organization.name, slug: organization.slug, role: organization.role, to: '/t/$orgSlug', params }
     const page = activeLabel(items)
@@ -107,13 +123,14 @@ export function useShellModel(): ShellModel {
   const ops = matches.find((match) => match.routeId === '/_authed/ops')
   if (ops) {
     const workspace: Workspace = { kind: 'ops', name: 'Operator console', to: '/ops' }
-    const groups: NavGroup[] = [{ label: 'Operator console', ariaLabel: 'Operator sections', items: OPS_ITEMS }]
+    const opsItems = withCount(OPS_ITEMS, operatorsOpen.data?.total)
+    const groups: NavGroup[] = [{ label: 'Operator console', ariaLabel: 'Operator sections', items: opsItems }]
     const crumbs: Crumb[] = [{ label: 'Operator console', to: '/ops' }]
     const tenantMatch = matches.find((match) => match.routeId === '/_authed/ops/tenants/$tenantId')
     if (tenantMatch) {
       const tenantId = (tenantMatch.params as { tenantId: string }).tenantId
       const tenant = tenantMatch.loaderData as { name?: string } | undefined
-      const items = tenantItems(tenantId)
+      const items = withCount(tenantItems(tenantId), tenantOpen.data?.total)
       groups.push({ label: `Tenant · ${tenant?.name ?? tenantId.slice(0, 8)}`, ariaLabel: 'Tenant sections', items })
       crumbs.push({ label: 'Tenants', to: '/ops/tenants' }, { label: tenant?.name ?? tenantId.slice(0, 8), to: '/ops/tenants/$tenantId', params: { tenantId } })
       const page = activeLabel(items)

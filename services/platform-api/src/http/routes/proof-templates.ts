@@ -14,6 +14,7 @@ import { type TenantContext, requireConsolePrincipal } from '../auth.ts'
 import { notFound } from '../errors.ts'
 import { containsI, listPage, newestFirst, pageOf, pageQuery, searchQuery } from '../list.ts'
 import { CONSOLE_ONLY_TAG } from './console.ts'
+import { held } from '../../approvals/requests.ts'
 
 const errorBody = z.object({ error: z.string(), reason: z.string() })
 const templateView = z.object({ id: z.string(), name: z.string(), definition: templateDefinition, biometricPolicy: templateBiometricOverride, createdAt: z.iso.datetime(), updatedAt: z.iso.datetime() })
@@ -43,12 +44,13 @@ export const proofTemplateRoutes = (deps: { db: Database }): FastifyPluginAsyncZ
   app.post(
     '/v1/proof-templates',
     {
+      config: { approval: 'template.create' },
       schema: {
         tags: writeTags,
         summary: 'Create a proof template',
         description: 'Each group discloses attributes from one credential and may add integer predicates. Credentials are referenced by schema name (all versions, or active only) or by credential definition id. `expiresOn` is always checked (`expiresOn >= today`, UTC) and can never be disclosed. `biometricPolicy` (optional) overrides the tenant\'s biometric default for requests made from this template.',
         body: templateBody,
-        response: { 201: templateView, 400: errorBody, 403: errorBody },
+        response: { 201: templateView, ...held, 400: errorBody, 403: errorBody },
       },
     },
     async (request, reply) => {
@@ -86,7 +88,7 @@ export const proofTemplateRoutes = (deps: { db: Database }): FastifyPluginAsyncZ
     return view(row)
   })
 
-  app.put('/v1/proof-templates/:id', { schema: { tags: writeTags, summary: 'Replace a proof template', params: z.object({ id: z.uuid() }), body: templateBody, response: { 200: templateView, 400: errorBody, 403: errorBody, 404: errorBody } } }, async (request) => {
+  app.put('/v1/proof-templates/:id', { config: { approval: 'template.update' }, schema: { tags: writeTags, summary: 'Replace a proof template', params: z.object({ id: z.uuid() }), body: templateBody, response: { 200: templateView, ...held, 400: errorBody, 403: errorBody, 404: errorBody } } }, async (request) => {
     const t = editor(request)
     const { definition, biometricPolicy } = split(request.body)
     validateTemplate(definition)
@@ -108,13 +110,14 @@ export const proofTemplateRoutes = (deps: { db: Database }): FastifyPluginAsyncZ
   app.put(
     '/v1/proof-templates/:id/biometric-policy',
     {
+      config: { approval: 'template.policy' },
       schema: {
         tags: writeTags,
         summary: 'Set the biometric policy of a proof template',
         description: '`inherit` follows the tenant default, `off` never gates, `required` gates with the given thresholds. `conditional` gates when its rule holds for the numbers sent with the proof request (`biometric.params`): up to 5 conditions, each a parameter name of your choosing, a comparison (`gte`, `gt`, `lte`, `lt`) and a number, joined by `match` (`any` or `all`). A request that lacks a parameter the rule names is refused. Applies to proof requests made from this template after the change.',
         params: z.object({ id: z.uuid() }),
         body: templateBiometricOverride,
-        response: { 200: z.object({ templateId: z.string(), biometricPolicy: templateBiometricOverride }), 403: errorBody, 404: errorBody },
+        response: { 200: z.object({ templateId: z.string(), biometricPolicy: templateBiometricOverride }), ...held, 403: errorBody, 404: errorBody },
       },
     },
     async (request) => {
@@ -129,7 +132,7 @@ export const proofTemplateRoutes = (deps: { db: Database }): FastifyPluginAsyncZ
     }
   )
 
-  app.delete('/v1/proof-templates/:id', { schema: { tags: writeTags, summary: 'Delete a proof template', params: z.object({ id: z.uuid() }), response: { 200: z.object({ deleted: z.boolean() }), 403: errorBody, 404: errorBody } } }, async (request) => {
+  app.delete('/v1/proof-templates/:id', { config: { approval: 'template.delete' }, schema: { tags: writeTags, summary: 'Delete a proof template', params: z.object({ id: z.uuid() }), response: { 200: z.object({ deleted: z.boolean() }), ...held, 403: errorBody, 404: errorBody } } }, async (request) => {
     const rows = await deps.db.delete(proofTemplates).where(and(eq(proofTemplates.tenantId, editor(request).id), eq(proofTemplates.id, request.params.id))).returning({ id: proofTemplates.id })
     if (rows.length === 0) throw notFound('proof template')
     return { deleted: true }

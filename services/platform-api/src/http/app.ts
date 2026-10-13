@@ -4,7 +4,8 @@
  *   API key       /v1/* customer resources (+ Idempotency-Key on POST/PUT): exchanges, wallets, reads
  *   console       the same /v1/* routes with console headers, plus the console-only ones: API keys,
  *                 stats, biometric settings, and every setup write (catalogue publishing, proof
- *                 templates, biometric policies, webhook endpoint/secret/retry; review K1)
+ *                 templates, biometric policies, webhook endpoint/secret/retry; review K1). Where a
+ *                 tenant requires it, the sensitive ones wait for a second person (approvals/gate.ts)
  *   wallet token  /v1/wallet/*
  *   operator      /admin/* (console token + operator role, or the break-glass admin token)
  *   console only  POST /admin/audit/events (the console token alone: events it reports about itself)
@@ -27,6 +28,8 @@ import type { Database } from '../db/client.ts'
 import type { MediatorClient } from '../mediator-client.ts'
 import type { WakeOutcome } from '../wake.ts'
 import { endpointLookup } from '../webhooks/events.ts'
+import { createApprovalGate } from '../approvals/gate.ts'
+import type { ChangeRequest } from '../approvals/requests.ts'
 import { consoleAuditHook } from './audit.ts'
 import { CONSOLE_TOKEN_HEADER, requireOperator, requireTenantPrincipal, requireWalletToken } from './auth.ts'
 import { platformErrorHandler } from './errors.ts'
@@ -34,6 +37,7 @@ import { useIdempotency } from './idempotency.ts'
 import { rateLimiter } from './rate-limit.ts'
 import { activityRoutes } from './routes/activity.ts'
 import { adminRoutes } from './routes/admin.ts'
+import { operatorApprovalRoutes, tenantApprovalRoutes } from './routes/approvals.ts'
 import { auditEventRoutes } from './routes/audit-events.ts'
 import { biometricRoutes, walletBiometricRoutes } from './routes/biometrics.ts'
 import { catalogueRoutes } from './routes/catalogue.ts'
@@ -141,6 +145,14 @@ export function buildApp(deps: AppDeps, options: BuildOptions = {}) {
   app.register(publicRoutes({ config: deps.config, readiness: deps.readiness }))
   app.register(internalRoutes({ webhookSecret: deps.config.MEDIATOR_WEBHOOK_SECRET, wake: deps.wake, readiness: deps.readiness, alerts: { db: deps.db, secret: deps.config.ALERT_WEBHOOK_SECRET } }))
 
+  // Approval by a second person (implement/22 C17): one gate for every route that opts in.
+  const gate = createApprovalGate({ db: deps.db, consoleToken: deps.config.CONSOLE_TOKEN })
+  // A biometric provider that waited for approval is kept in biometric-service; a request that is
+  // rejected, cancelled or expires lets go of it.
+  const onDiscard = async (row: ChangeRequest) => {
+    if (row.type === 'biometrics.provider.set' && row.tenantId && deps.biometric) await deps.biometric.client.deletePendingProvider(row.tenantId)
+  }
+
   // Per-principal limits (review M4), one in-process store for the whole app.
   const limits = rateLimiter({ apiKeyPerMin: deps.config.RATE_LIMIT_API_KEY_PER_MIN, walletPerMin: deps.config.RATE_LIMIT_WALLET_PER_MIN, invitationsPer10Min: deps.config.RATE_LIMIT_INVITATION_PER_10MIN })
 
@@ -148,6 +160,8 @@ export function buildApp(deps: AppDeps, options: BuildOptions = {}) {
   app.register(async (scope) => {
     scope.addHook('onRequest', requireTenantPrincipal(deps.db, deps.config.CONSOLE_TOKEN))
     scope.addHook('onRequest', limits.tenant)
+    // Before idempotency: a held call is stored as a change request, never as a replayable response.
+    scope.addHook('preHandler', gate.preHandler)
     useIdempotency(scope, deps.db)
     await scope.register(catalogueRoutes({ agent: deps.agent }))
     const erasure = { db: deps.db, agent: deps.agent, biometric: deps.biometric?.client, endpoints: endpointLookup(deps.db), logger: deps.logger }
@@ -161,6 +175,7 @@ export function buildApp(deps: AppDeps, options: BuildOptions = {}) {
     await scope.register(tenantStatsRoutes({ db: deps.db }))
     await scope.register(verificationRoutes({ db: deps.db }))
     await scope.register(activityRoutes({ db: deps.db }))
+    await scope.register(tenantApprovalRoutes({ db: deps.db, gate, onDiscard }))
   })
 
   // SDK scope: wallet token.
@@ -177,6 +192,7 @@ export function buildApp(deps: AppDeps, options: BuildOptions = {}) {
     scope.addHook('onRequest', requireOperator(deps.config.PLATFORM_ADMIN_TOKEN, deps.config.CONSOLE_TOKEN))
     await scope.register(platformStatsRoutes({ db: deps.db, readiness: deps.readiness }))
     await scope.register(healthRoutes({ db: deps.db, config: deps.config, readiness: deps.readiness }))
+    await scope.register(operatorApprovalRoutes({ db: deps.db, gate, required: deps.config.OPERATOR_APPROVALS === 'on' }))
   })
   // What the console reports about itself (sign-ins, account changes, exports): console token only.
   app.register(auditEventRoutes({ db: deps.db, consoleToken: deps.config.CONSOLE_TOKEN }))

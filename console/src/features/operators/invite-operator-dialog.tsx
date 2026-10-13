@@ -11,6 +11,7 @@ import { DialogClose, DialogFooter } from '@/components/ui/dialog'
 import { editOperator, inviteOperator } from '@/features/operators/operators.functions'
 import { type EditOperatorInput, type InviteOperatorInput, STAFF_ROLE_HELP, editOperatorInput, inviteOperatorInput } from '@/features/operators/operators.schemas'
 import { STAFF_ROLES, type StaffRole } from '@/lib/permissions'
+import { announceHeld } from '@/lib/held'
 
 const ROLE_OPTIONS: ChoiceOption<StaffRole>[] = STAFF_ROLES.map((role) => ({ value: role, label: role, description: STAFF_ROLE_HELP[role] }))
 
@@ -36,6 +37,7 @@ function InviteOperatorForm({ onDone }: { onDone: () => void }) {
   const invite = useMutation({
     mutationFn: (input: InviteOperatorInput) => inviteOperator({ data: input }),
     onSuccess: async (result) => {
+      if (announceHeld(result, queryClient)) return
       toast.success(`${result.email} received a link to set a password.`)
       await queryClient.invalidateQueries({ queryKey: ['ops', 'operators'] })
     },
@@ -77,8 +79,9 @@ function EditOperatorForm({ operator, onDone }: { operator: { id: string; email:
   const queryClient = useQueryClient()
   const save = useMutation({
     mutationFn: (input: EditOperatorInput) => editOperator({ data: { userId: operator.id, ...input } }),
-    onSuccess: async () => {
-      toast.success(`${operator.email} was updated.`)
+    onSuccess: async (result) => {
+      // A new name is saved at once; a new role may wait for a second operator.
+      if (!announceHeld(result, queryClient)) toast.success(`${operator.email} was updated.`)
       await queryClient.invalidateQueries({ queryKey: ['ops', 'operators'] })
     },
   })

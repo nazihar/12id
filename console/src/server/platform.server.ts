@@ -5,6 +5,8 @@
  */
 import createClient from 'openapi-fetch'
 
+import type { Held } from '@/lib/held'
+
 import { serverEnv } from './env.server'
 import type { Principal } from './middleware'
 import type { paths } from './platform-api'
@@ -27,6 +29,23 @@ export function unwrap<T>(result: { data?: T; error?: unknown; response: Respons
   if (result.response.ok && result.data !== undefined) return result.data
   const body = result.error as { error?: string; reason?: string } | undefined
   throw new PlatformCallError(result.response.status, body?.error ?? 'platform_error', body?.reason ?? `platform-api answered ${result.response.status}`)
+}
+
+/** What platform-api answers with `202` from a held route (implement/22 C17). */
+interface HeldBody {
+  approval: { id: string; type: string; label: string; summary: string; apply: 'on_approval' | 'by_requester' }
+}
+
+/**
+ * The body of a successful call, or `{ held }` when platform-api did not make the change because the
+ * tenant requires a second person for it. A route that can answer `202` has that in its type, so a
+ * caller that forgets this does not compile.
+ */
+export function unwrapHeld<T>(result: { data?: T; error?: unknown; response: Response }): Exclude<T, HeldBody> | Held {
+  const body = unwrap(result)
+  if (result.response.status !== 202) return body as Exclude<T, HeldBody>
+  const { id, type, label, summary, apply } = (body as HeldBody).approval
+  return { held: { id, type, label, summary, apply } }
 }
 
 /**

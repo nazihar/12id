@@ -20,6 +20,7 @@ import { Route as AuthedOpsRouteImport } from './routes/_authed/ops'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as InviteInvitationIdRouteImport } from './routes/invite.$invitationId'
 import { Route as AuthedOpsIndexRouteImport } from './routes/_authed/ops/index'
+import { Route as AuthedOpsApprovalsRouteImport } from './routes/_authed/ops/approvals'
 import { Route as AuthedOpsAuditRouteImport } from './routes/_authed/ops/audit'
 import { Route as AuthedOpsDeliveriesRouteImport } from './routes/_authed/ops/deliveries'
 import { Route as AuthedOpsHealthRouteImport } from './routes/_authed/ops/health'
@@ -30,6 +31,7 @@ import { Route as AuthedOpsTenantsIndexRouteImport } from './routes/_authed/ops/
 import { Route as AuthedOpsTenantsTenantIdRouteImport } from './routes/_authed/ops/tenants/$tenantId'
 import { Route as AuthedTOrgSlugIndexRouteImport } from './routes/_authed/t/$orgSlug/index'
 import { Route as AuthedTOrgSlugApiKeysRouteImport } from './routes/_authed/t/$orgSlug/api-keys'
+import { Route as AuthedTOrgSlugApprovalsRouteImport } from './routes/_authed/t/$orgSlug/approvals'
 import { Route as AuthedTOrgSlugBiometricsRouteImport } from './routes/_authed/t/$orgSlug/biometrics'
 import { Route as AuthedTOrgSlugCatalogueRouteImport } from './routes/_authed/t/$orgSlug/catalogue'
 import { Route as AuthedTOrgSlugDataProtectionRouteImport } from './routes/_authed/t/$orgSlug/data-protection'
@@ -40,6 +42,7 @@ import { Route as AuthedTOrgSlugWalletsRouteImport } from './routes/_authed/t/$o
 import { Route as AuthedTOrgSlugWebhooksRouteImport } from './routes/_authed/t/$orgSlug/webhooks'
 import { Route as AuthedOpsTenantsTenantIdIndexRouteImport } from './routes/_authed/ops/tenants/$tenantId/index'
 import { Route as AuthedOpsTenantsTenantIdApiKeysRouteImport } from './routes/_authed/ops/tenants/$tenantId/api-keys'
+import { Route as AuthedOpsTenantsTenantIdApprovalsRouteImport } from './routes/_authed/ops/tenants/$tenantId/approvals'
 import { Route as AuthedOpsTenantsTenantIdBiometricsRouteImport } from './routes/_authed/ops/tenants/$tenantId/biometrics'
 import { Route as AuthedOpsTenantsTenantIdCatalogueRouteImport } from './routes/_authed/ops/tenants/$tenantId/catalogue'
 import { Route as AuthedOpsTenantsTenantIdDataProtectionRouteImport } from './routes/_authed/ops/tenants/$tenantId/data-protection'
@@ -108,6 +111,11 @@ const AuthedOpsIndexRoute = AuthedOpsIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AuthedOpsRoute,
 } as any)
+const AuthedOpsApprovalsRoute = AuthedOpsApprovalsRouteImport.update({
+  id: '/approvals',
+  path: '/approvals',
+  getParentRoute: () => AuthedOpsRoute,
+} as any)
 const AuthedOpsAuditRoute = AuthedOpsAuditRouteImport.update({
   id: '/audit',
   path: '/audit',
@@ -157,6 +165,11 @@ const AuthedTOrgSlugIndexRoute = AuthedTOrgSlugIndexRouteImport.update({
 const AuthedTOrgSlugApiKeysRoute = AuthedTOrgSlugApiKeysRouteImport.update({
   id: '/api-keys',
   path: '/api-keys',
+  getParentRoute: () => AuthedTOrgSlugRoute,
+} as any)
+const AuthedTOrgSlugApprovalsRoute = AuthedTOrgSlugApprovalsRouteImport.update({
+  id: '/approvals',
+  path: '/approvals',
   getParentRoute: () => AuthedTOrgSlugRoute,
 } as any)
 const AuthedTOrgSlugBiometricsRoute =
@@ -212,6 +225,12 @@ const AuthedOpsTenantsTenantIdApiKeysRoute =
   AuthedOpsTenantsTenantIdApiKeysRouteImport.update({
     id: '/api-keys',
     path: '/api-keys',
+    getParentRoute: () => AuthedOpsTenantsTenantIdRoute,
+  } as any)
+const AuthedOpsTenantsTenantIdApprovalsRoute =
+  AuthedOpsTenantsTenantIdApprovalsRouteImport.update({
+    id: '/approvals',
+    path: '/approvals',
     getParentRoute: () => AuthedOpsTenantsTenantIdRoute,
   } as any)
 const AuthedOpsTenantsTenantIdBiometricsRoute =
@@ -303,6 +322,7 @@ export interface FileRoutesByFullPath {
   '/ops': typeof AuthedOpsRouteWithChildren
   '/api/health': typeof ApiHealthRoute
   '/invite/$invitationId': typeof InviteInvitationIdRoute
+  '/ops/approvals': typeof AuthedOpsApprovalsRoute
   '/ops/audit': typeof AuthedOpsAuditRoute
   '/ops/deliveries': typeof AuthedOpsDeliveriesRoute
   '/ops/health': typeof AuthedOpsHealthRoute
@@ -312,6 +332,7 @@ export interface FileRoutesByFullPath {
   '/ops/': typeof AuthedOpsIndexRoute
   '/ops/tenants/$tenantId': typeof AuthedOpsTenantsTenantIdRouteWithChildren
   '/t/$orgSlug/api-keys': typeof AuthedTOrgSlugApiKeysRoute
+  '/t/$orgSlug/approvals': typeof AuthedTOrgSlugApprovalsRoute
   '/t/$orgSlug/biometrics': typeof AuthedTOrgSlugBiometricsRoute
   '/t/$orgSlug/catalogue': typeof AuthedTOrgSlugCatalogueRoute
   '/t/$orgSlug/data-protection': typeof AuthedTOrgSlugDataProtectionRoute
@@ -323,6 +344,7 @@ export interface FileRoutesByFullPath {
   '/ops/tenants/': typeof AuthedOpsTenantsIndexRoute
   '/t/$orgSlug/': typeof AuthedTOrgSlugIndexRoute
   '/ops/tenants/$tenantId/api-keys': typeof AuthedOpsTenantsTenantIdApiKeysRoute
+  '/ops/tenants/$tenantId/approvals': typeof AuthedOpsTenantsTenantIdApprovalsRoute
   '/ops/tenants/$tenantId/biometrics': typeof AuthedOpsTenantsTenantIdBiometricsRoute
   '/ops/tenants/$tenantId/catalogue': typeof AuthedOpsTenantsTenantIdCatalogueRoute
   '/ops/tenants/$tenantId/data-protection': typeof AuthedOpsTenantsTenantIdDataProtectionRoute
@@ -347,6 +369,7 @@ export interface FileRoutesByTo {
   '/account': typeof AuthedAccountRoute
   '/api/health': typeof ApiHealthRoute
   '/invite/$invitationId': typeof InviteInvitationIdRoute
+  '/ops/approvals': typeof AuthedOpsApprovalsRoute
   '/ops/audit': typeof AuthedOpsAuditRoute
   '/ops/deliveries': typeof AuthedOpsDeliveriesRoute
   '/ops/health': typeof AuthedOpsHealthRoute
@@ -354,6 +377,7 @@ export interface FileRoutesByTo {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/ops': typeof AuthedOpsIndexRoute
   '/t/$orgSlug/api-keys': typeof AuthedTOrgSlugApiKeysRoute
+  '/t/$orgSlug/approvals': typeof AuthedTOrgSlugApprovalsRoute
   '/t/$orgSlug/biometrics': typeof AuthedTOrgSlugBiometricsRoute
   '/t/$orgSlug/catalogue': typeof AuthedTOrgSlugCatalogueRoute
   '/t/$orgSlug/data-protection': typeof AuthedTOrgSlugDataProtectionRoute
@@ -365,6 +389,7 @@ export interface FileRoutesByTo {
   '/ops/tenants': typeof AuthedOpsTenantsIndexRoute
   '/t/$orgSlug': typeof AuthedTOrgSlugIndexRoute
   '/ops/tenants/$tenantId/api-keys': typeof AuthedOpsTenantsTenantIdApiKeysRoute
+  '/ops/tenants/$tenantId/approvals': typeof AuthedOpsTenantsTenantIdApprovalsRoute
   '/ops/tenants/$tenantId/biometrics': typeof AuthedOpsTenantsTenantIdBiometricsRoute
   '/ops/tenants/$tenantId/catalogue': typeof AuthedOpsTenantsTenantIdCatalogueRoute
   '/ops/tenants/$tenantId/data-protection': typeof AuthedOpsTenantsTenantIdDataProtectionRoute
@@ -392,6 +417,7 @@ export interface FileRoutesById {
   '/_authed/ops': typeof AuthedOpsRouteWithChildren
   '/api/health': typeof ApiHealthRoute
   '/invite/$invitationId': typeof InviteInvitationIdRoute
+  '/_authed/ops/approvals': typeof AuthedOpsApprovalsRoute
   '/_authed/ops/audit': typeof AuthedOpsAuditRoute
   '/_authed/ops/deliveries': typeof AuthedOpsDeliveriesRoute
   '/_authed/ops/health': typeof AuthedOpsHealthRoute
@@ -401,6 +427,7 @@ export interface FileRoutesById {
   '/_authed/ops/': typeof AuthedOpsIndexRoute
   '/_authed/ops/tenants/$tenantId': typeof AuthedOpsTenantsTenantIdRouteWithChildren
   '/_authed/t/$orgSlug/api-keys': typeof AuthedTOrgSlugApiKeysRoute
+  '/_authed/t/$orgSlug/approvals': typeof AuthedTOrgSlugApprovalsRoute
   '/_authed/t/$orgSlug/biometrics': typeof AuthedTOrgSlugBiometricsRoute
   '/_authed/t/$orgSlug/catalogue': typeof AuthedTOrgSlugCatalogueRoute
   '/_authed/t/$orgSlug/data-protection': typeof AuthedTOrgSlugDataProtectionRoute
@@ -412,6 +439,7 @@ export interface FileRoutesById {
   '/_authed/ops/tenants/': typeof AuthedOpsTenantsIndexRoute
   '/_authed/t/$orgSlug/': typeof AuthedTOrgSlugIndexRoute
   '/_authed/ops/tenants/$tenantId/api-keys': typeof AuthedOpsTenantsTenantIdApiKeysRoute
+  '/_authed/ops/tenants/$tenantId/approvals': typeof AuthedOpsTenantsTenantIdApprovalsRoute
   '/_authed/ops/tenants/$tenantId/biometrics': typeof AuthedOpsTenantsTenantIdBiometricsRoute
   '/_authed/ops/tenants/$tenantId/catalogue': typeof AuthedOpsTenantsTenantIdCatalogueRoute
   '/_authed/ops/tenants/$tenantId/data-protection': typeof AuthedOpsTenantsTenantIdDataProtectionRoute
@@ -439,6 +467,7 @@ export interface FileRouteTypes {
     | '/ops'
     | '/api/health'
     | '/invite/$invitationId'
+    | '/ops/approvals'
     | '/ops/audit'
     | '/ops/deliveries'
     | '/ops/health'
@@ -448,6 +477,7 @@ export interface FileRouteTypes {
     | '/ops/'
     | '/ops/tenants/$tenantId'
     | '/t/$orgSlug/api-keys'
+    | '/t/$orgSlug/approvals'
     | '/t/$orgSlug/biometrics'
     | '/t/$orgSlug/catalogue'
     | '/t/$orgSlug/data-protection'
@@ -459,6 +489,7 @@ export interface FileRouteTypes {
     | '/ops/tenants/'
     | '/t/$orgSlug/'
     | '/ops/tenants/$tenantId/api-keys'
+    | '/ops/tenants/$tenantId/approvals'
     | '/ops/tenants/$tenantId/biometrics'
     | '/ops/tenants/$tenantId/catalogue'
     | '/ops/tenants/$tenantId/data-protection'
@@ -483,6 +514,7 @@ export interface FileRouteTypes {
     | '/account'
     | '/api/health'
     | '/invite/$invitationId'
+    | '/ops/approvals'
     | '/ops/audit'
     | '/ops/deliveries'
     | '/ops/health'
@@ -490,6 +522,7 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/ops'
     | '/t/$orgSlug/api-keys'
+    | '/t/$orgSlug/approvals'
     | '/t/$orgSlug/biometrics'
     | '/t/$orgSlug/catalogue'
     | '/t/$orgSlug/data-protection'
@@ -501,6 +534,7 @@ export interface FileRouteTypes {
     | '/ops/tenants'
     | '/t/$orgSlug'
     | '/ops/tenants/$tenantId/api-keys'
+    | '/ops/tenants/$tenantId/approvals'
     | '/ops/tenants/$tenantId/biometrics'
     | '/ops/tenants/$tenantId/catalogue'
     | '/ops/tenants/$tenantId/data-protection'
@@ -527,6 +561,7 @@ export interface FileRouteTypes {
     | '/_authed/ops'
     | '/api/health'
     | '/invite/$invitationId'
+    | '/_authed/ops/approvals'
     | '/_authed/ops/audit'
     | '/_authed/ops/deliveries'
     | '/_authed/ops/health'
@@ -536,6 +571,7 @@ export interface FileRouteTypes {
     | '/_authed/ops/'
     | '/_authed/ops/tenants/$tenantId'
     | '/_authed/t/$orgSlug/api-keys'
+    | '/_authed/t/$orgSlug/approvals'
     | '/_authed/t/$orgSlug/biometrics'
     | '/_authed/t/$orgSlug/catalogue'
     | '/_authed/t/$orgSlug/data-protection'
@@ -547,6 +583,7 @@ export interface FileRouteTypes {
     | '/_authed/ops/tenants/'
     | '/_authed/t/$orgSlug/'
     | '/_authed/ops/tenants/$tenantId/api-keys'
+    | '/_authed/ops/tenants/$tenantId/approvals'
     | '/_authed/ops/tenants/$tenantId/biometrics'
     | '/_authed/ops/tenants/$tenantId/catalogue'
     | '/_authed/ops/tenants/$tenantId/data-protection'
@@ -654,6 +691,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedOpsIndexRouteImport
       parentRoute: typeof AuthedOpsRoute
     }
+    '/_authed/ops/approvals': {
+      id: '/_authed/ops/approvals'
+      path: '/approvals'
+      fullPath: '/ops/approvals'
+      preLoaderRoute: typeof AuthedOpsApprovalsRouteImport
+      parentRoute: typeof AuthedOpsRoute
+    }
     '/_authed/ops/audit': {
       id: '/_authed/ops/audit'
       path: '/audit'
@@ -724,6 +768,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedTOrgSlugApiKeysRouteImport
       parentRoute: typeof AuthedTOrgSlugRoute
     }
+    '/_authed/t/$orgSlug/approvals': {
+      id: '/_authed/t/$orgSlug/approvals'
+      path: '/approvals'
+      fullPath: '/t/$orgSlug/approvals'
+      preLoaderRoute: typeof AuthedTOrgSlugApprovalsRouteImport
+      parentRoute: typeof AuthedTOrgSlugRoute
+    }
     '/_authed/t/$orgSlug/biometrics': {
       id: '/_authed/t/$orgSlug/biometrics'
       path: '/biometrics'
@@ -792,6 +843,13 @@ declare module '@tanstack/react-router' {
       path: '/api-keys'
       fullPath: '/ops/tenants/$tenantId/api-keys'
       preLoaderRoute: typeof AuthedOpsTenantsTenantIdApiKeysRouteImport
+      parentRoute: typeof AuthedOpsTenantsTenantIdRoute
+    }
+    '/_authed/ops/tenants/$tenantId/approvals': {
+      id: '/_authed/ops/tenants/$tenantId/approvals'
+      path: '/approvals'
+      fullPath: '/ops/tenants/$tenantId/approvals'
+      preLoaderRoute: typeof AuthedOpsTenantsTenantIdApprovalsRouteImport
       parentRoute: typeof AuthedOpsTenantsTenantIdRoute
     }
     '/_authed/ops/tenants/$tenantId/biometrics': {
@@ -890,6 +948,7 @@ declare module '@tanstack/react-router' {
 
 interface AuthedOpsTenantsTenantIdRouteChildren {
   AuthedOpsTenantsTenantIdApiKeysRoute: typeof AuthedOpsTenantsTenantIdApiKeysRoute
+  AuthedOpsTenantsTenantIdApprovalsRoute: typeof AuthedOpsTenantsTenantIdApprovalsRoute
   AuthedOpsTenantsTenantIdBiometricsRoute: typeof AuthedOpsTenantsTenantIdBiometricsRoute
   AuthedOpsTenantsTenantIdCatalogueRoute: typeof AuthedOpsTenantsTenantIdCatalogueRoute
   AuthedOpsTenantsTenantIdDataProtectionRoute: typeof AuthedOpsTenantsTenantIdDataProtectionRoute
@@ -905,6 +964,8 @@ interface AuthedOpsTenantsTenantIdRouteChildren {
 const AuthedOpsTenantsTenantIdRouteChildren: AuthedOpsTenantsTenantIdRouteChildren =
   {
     AuthedOpsTenantsTenantIdApiKeysRoute: AuthedOpsTenantsTenantIdApiKeysRoute,
+    AuthedOpsTenantsTenantIdApprovalsRoute:
+      AuthedOpsTenantsTenantIdApprovalsRoute,
     AuthedOpsTenantsTenantIdBiometricsRoute:
       AuthedOpsTenantsTenantIdBiometricsRoute,
     AuthedOpsTenantsTenantIdCatalogueRoute:
@@ -931,6 +992,7 @@ const AuthedOpsTenantsTenantIdRouteWithChildren =
   )
 
 interface AuthedOpsRouteChildren {
+  AuthedOpsApprovalsRoute: typeof AuthedOpsApprovalsRoute
   AuthedOpsAuditRoute: typeof AuthedOpsAuditRoute
   AuthedOpsDeliveriesRoute: typeof AuthedOpsDeliveriesRoute
   AuthedOpsHealthRoute: typeof AuthedOpsHealthRoute
@@ -941,6 +1003,7 @@ interface AuthedOpsRouteChildren {
 }
 
 const AuthedOpsRouteChildren: AuthedOpsRouteChildren = {
+  AuthedOpsApprovalsRoute: AuthedOpsApprovalsRoute,
   AuthedOpsAuditRoute: AuthedOpsAuditRoute,
   AuthedOpsDeliveriesRoute: AuthedOpsDeliveriesRoute,
   AuthedOpsHealthRoute: AuthedOpsHealthRoute,
@@ -956,6 +1019,7 @@ const AuthedOpsRouteWithChildren = AuthedOpsRoute._addFileChildren(
 
 interface AuthedTOrgSlugRouteChildren {
   AuthedTOrgSlugApiKeysRoute: typeof AuthedTOrgSlugApiKeysRoute
+  AuthedTOrgSlugApprovalsRoute: typeof AuthedTOrgSlugApprovalsRoute
   AuthedTOrgSlugBiometricsRoute: typeof AuthedTOrgSlugBiometricsRoute
   AuthedTOrgSlugCatalogueRoute: typeof AuthedTOrgSlugCatalogueRoute
   AuthedTOrgSlugDataProtectionRoute: typeof AuthedTOrgSlugDataProtectionRoute
@@ -973,6 +1037,7 @@ interface AuthedTOrgSlugRouteChildren {
 
 const AuthedTOrgSlugRouteChildren: AuthedTOrgSlugRouteChildren = {
   AuthedTOrgSlugApiKeysRoute: AuthedTOrgSlugApiKeysRoute,
+  AuthedTOrgSlugApprovalsRoute: AuthedTOrgSlugApprovalsRoute,
   AuthedTOrgSlugBiometricsRoute: AuthedTOrgSlugBiometricsRoute,
   AuthedTOrgSlugCatalogueRoute: AuthedTOrgSlugCatalogueRoute,
   AuthedTOrgSlugDataProtectionRoute: AuthedTOrgSlugDataProtectionRoute,

@@ -20,6 +20,7 @@ import { type SQL, asc, gt, sql } from 'drizzle-orm'
 import type { Logger as PinoLogger } from 'pino'
 
 import type { Database } from './db/client.ts'
+import { purgeClosed } from './approvals/requests.ts'
 import { consoleAudit, tenants } from './db/schema.ts'
 
 /** A period a tenant or the deployment may choose: a year to ten years, or 0 to keep everything. */
@@ -98,6 +99,13 @@ export async function auditRetentionOnce(deps: AuditRetentionDeps): Promise<Audi
 
   // Rows of no tenant, and rows whose tenant id names none (a refused call on an unknown tenant).
   await purgeScope(deps, sql`(${consoleAudit.tenantId} is null or not exists (select 1 from ${tenants} where ${tenants.id} = ${consoleAudit.tenantId}))`, null, deps.defaultDays, now, report)
+
+  // Change requests that are closed (implement/22 C17) go with the audit log, on the deployment's period:
+  // what was asked and decided is in the audit rows of its own tenant for as long as that tenant keeps them.
+  if (deps.defaultDays > 0) {
+    const closed = await purgeClosed(deps.db, new Date(now.getTime() - deps.defaultDays * DAY))
+    if (closed > 0) deps.logger.info({ component: 'audit-retention', changeRequests: closed }, 'old change requests deleted')
+  }
 
   deps.logger.info({ component: 'audit-retention', ...report }, 'audit retention pass done')
   return report

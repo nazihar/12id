@@ -5,7 +5,7 @@
  */
 export const AUDIT_EVENT_METHOD = 'EVENT'
 
-export const AUDIT_KINDS = ['change', 'sign-in', 'account', 'export'] as const
+export const AUDIT_KINDS = ['change', 'sign-in', 'account', 'export', 'approval'] as const
 export type AuditKind = (typeof AUDIT_KINDS)[number]
 
 export const auditKindOptions: Array<{ value: AuditKind; label: string }> = [
@@ -13,6 +13,8 @@ export const auditKindOptions: Array<{ value: AuditKind; label: string }> = [
   { value: 'sign-in', label: 'Sign-ins' },
   { value: 'account', label: 'Accounts' },
   { value: 'export', label: 'Exports' },
+  // implement/22 C17: every call that was held, decided or applied for a second person.
+  { value: 'approval', label: 'Approvals' },
 ]
 
 const EVENT_LABELS: Record<string, string> = {

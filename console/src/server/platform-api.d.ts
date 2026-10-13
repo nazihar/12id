@@ -196,6 +196,46 @@ export interface paths {
                     };
                 };
                 /** @description Default Response */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            approval: {
+                                id: string;
+                                tenantId: string | null;
+                                type: string;
+                                label: string;
+                                /** @enum {string} */
+                                executor: "platform" | "console";
+                                /** @enum {string} */
+                                apply: "on_approval" | "by_requester";
+                                roles: string[];
+                                summary: string;
+                                change: unknown | null;
+                                before: unknown | null;
+                                /** @enum {string} */
+                                status: "pending" | "approved" | "applied" | "rejected" | "cancelled" | "expired" | "failed";
+                                requestedBy: string;
+                                requestedByLabel: string | null;
+                                requestedByRole: string;
+                                /** Format: date-time */
+                                requestedAt: string;
+                                decidedBy: string | null;
+                                decidedByLabel: string | null;
+                                decidedByRole: string | null;
+                                decidedAt: string | null;
+                                decisionReason: string | null;
+                                appliedAt: string | null;
+                                applyError: string | null;
+                                /** Format: date-time */
+                                expiresAt: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -428,6 +468,46 @@ export interface paths {
                             credentialDefinitionId: string | null;
                             qualifiedId: string | null;
                             lastError: string | null;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            approval: {
+                                id: string;
+                                tenantId: string | null;
+                                type: string;
+                                label: string;
+                                /** @enum {string} */
+                                executor: "platform" | "console";
+                                /** @enum {string} */
+                                apply: "on_approval" | "by_requester";
+                                roles: string[];
+                                summary: string;
+                                change: unknown | null;
+                                before: unknown | null;
+                                /** @enum {string} */
+                                status: "pending" | "approved" | "applied" | "rejected" | "cancelled" | "expired" | "failed";
+                                requestedBy: string;
+                                requestedByLabel: string | null;
+                                requestedByRole: string;
+                                /** Format: date-time */
+                                requestedAt: string;
+                                decidedBy: string | null;
+                                decidedByLabel: string | null;
+                                decidedByRole: string | null;
+                                decidedAt: string | null;
+                                decisionReason: string | null;
+                                appliedAt: string | null;
+                                applyError: string | null;
+                                /** Format: date-time */
+                                expiresAt: string;
+                            };
                         };
                     };
                 };
@@ -2031,6 +2111,46 @@ export interface paths {
                     };
                 };
                 /** @description Default Response */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            approval: {
+                                id: string;
+                                tenantId: string | null;
+                                type: string;
+                                label: string;
+                                /** @enum {string} */
+                                executor: "platform" | "console";
+                                /** @enum {string} */
+                                apply: "on_approval" | "by_requester";
+                                roles: string[];
+                                summary: string;
+                                change: unknown | null;
+                                before: unknown | null;
+                                /** @enum {string} */
+                                status: "pending" | "approved" | "applied" | "rejected" | "cancelled" | "expired" | "failed";
+                                requestedBy: string;
+                                requestedByLabel: string | null;
+                                requestedByRole: string;
+                                /** Format: date-time */
+                                requestedAt: string;
+                                decidedBy: string | null;
+                                decidedByLabel: string | null;
+                                decidedByRole: string | null;
+                                decidedAt: string | null;
+                                decisionReason: string | null;
+                                appliedAt: string | null;
+                                applyError: string | null;
+                                /** Format: date-time */
+                                expiresAt: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -2133,6 +2253,46 @@ export interface paths {
                             platformDefault: number;
                             /** @description The shortest period that can be set (other than 0). */
                             minimumDays: number;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            approval: {
+                                id: string;
+                                tenantId: string | null;
+                                type: string;
+                                label: string;
+                                /** @enum {string} */
+                                executor: "platform" | "console";
+                                /** @enum {string} */
+                                apply: "on_approval" | "by_requester";
+                                roles: string[];
+                                summary: string;
+                                change: unknown | null;
+                                before: unknown | null;
+                                /** @enum {string} */
+                                status: "pending" | "approved" | "applied" | "rejected" | "cancelled" | "expired" | "failed";
+                                requestedBy: string;
+                                requestedByLabel: string | null;
+                                requestedByRole: string;
+                                /** Format: date-time */
+                                requestedAt: string;
+                                decidedBy: string | null;
+                                decidedByLabel: string | null;
+                                decidedByRole: string | null;
+                                decidedAt: string | null;
+                                decisionReason: string | null;
+                                appliedAt: string | null;
+                                applyError: string | null;
+                                /** Format: date-time */
+                                expiresAt: string;
+                            };
                         };
                     };
                 };
@@ -2350,6 +2510,46 @@ export interface paths {
                     };
                 };
                 /** @description Default Response */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            approval: {
+                                id: string;
+                                tenantId: string | null;
+                                type: string;
+                                label: string;
+                                /** @enum {string} */
+                                executor: "platform" | "console";
+                                /** @enum {string} */
+                                apply: "on_approval" | "by_requester";
+                                roles: string[];
+                                summary: string;
+                                change: unknown | null;
+                                before: unknown | null;
+                                /** @enum {string} */
+                                status: "pending" | "approved" | "applied" | "rejected" | "cancelled" | "expired" | "failed";
+                                requestedBy: string;
+                                requestedByLabel: string | null;
+                                requestedByRole: string;
+                                /** Format: date-time */
+                                requestedAt: string;
+                                decidedBy: string | null;
+                                decidedByLabel: string | null;
+                                decidedByRole: string | null;
+                                decidedAt: string | null;
+                                decisionReason: string | null;
+                                appliedAt: string | null;
+                                applyError: string | null;
+                                /** Format: date-time */
+                                expiresAt: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -2478,6 +2678,46 @@ export interface paths {
                     };
                 };
                 /** @description Default Response */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            approval: {
+                                id: string;
+                                tenantId: string | null;
+                                type: string;
+                                label: string;
+                                /** @enum {string} */
+                                executor: "platform" | "console";
+                                /** @enum {string} */
+                                apply: "on_approval" | "by_requester";
+                                roles: string[];
+                                summary: string;
+                                change: unknown | null;
+                                before: unknown | null;
+                                /** @enum {string} */
+                                status: "pending" | "approved" | "applied" | "rejected" | "cancelled" | "expired" | "failed";
+                                requestedBy: string;
+                                requestedByLabel: string | null;
+                                requestedByRole: string;
+                                /** Format: date-time */
+                                requestedAt: string;
+                                decidedBy: string | null;
+                                decidedByLabel: string | null;
+                                decidedByRole: string | null;
+                                decidedAt: string | null;
+                                decisionReason: string | null;
+                                appliedAt: string | null;
+                                applyError: string | null;
+                                /** Format: date-time */
+                                expiresAt: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -2534,8 +2774,131 @@ export interface paths {
                         };
                     };
                 };
+                /** @description Default Response */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            approval: {
+                                id: string;
+                                tenantId: string | null;
+                                type: string;
+                                label: string;
+                                /** @enum {string} */
+                                executor: "platform" | "console";
+                                /** @enum {string} */
+                                apply: "on_approval" | "by_requester";
+                                roles: string[];
+                                summary: string;
+                                change: unknown | null;
+                                before: unknown | null;
+                                /** @enum {string} */
+                                status: "pending" | "approved" | "applied" | "rejected" | "cancelled" | "expired" | "failed";
+                                requestedBy: string;
+                                requestedByLabel: string | null;
+                                requestedByRole: string;
+                                /** Format: date-time */
+                                requestedAt: string;
+                                decidedBy: string | null;
+                                decidedByLabel: string | null;
+                                decidedByRole: string | null;
+                                decidedAt: string | null;
+                                decisionReason: string | null;
+                                appliedAt: string | null;
+                                applyError: string | null;
+                                /** Format: date-time */
+                                expiresAt: string;
+                            };
+                        };
+                    };
+                };
             };
         };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/biometrics/provider/pending/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Activate the provider configuration that waited for approval
+         * @description Made by platform-api itself when the change request is approved; any other caller is refused.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            enabled: boolean;
+                            defaultPolicy: {
+                                required: boolean;
+                                minMatchScore: number;
+                                minLivenessScore: number;
+                                maxAttempts: number;
+                                ttlMinutes: number;
+                            };
+                            externalId: string;
+                            provider: {
+                                id: string;
+                                publicConfig: {
+                                    [key: string]: unknown;
+                                };
+                                /** @enum {string} */
+                                status: "untested" | "ok" | "failed";
+                                lastTestedAt: string | null;
+                                lastError: string | null;
+                            } | null;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2749,6 +3112,46 @@ export interface paths {
                                 minLivenessScore?: number;
                                 maxAttempts?: number;
                                 ttlMinutes?: number;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            approval: {
+                                id: string;
+                                tenantId: string | null;
+                                type: string;
+                                label: string;
+                                /** @enum {string} */
+                                executor: "platform" | "console";
+                                /** @enum {string} */
+                                apply: "on_approval" | "by_requester";
+                                roles: string[];
+                                summary: string;
+                                change: unknown | null;
+                                before: unknown | null;
+                                /** @enum {string} */
+                                status: "pending" | "approved" | "applied" | "rejected" | "cancelled" | "expired" | "failed";
+                                requestedBy: string;
+                                requestedByLabel: string | null;
+                                requestedByRole: string;
+                                /** Format: date-time */
+                                requestedAt: string;
+                                decidedBy: string | null;
+                                decidedByLabel: string | null;
+                                decidedByRole: string | null;
+                                decidedAt: string | null;
+                                decisionReason: string | null;
+                                appliedAt: string | null;
+                                applyError: string | null;
+                                /** Format: date-time */
+                                expiresAt: string;
                             };
                         };
                     };
@@ -3027,6 +3430,46 @@ export interface paths {
                             createdAt: string;
                             /** Format: date-time */
                             updatedAt: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            approval: {
+                                id: string;
+                                tenantId: string | null;
+                                type: string;
+                                label: string;
+                                /** @enum {string} */
+                                executor: "platform" | "console";
+                                /** @enum {string} */
+                                apply: "on_approval" | "by_requester";
+                                roles: string[];
+                                summary: string;
+                                change: unknown | null;
+                                before: unknown | null;
+                                /** @enum {string} */
+                                status: "pending" | "approved" | "applied" | "rejected" | "cancelled" | "expired" | "failed";
+                                requestedBy: string;
+                                requestedByLabel: string | null;
+                                requestedByRole: string;
+                                /** Format: date-time */
+                                requestedAt: string;
+                                decidedBy: string | null;
+                                decidedByLabel: string | null;
+                                decidedByRole: string | null;
+                                decidedAt: string | null;
+                                decisionReason: string | null;
+                                appliedAt: string | null;
+                                applyError: string | null;
+                                /** Format: date-time */
+                                expiresAt: string;
+                            };
                         };
                     };
                 };
@@ -3317,6 +3760,46 @@ export interface paths {
                     };
                 };
                 /** @description Default Response */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            approval: {
+                                id: string;
+                                tenantId: string | null;
+                                type: string;
+                                label: string;
+                                /** @enum {string} */
+                                executor: "platform" | "console";
+                                /** @enum {string} */
+                                apply: "on_approval" | "by_requester";
+                                roles: string[];
+                                summary: string;
+                                change: unknown | null;
+                                before: unknown | null;
+                                /** @enum {string} */
+                                status: "pending" | "approved" | "applied" | "rejected" | "cancelled" | "expired" | "failed";
+                                requestedBy: string;
+                                requestedByLabel: string | null;
+                                requestedByRole: string;
+                                /** Format: date-time */
+                                requestedAt: string;
+                                decidedBy: string | null;
+                                decidedByLabel: string | null;
+                                decidedByRole: string | null;
+                                decidedAt: string | null;
+                                decisionReason: string | null;
+                                appliedAt: string | null;
+                                applyError: string | null;
+                                /** Format: date-time */
+                                expiresAt: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -3375,6 +3858,46 @@ export interface paths {
                     content: {
                         "application/json": {
                             deleted: boolean;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            approval: {
+                                id: string;
+                                tenantId: string | null;
+                                type: string;
+                                label: string;
+                                /** @enum {string} */
+                                executor: "platform" | "console";
+                                /** @enum {string} */
+                                apply: "on_approval" | "by_requester";
+                                roles: string[];
+                                summary: string;
+                                change: unknown | null;
+                                before: unknown | null;
+                                /** @enum {string} */
+                                status: "pending" | "approved" | "applied" | "rejected" | "cancelled" | "expired" | "failed";
+                                requestedBy: string;
+                                requestedByLabel: string | null;
+                                requestedByRole: string;
+                                /** Format: date-time */
+                                requestedAt: string;
+                                decidedBy: string | null;
+                                decidedByLabel: string | null;
+                                decidedByRole: string | null;
+                                decidedAt: string | null;
+                                decisionReason: string | null;
+                                appliedAt: string | null;
+                                applyError: string | null;
+                                /** Format: date-time */
+                                expiresAt: string;
+                            };
                         };
                     };
                 };
@@ -3580,6 +4103,46 @@ export interface paths {
                                 minLivenessScore?: number;
                                 maxAttempts?: number;
                                 ttlMinutes?: number;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            approval: {
+                                id: string;
+                                tenantId: string | null;
+                                type: string;
+                                label: string;
+                                /** @enum {string} */
+                                executor: "platform" | "console";
+                                /** @enum {string} */
+                                apply: "on_approval" | "by_requester";
+                                roles: string[];
+                                summary: string;
+                                change: unknown | null;
+                                before: unknown | null;
+                                /** @enum {string} */
+                                status: "pending" | "approved" | "applied" | "rejected" | "cancelled" | "expired" | "failed";
+                                requestedBy: string;
+                                requestedByLabel: string | null;
+                                requestedByRole: string;
+                                /** Format: date-time */
+                                requestedAt: string;
+                                decidedBy: string | null;
+                                decidedByLabel: string | null;
+                                decidedByRole: string | null;
+                                decidedAt: string | null;
+                                decisionReason: string | null;
+                                appliedAt: string | null;
+                                applyError: string | null;
+                                /** Format: date-time */
+                                expiresAt: string;
                             };
                         };
                     };
@@ -3929,6 +4492,46 @@ export interface paths {
                     };
                 };
                 /** @description Default Response */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            approval: {
+                                id: string;
+                                tenantId: string | null;
+                                type: string;
+                                label: string;
+                                /** @enum {string} */
+                                executor: "platform" | "console";
+                                /** @enum {string} */
+                                apply: "on_approval" | "by_requester";
+                                roles: string[];
+                                summary: string;
+                                change: unknown | null;
+                                before: unknown | null;
+                                /** @enum {string} */
+                                status: "pending" | "approved" | "applied" | "rejected" | "cancelled" | "expired" | "failed";
+                                requestedBy: string;
+                                requestedByLabel: string | null;
+                                requestedByRole: string;
+                                /** Format: date-time */
+                                requestedAt: string;
+                                decidedBy: string | null;
+                                decidedByLabel: string | null;
+                                decidedByRole: string | null;
+                                decidedAt: string | null;
+                                decisionReason: string | null;
+                                appliedAt: string | null;
+                                applyError: string | null;
+                                /** Format: date-time */
+                                expiresAt: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -3961,6 +4564,46 @@ export interface paths {
                     content: {
                         "application/json": {
                             deleted: boolean;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            approval: {
+                                id: string;
+                                tenantId: string | null;
+                                type: string;
+                                label: string;
+                                /** @enum {string} */
+                                executor: "platform" | "console";
+                                /** @enum {string} */
+                                apply: "on_approval" | "by_requester";
+                                roles: string[];
+                                summary: string;
+                                change: unknown | null;
+                                before: unknown | null;
+                                /** @enum {string} */
+                                status: "pending" | "approved" | "applied" | "rejected" | "cancelled" | "expired" | "failed";
+                                requestedBy: string;
+                                requestedByLabel: string | null;
+                                requestedByRole: string;
+                                /** Format: date-time */
+                                requestedAt: string;
+                                decidedBy: string | null;
+                                decidedByLabel: string | null;
+                                decidedByRole: string | null;
+                                decidedAt: string | null;
+                                decisionReason: string | null;
+                                appliedAt: string | null;
+                                applyError: string | null;
+                                /** Format: date-time */
+                                expiresAt: string;
+                            };
                         };
                     };
                 };
@@ -4025,6 +4668,46 @@ export interface paths {
                     content: {
                         "application/json": {
                             secret: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            approval: {
+                                id: string;
+                                tenantId: string | null;
+                                type: string;
+                                label: string;
+                                /** @enum {string} */
+                                executor: "platform" | "console";
+                                /** @enum {string} */
+                                apply: "on_approval" | "by_requester";
+                                roles: string[];
+                                summary: string;
+                                change: unknown | null;
+                                before: unknown | null;
+                                /** @enum {string} */
+                                status: "pending" | "approved" | "applied" | "rejected" | "cancelled" | "expired" | "failed";
+                                requestedBy: string;
+                                requestedByLabel: string | null;
+                                requestedByRole: string;
+                                /** Format: date-time */
+                                requestedAt: string;
+                                decidedBy: string | null;
+                                decidedByLabel: string | null;
+                                decidedByRole: string | null;
+                                decidedAt: string | null;
+                                decisionReason: string | null;
+                                appliedAt: string | null;
+                                applyError: string | null;
+                                /** Format: date-time */
+                                expiresAt: string;
+                            };
                         };
                     };
                 };
@@ -4384,6 +5067,46 @@ export interface paths {
                             lastUsedAt: string | null;
                             revokedAt: string | null;
                             apiKey: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            approval: {
+                                id: string;
+                                tenantId: string | null;
+                                type: string;
+                                label: string;
+                                /** @enum {string} */
+                                executor: "platform" | "console";
+                                /** @enum {string} */
+                                apply: "on_approval" | "by_requester";
+                                roles: string[];
+                                summary: string;
+                                change: unknown | null;
+                                before: unknown | null;
+                                /** @enum {string} */
+                                status: "pending" | "approved" | "applied" | "rejected" | "cancelled" | "expired" | "failed";
+                                requestedBy: string;
+                                requestedByLabel: string | null;
+                                requestedByRole: string;
+                                /** Format: date-time */
+                                requestedAt: string;
+                                decidedBy: string | null;
+                                decidedByLabel: string | null;
+                                decidedByRole: string | null;
+                                decidedAt: string | null;
+                                decisionReason: string | null;
+                                appliedAt: string | null;
+                                applyError: string | null;
+                                /** Format: date-time */
+                                expiresAt: string;
+                            };
                         };
                     };
                 };
@@ -4944,6 +5667,966 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Whether sensitive changes need a second person, and which */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            required: boolean;
+                            types: {
+                                id: string;
+                                label: string;
+                                /** @enum {string} */
+                                apply: "on_approval" | "by_requester";
+                                /** @enum {string} */
+                                executor: "platform" | "console";
+                            }[];
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
+        /**
+         * Require a second person for sensitive changes, or stop
+         * @description Switching on takes effect at once. Switching off is itself a change that waits for a second person.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        required: boolean;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            required: boolean;
+                            types: {
+                                id: string;
+                                label: string;
+                                /** @enum {string} */
+                                apply: "on_approval" | "by_requester";
+                                /** @enum {string} */
+                                executor: "platform" | "console";
+                            }[];
+                        };
+                    };
+                };
+                /** @description Default Response */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            approval: {
+                                id: string;
+                                tenantId: string | null;
+                                type: string;
+                                label: string;
+                                /** @enum {string} */
+                                executor: "platform" | "console";
+                                /** @enum {string} */
+                                apply: "on_approval" | "by_requester";
+                                roles: string[];
+                                summary: string;
+                                change: unknown | null;
+                                before: unknown | null;
+                                /** @enum {string} */
+                                status: "pending" | "approved" | "applied" | "rejected" | "cancelled" | "expired" | "failed";
+                                requestedBy: string;
+                                requestedByLabel: string | null;
+                                requestedByRole: string;
+                                /** Format: date-time */
+                                requestedAt: string;
+                                decidedBy: string | null;
+                                decidedByLabel: string | null;
+                                decidedByRole: string | null;
+                                decidedAt: string | null;
+                                decisionReason: string | null;
+                                appliedAt: string | null;
+                                applyError: string | null;
+                                /** Format: date-time */
+                                expiresAt: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/change-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List change requests
+         * @description Newest first, paged. `status` keeps one or more states; the open ones are `pending` and `approved`.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    page?: number;
+                    /** @description 25, 50 or 100. */
+                    pageSize?: number;
+                    /** @description One or more of: pending, approved, applied, rejected, cancelled, expired, failed. */
+                    status?: string | string[];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items: {
+                                id: string;
+                                tenantId: string | null;
+                                type: string;
+                                label: string;
+                                /** @enum {string} */
+                                executor: "platform" | "console";
+                                /** @enum {string} */
+                                apply: "on_approval" | "by_requester";
+                                roles: string[];
+                                summary: string;
+                                change: unknown | null;
+                                before: unknown | null;
+                                /** @enum {string} */
+                                status: "pending" | "approved" | "applied" | "rejected" | "cancelled" | "expired" | "failed";
+                                requestedBy: string;
+                                requestedByLabel: string | null;
+                                requestedByRole: string;
+                                /** Format: date-time */
+                                requestedAt: string;
+                                decidedBy: string | null;
+                                decidedByLabel: string | null;
+                                decidedByRole: string | null;
+                                decidedAt: string | null;
+                                decisionReason: string | null;
+                                appliedAt: string | null;
+                                applyError: string | null;
+                                /** Format: date-time */
+                                expiresAt: string;
+                            }[];
+                            total: number;
+                            page: number;
+                            pageSize: number;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Ask for a change the console performs itself
+         * @description Account actions (members, operators) run through the console, so the console stores the request here and performs the action once it is approved. `payload` is what it needs for that; it must hold no secret.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        type: "member.invite" | "member.role";
+                        payload: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            id: string;
+                            tenantId: string | null;
+                            type: string;
+                            label: string;
+                            /** @enum {string} */
+                            executor: "platform" | "console";
+                            /** @enum {string} */
+                            apply: "on_approval" | "by_requester";
+                            roles: string[];
+                            summary: string;
+                            change: unknown | null;
+                            before: unknown | null;
+                            /** @enum {string} */
+                            status: "pending" | "approved" | "applied" | "rejected" | "cancelled" | "expired" | "failed";
+                            requestedBy: string;
+                            requestedByLabel: string | null;
+                            requestedByRole: string;
+                            /** Format: date-time */
+                            requestedAt: string;
+                            decidedBy: string | null;
+                            decidedByLabel: string | null;
+                            decidedByRole: string | null;
+                            decidedAt: string | null;
+                            decisionReason: string | null;
+                            appliedAt: string | null;
+                            applyError: string | null;
+                            /** Format: date-time */
+                            expiresAt: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/change-requests/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a change request */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            id: string;
+                            tenantId: string | null;
+                            type: string;
+                            label: string;
+                            /** @enum {string} */
+                            executor: "platform" | "console";
+                            /** @enum {string} */
+                            apply: "on_approval" | "by_requester";
+                            roles: string[];
+                            summary: string;
+                            change: unknown | null;
+                            before: unknown | null;
+                            /** @enum {string} */
+                            status: "pending" | "approved" | "applied" | "rejected" | "cancelled" | "expired" | "failed";
+                            requestedBy: string;
+                            requestedByLabel: string | null;
+                            requestedByRole: string;
+                            /** Format: date-time */
+                            requestedAt: string;
+                            decidedBy: string | null;
+                            decidedByLabel: string | null;
+                            decidedByRole: string | null;
+                            decidedAt: string | null;
+                            decisionReason: string | null;
+                            appliedAt: string | null;
+                            applyError: string | null;
+                            /** Format: date-time */
+                            expiresAt: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/change-requests/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve a change request
+         * @description Not by the person who asked, and only by a role that could have made the change. Most changes take effect at once: the stored call is made again, and if it no longer fits the request ends as `failed` with the reason. A change that hands out a secret, or that the console performs, stays `approved` until the person who asked applies it.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            id: string;
+                            tenantId: string | null;
+                            type: string;
+                            label: string;
+                            /** @enum {string} */
+                            executor: "platform" | "console";
+                            /** @enum {string} */
+                            apply: "on_approval" | "by_requester";
+                            roles: string[];
+                            summary: string;
+                            change: unknown | null;
+                            before: unknown | null;
+                            /** @enum {string} */
+                            status: "pending" | "approved" | "applied" | "rejected" | "cancelled" | "expired" | "failed";
+                            requestedBy: string;
+                            requestedByLabel: string | null;
+                            requestedByRole: string;
+                            /** Format: date-time */
+                            requestedAt: string;
+                            decidedBy: string | null;
+                            decidedByLabel: string | null;
+                            decidedByRole: string | null;
+                            decidedAt: string | null;
+                            decisionReason: string | null;
+                            appliedAt: string | null;
+                            applyError: string | null;
+                            /** Format: date-time */
+                            expiresAt: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/change-requests/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject a change request */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        reason: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            id: string;
+                            tenantId: string | null;
+                            type: string;
+                            label: string;
+                            /** @enum {string} */
+                            executor: "platform" | "console";
+                            /** @enum {string} */
+                            apply: "on_approval" | "by_requester";
+                            roles: string[];
+                            summary: string;
+                            change: unknown | null;
+                            before: unknown | null;
+                            /** @enum {string} */
+                            status: "pending" | "approved" | "applied" | "rejected" | "cancelled" | "expired" | "failed";
+                            requestedBy: string;
+                            requestedByLabel: string | null;
+                            requestedByRole: string;
+                            /** Format: date-time */
+                            requestedAt: string;
+                            decidedBy: string | null;
+                            decidedByLabel: string | null;
+                            decidedByRole: string | null;
+                            decidedAt: string | null;
+                            decisionReason: string | null;
+                            appliedAt: string | null;
+                            applyError: string | null;
+                            /** Format: date-time */
+                            expiresAt: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/change-requests/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel your own change request */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            id: string;
+                            tenantId: string | null;
+                            type: string;
+                            label: string;
+                            /** @enum {string} */
+                            executor: "platform" | "console";
+                            /** @enum {string} */
+                            apply: "on_approval" | "by_requester";
+                            roles: string[];
+                            summary: string;
+                            change: unknown | null;
+                            before: unknown | null;
+                            /** @enum {string} */
+                            status: "pending" | "approved" | "applied" | "rejected" | "cancelled" | "expired" | "failed";
+                            requestedBy: string;
+                            requestedByLabel: string | null;
+                            requestedByRole: string;
+                            /** Format: date-time */
+                            requestedAt: string;
+                            decidedBy: string | null;
+                            decidedByLabel: string | null;
+                            decidedByRole: string | null;
+                            decidedAt: string | null;
+                            decisionReason: string | null;
+                            appliedAt: string | null;
+                            applyError: string | null;
+                            /** Format: date-time */
+                            expiresAt: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/change-requests/{id}/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply an approved change request
+         * @description Only the person who asked. A platform change is made now and its answer returned (a new API key or signing secret is shown here, once). For a console change the stored `payload` is returned; the console performs it and reports to `…/applied`.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            request: {
+                                id: string;
+                                tenantId: string | null;
+                                type: string;
+                                label: string;
+                                /** @enum {string} */
+                                executor: "platform" | "console";
+                                /** @enum {string} */
+                                apply: "on_approval" | "by_requester";
+                                roles: string[];
+                                summary: string;
+                                change: unknown | null;
+                                before: unknown | null;
+                                /** @enum {string} */
+                                status: "pending" | "approved" | "applied" | "rejected" | "cancelled" | "expired" | "failed";
+                                requestedBy: string;
+                                requestedByLabel: string | null;
+                                requestedByRole: string;
+                                /** Format: date-time */
+                                requestedAt: string;
+                                decidedBy: string | null;
+                                decidedByLabel: string | null;
+                                decidedByRole: string | null;
+                                decidedAt: string | null;
+                                decisionReason: string | null;
+                                appliedAt: string | null;
+                                applyError: string | null;
+                                /** Format: date-time */
+                                expiresAt: string;
+                            };
+                            result: {
+                                statusCode: number;
+                                body: unknown;
+                            } | null;
+                            payload: {
+                                [key: string]: unknown;
+                            } | null;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/change-requests/{id}/applied": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Report the outcome of a console change */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        ok: boolean;
+                        error?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            id: string;
+                            tenantId: string | null;
+                            type: string;
+                            label: string;
+                            /** @enum {string} */
+                            executor: "platform" | "console";
+                            /** @enum {string} */
+                            apply: "on_approval" | "by_requester";
+                            roles: string[];
+                            summary: string;
+                            change: unknown | null;
+                            before: unknown | null;
+                            /** @enum {string} */
+                            status: "pending" | "approved" | "applied" | "rejected" | "cancelled" | "expired" | "failed";
+                            requestedBy: string;
+                            requestedByLabel: string | null;
+                            requestedByRole: string;
+                            /** Format: date-time */
+                            requestedAt: string;
+                            decidedBy: string | null;
+                            decidedByLabel: string | null;
+                            decidedByRole: string | null;
+                            decidedAt: string | null;
+                            decisionReason: string | null;
+                            appliedAt: string | null;
+                            applyError: string | null;
+                            /** Format: date-time */
+                            expiresAt: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -5845,7 +7528,7 @@ export interface paths {
         };
         /**
          * Console audit log
-         * @description Newest first, paged. Each change carries its route parameters and request body, with secrets and personal data replaced. Sign-ins, account changes and exports are rows with method `EVENT` and their type as the route. `kind` keeps one family: `change` (calls that went through this API), `sign-in`, `account` or `export`. `q` matches the route pattern or event type, the actor id or the actor label (email), or any of the `qActor` ids (the console resolves names and emails to account ids); `actor` restricts to one or more actor ids.
+         * @description Newest first, paged. Each change carries its route parameters and request body, with secrets and personal data replaced. Sign-ins, account changes and exports are rows with method `EVENT` and their type as the route. `kind` keeps one family: `change` (calls that went through this API), `sign-in`, `account`, `export`, or `approval` (everything about a change that waited for a second person). `q` matches the route pattern or event type, the actor id or the actor label (email), or any of the `qActor` ids (the console resolves names and emails to account ids); `actor` restricts to one or more actor ids.
          */
         get: {
             parameters: {
@@ -5860,7 +7543,7 @@ export interface paths {
                     /** @description Case-insensitive contains match. */
                     q?: string;
                     tenantId?: string;
-                    kind?: "change" | "sign-in" | "account" | "export";
+                    kind?: "change" | "sign-in" | "account" | "export" | "approval";
                     actor?: string | string[];
                     qActor?: string | string[];
                 };
@@ -6109,6 +7792,863 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Whether changes to operator accounts need a second operator */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            required: boolean;
+                            types: {
+                                id: string;
+                                label: string;
+                                /** @enum {string} */
+                                apply: "on_approval" | "by_requester";
+                                /** @enum {string} */
+                                executor: "platform" | "console";
+                            }[];
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/change-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List change requests
+         * @description Newest first, paged. `status` keeps one or more states; the open ones are `pending` and `approved`.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    page?: number;
+                    /** @description 25, 50 or 100. */
+                    pageSize?: number;
+                    /** @description One or more of: pending, approved, applied, rejected, cancelled, expired, failed. */
+                    status?: string | string[];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items: {
+                                id: string;
+                                tenantId: string | null;
+                                type: string;
+                                label: string;
+                                /** @enum {string} */
+                                executor: "platform" | "console";
+                                /** @enum {string} */
+                                apply: "on_approval" | "by_requester";
+                                roles: string[];
+                                summary: string;
+                                change: unknown | null;
+                                before: unknown | null;
+                                /** @enum {string} */
+                                status: "pending" | "approved" | "applied" | "rejected" | "cancelled" | "expired" | "failed";
+                                requestedBy: string;
+                                requestedByLabel: string | null;
+                                requestedByRole: string;
+                                /** Format: date-time */
+                                requestedAt: string;
+                                decidedBy: string | null;
+                                decidedByLabel: string | null;
+                                decidedByRole: string | null;
+                                decidedAt: string | null;
+                                decisionReason: string | null;
+                                appliedAt: string | null;
+                                applyError: string | null;
+                                /** Format: date-time */
+                                expiresAt: string;
+                            }[];
+                            total: number;
+                            page: number;
+                            pageSize: number;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Ask for a change the console performs itself
+         * @description Account actions (members, operators) run through the console, so the console stores the request here and performs the action once it is approved. `payload` is what it needs for that; it must hold no secret.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        type: "operator.invite" | "operator.role" | "operator.unban";
+                        payload: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            id: string;
+                            tenantId: string | null;
+                            type: string;
+                            label: string;
+                            /** @enum {string} */
+                            executor: "platform" | "console";
+                            /** @enum {string} */
+                            apply: "on_approval" | "by_requester";
+                            roles: string[];
+                            summary: string;
+                            change: unknown | null;
+                            before: unknown | null;
+                            /** @enum {string} */
+                            status: "pending" | "approved" | "applied" | "rejected" | "cancelled" | "expired" | "failed";
+                            requestedBy: string;
+                            requestedByLabel: string | null;
+                            requestedByRole: string;
+                            /** Format: date-time */
+                            requestedAt: string;
+                            decidedBy: string | null;
+                            decidedByLabel: string | null;
+                            decidedByRole: string | null;
+                            decidedAt: string | null;
+                            decisionReason: string | null;
+                            appliedAt: string | null;
+                            applyError: string | null;
+                            /** Format: date-time */
+                            expiresAt: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/change-requests/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a change request */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            id: string;
+                            tenantId: string | null;
+                            type: string;
+                            label: string;
+                            /** @enum {string} */
+                            executor: "platform" | "console";
+                            /** @enum {string} */
+                            apply: "on_approval" | "by_requester";
+                            roles: string[];
+                            summary: string;
+                            change: unknown | null;
+                            before: unknown | null;
+                            /** @enum {string} */
+                            status: "pending" | "approved" | "applied" | "rejected" | "cancelled" | "expired" | "failed";
+                            requestedBy: string;
+                            requestedByLabel: string | null;
+                            requestedByRole: string;
+                            /** Format: date-time */
+                            requestedAt: string;
+                            decidedBy: string | null;
+                            decidedByLabel: string | null;
+                            decidedByRole: string | null;
+                            decidedAt: string | null;
+                            decisionReason: string | null;
+                            appliedAt: string | null;
+                            applyError: string | null;
+                            /** Format: date-time */
+                            expiresAt: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/change-requests/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve a change request
+         * @description Not by the person who asked, and only by a role that could have made the change. Most changes take effect at once: the stored call is made again, and if it no longer fits the request ends as `failed` with the reason. A change that hands out a secret, or that the console performs, stays `approved` until the person who asked applies it.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            id: string;
+                            tenantId: string | null;
+                            type: string;
+                            label: string;
+                            /** @enum {string} */
+                            executor: "platform" | "console";
+                            /** @enum {string} */
+                            apply: "on_approval" | "by_requester";
+                            roles: string[];
+                            summary: string;
+                            change: unknown | null;
+                            before: unknown | null;
+                            /** @enum {string} */
+                            status: "pending" | "approved" | "applied" | "rejected" | "cancelled" | "expired" | "failed";
+                            requestedBy: string;
+                            requestedByLabel: string | null;
+                            requestedByRole: string;
+                            /** Format: date-time */
+                            requestedAt: string;
+                            decidedBy: string | null;
+                            decidedByLabel: string | null;
+                            decidedByRole: string | null;
+                            decidedAt: string | null;
+                            decisionReason: string | null;
+                            appliedAt: string | null;
+                            applyError: string | null;
+                            /** Format: date-time */
+                            expiresAt: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/change-requests/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject a change request */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        reason: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            id: string;
+                            tenantId: string | null;
+                            type: string;
+                            label: string;
+                            /** @enum {string} */
+                            executor: "platform" | "console";
+                            /** @enum {string} */
+                            apply: "on_approval" | "by_requester";
+                            roles: string[];
+                            summary: string;
+                            change: unknown | null;
+                            before: unknown | null;
+                            /** @enum {string} */
+                            status: "pending" | "approved" | "applied" | "rejected" | "cancelled" | "expired" | "failed";
+                            requestedBy: string;
+                            requestedByLabel: string | null;
+                            requestedByRole: string;
+                            /** Format: date-time */
+                            requestedAt: string;
+                            decidedBy: string | null;
+                            decidedByLabel: string | null;
+                            decidedByRole: string | null;
+                            decidedAt: string | null;
+                            decisionReason: string | null;
+                            appliedAt: string | null;
+                            applyError: string | null;
+                            /** Format: date-time */
+                            expiresAt: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/change-requests/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel your own change request */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            id: string;
+                            tenantId: string | null;
+                            type: string;
+                            label: string;
+                            /** @enum {string} */
+                            executor: "platform" | "console";
+                            /** @enum {string} */
+                            apply: "on_approval" | "by_requester";
+                            roles: string[];
+                            summary: string;
+                            change: unknown | null;
+                            before: unknown | null;
+                            /** @enum {string} */
+                            status: "pending" | "approved" | "applied" | "rejected" | "cancelled" | "expired" | "failed";
+                            requestedBy: string;
+                            requestedByLabel: string | null;
+                            requestedByRole: string;
+                            /** Format: date-time */
+                            requestedAt: string;
+                            decidedBy: string | null;
+                            decidedByLabel: string | null;
+                            decidedByRole: string | null;
+                            decidedAt: string | null;
+                            decisionReason: string | null;
+                            appliedAt: string | null;
+                            applyError: string | null;
+                            /** Format: date-time */
+                            expiresAt: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/change-requests/{id}/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply an approved change request
+         * @description Only the person who asked. A platform change is made now and its answer returned (a new API key or signing secret is shown here, once). For a console change the stored `payload` is returned; the console performs it and reports to `…/applied`.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            request: {
+                                id: string;
+                                tenantId: string | null;
+                                type: string;
+                                label: string;
+                                /** @enum {string} */
+                                executor: "platform" | "console";
+                                /** @enum {string} */
+                                apply: "on_approval" | "by_requester";
+                                roles: string[];
+                                summary: string;
+                                change: unknown | null;
+                                before: unknown | null;
+                                /** @enum {string} */
+                                status: "pending" | "approved" | "applied" | "rejected" | "cancelled" | "expired" | "failed";
+                                requestedBy: string;
+                                requestedByLabel: string | null;
+                                requestedByRole: string;
+                                /** Format: date-time */
+                                requestedAt: string;
+                                decidedBy: string | null;
+                                decidedByLabel: string | null;
+                                decidedByRole: string | null;
+                                decidedAt: string | null;
+                                decisionReason: string | null;
+                                appliedAt: string | null;
+                                applyError: string | null;
+                                /** Format: date-time */
+                                expiresAt: string;
+                            };
+                            result: {
+                                statusCode: number;
+                                body: unknown;
+                            } | null;
+                            payload: {
+                                [key: string]: unknown;
+                            } | null;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/change-requests/{id}/applied": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Report the outcome of a console change */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        ok: boolean;
+                        error?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            id: string;
+                            tenantId: string | null;
+                            type: string;
+                            label: string;
+                            /** @enum {string} */
+                            executor: "platform" | "console";
+                            /** @enum {string} */
+                            apply: "on_approval" | "by_requester";
+                            roles: string[];
+                            summary: string;
+                            change: unknown | null;
+                            before: unknown | null;
+                            /** @enum {string} */
+                            status: "pending" | "approved" | "applied" | "rejected" | "cancelled" | "expired" | "failed";
+                            requestedBy: string;
+                            requestedByLabel: string | null;
+                            requestedByRole: string;
+                            /** Format: date-time */
+                            requestedAt: string;
+                            decidedBy: string | null;
+                            decidedByLabel: string | null;
+                            decidedByRole: string | null;
+                            decidedAt: string | null;
+                            decisionReason: string | null;
+                            appliedAt: string | null;
+                            applyError: string | null;
+                            /** Format: date-time */
+                            expiresAt: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;

@@ -17,6 +17,8 @@ import { SelectFilter } from '@/components/data-table/list-toolbar'
 import { useListPending } from '@/components/data-table/use-list-pending'
 import { formatDateTime } from '@/lib/format'
 import { isFiltered, pagingFor, resetFor, parseListSearch, searchPatcher } from '@/lib/list-search'
+import { announceHeld } from '@/lib/held'
+import { OpsPendingChanges } from '@/features/approvals/pending-changes'
 
 type OperatorRow = Awaited<ReturnType<typeof listOperators>>['items'][number]
 
@@ -44,6 +46,7 @@ function OperatorsPage() {
         description="Staff with access to every tenant. An operator can change things; an auditor only reads, and never sees personal data unmasked."
         actions={viewer.isOperator ? <InviteOperatorDialog /> : undefined}
       />
+      <OpsPendingChanges types={['operator.']} />
       <DataTable
         columns={operatorColumns(viewer.userId, viewer.isOperator)}
         data={data.items}
@@ -97,7 +100,8 @@ function OperatorActions({ operator }: { operator: OperatorRow }) {
   })
   const unban = useMutation({
     mutationFn: () => unbanOperator({ data: { userId: operator.id } }),
-    onSuccess: async () => {
+    onSuccess: async (result) => {
+      if (announceHeld(result, queryClient)) return
       toast.success(`${operator.email} can sign in again.`)
       await refresh()
     },

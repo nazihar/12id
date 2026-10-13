@@ -12,6 +12,7 @@ import { changeMemberRole, inviteMember } from '@/features/portal/members.functi
 import { type InviteMemberInput, type MemberRoleInput, ROLE_HELP, TENANT_ROLES, inviteMemberInput, memberRoleInput } from '@/features/portal/members.schemas'
 import { portalKey } from '@/features/portal/portal.queries'
 import type { TenantRole } from '@/lib/permissions'
+import { announceHeld } from '@/lib/held'
 
 const ROLE_OPTIONS: ChoiceOption<TenantRole>[] = TENANT_ROLES.map((role) => ({ value: role, label: role, description: ROLE_HELP[role] }))
 
@@ -37,6 +38,7 @@ function InviteMemberForm({ organizationId, orgSlug, onDone }: { organizationId:
   const invite = useMutation({
     mutationFn: (input: InviteMemberInput) => inviteMember({ data: { organizationId, ...input } }),
     onSuccess: async (result) => {
+      if (announceHeld(result, queryClient)) return
       toast.success(`Invitation sent to ${result.email}.`)
       await queryClient.invalidateQueries({ queryKey: portalKey(orgSlug, 'members') })
     },
@@ -77,7 +79,8 @@ function ChangeRoleForm({ organizationId, orgSlug, member, onDone }: { organizat
   const queryClient = useQueryClient()
   const change = useMutation({
     mutationFn: (input: MemberRoleInput) => changeMemberRole({ data: { organizationId, memberId: member.id, role: input.role } }),
-    onSuccess: async () => {
+    onSuccess: async (result) => {
+      if (announceHeld(result, queryClient)) return
       toast.success('Role changed.')
       await queryClient.invalidateQueries({ queryKey: portalKey(orgSlug, 'members') })
     },

@@ -28,6 +28,7 @@ import {
 } from '@/features/portal/biometrics.schemas'
 import { getPortalCredentialDefinitionPolicy, getPortalTemplatePolicy, savePortalCredentialDefinitionPolicy, savePortalTemplatePolicy } from '@/features/portal/portal-data.functions'
 import { portalKey } from '@/features/portal/portal.queries'
+import { announceHeld } from '@/lib/held'
 
 const DEFAULT_NUMBERS = { minMatchScore: 90, minLivenessScore: 90, maxAttempts: 3 }
 
@@ -112,7 +113,8 @@ function PolicyForm({ initial, subject, orgSlug, onDone }: { initial: TemplateBi
   const queryClient = useQueryClient()
   const save = useMutation({
     mutationFn: subject.save,
-    onSuccess: async () => {
+    onSuccess: async (saved) => {
+      if (announceHeld(saved, queryClient)) return
       toast.success('Face check policy saved.')
       await queryClient.invalidateQueries({ queryKey: portalKey(orgSlug, 'biometric-policy', subject.key) })
       // The templates list shows each template's face-check mode.

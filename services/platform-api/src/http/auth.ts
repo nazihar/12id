@@ -43,6 +43,8 @@ export interface TenantContext {
   status: string
   /** Operator override of the per-API-key limit (review M4); null = the configured default. */
   rateLimitPerMin?: number | null
+  /** Sensitive changes by the console wait for a second person (implement/22 C17). Only read for console callers. */
+  approvalsRequired?: boolean
   principal: Principal
 }
 
@@ -147,7 +149,7 @@ export function requireTenantPrincipal(db: Database, consoleToken: string | unde
     if ('error' in identity) return unauthorized(reply, identity.error)
     const tenantId = headerValue(request, CONSOLE_TENANT_HEADER)
     if (!isUuid(tenantId)) return unauthorized(reply, 'missing or malformed console tenant')
-    const [row] = await db.select({ id: tenants.id, agentTenantId: tenants.agentTenantId, name: tenants.name, status: tenants.status }).from(tenants).where(eq(tenants.id, tenantId))
+    const [row] = await db.select({ id: tenants.id, agentTenantId: tenants.agentTenantId, name: tenants.name, status: tenants.status, approvalsRequired: tenants.approvalsRequired }).from(tenants).where(eq(tenants.id, tenantId))
     if (!row) return unauthorized(reply, 'unknown console tenant')
     if (identity.role === 'auditor' && !isRead(request)) return forbidden(reply, AUDITOR_READ_ONLY)
     request.tenant = { ...row, principal: { kind: 'console', actor: identity.actor, role: identity.role, actorLabel: identity.actorLabel } }

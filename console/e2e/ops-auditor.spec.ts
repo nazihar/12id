@@ -107,6 +107,9 @@ test('an auditor reads the operator area and changes nothing; an operator edits 
   // Deleted: the account is gone and its session with it.
   await page.getByRole('button', { name: `Delete ${auditorEmail}` }).click()
   await page.getByRole('alertdialog').getByRole('button', { name: 'Delete account' }).click()
+  // Wait for the deletion itself: while the dialog is open the table is hidden from the accessibility
+  // tree, so "no such row" would be true before anything was deleted.
+  await expect(page.getByText(`${auditorEmail} was deleted.`)).toBeVisible()
   await expect(row(page, auditorEmail)).toHaveCount(0)
   await auditor.goto('/ops')
   await expect(auditor).toHaveURL(/\/login/)

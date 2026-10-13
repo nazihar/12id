@@ -18,6 +18,7 @@ import { type TenantContext, requireConsolePrincipal } from '../auth.ts'
 import { PlatformError } from '../errors.ts'
 import { listPage, newestFirst, pageOf, pageQuery } from '../list.ts'
 import { CONSOLE_ONLY_TAG } from './console.ts'
+import { held } from '../../approvals/requests.ts'
 
 const errorBody = z.object({ error: z.string(), reason: z.string() })
 const MAX_DAYS = 3650
@@ -69,11 +70,12 @@ export const dataProtectionRoutes = (deps: { db: Database; defaultRetentionDays:
   app.put(
     '/v1/data-retention',
     {
+      config: { approval: 'retention.data' },
       schema: {
         tags: ['data protection', CONSOLE_ONLY_TAG],
         summary: 'Set the retention period',
         body: z.object({ retentionDays: z.number().int().min(0).max(MAX_DAYS).nullable().describe('Days; 0 = keep until erased on request; null = the platform default.') }),
-        response: { 200: retentionView, 403: errorBody },
+        response: { 200: retentionView, ...held, 403: errorBody },
       },
     },
     async (request) => {
@@ -113,6 +115,7 @@ export const dataProtectionRoutes = (deps: { db: Database; defaultRetentionDays:
   app.put(
     '/v1/audit-retention',
     {
+      config: { approval: 'retention.audit' },
       schema: {
         tags: auditTags,
         summary: 'Set the audit log period',
@@ -124,7 +127,7 @@ export const dataProtectionRoutes = (deps: { db: Database; defaultRetentionDays:
             .nullable()
             .describe('Days, a year to ten years; 0 = keep everything; null = the deployment default.'),
         }),
-        response: { 200: auditRetentionView, 400: errorBody, 403: errorBody },
+        response: { 200: auditRetentionView, ...held, 400: errorBody, 403: errorBody },
       },
     },
     async (request) => {

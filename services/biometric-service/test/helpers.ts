@@ -46,7 +46,7 @@ export async function testDatabase(): Promise<Database | null> {
     }
   }
   if (!shared) return null
-  for (const table of [schema.results, schema.sessions, schema.checks, schema.providerConfigs, schema.tenantKeys]) await shared.db.delete(table)
+  for (const table of [schema.results, schema.sessions, schema.checks, schema.providerConfigsPending, schema.providerConfigs, schema.tenantKeys]) await shared.db.delete(table)
   return shared.db
 }
 

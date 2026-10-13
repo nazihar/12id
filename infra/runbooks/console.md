@@ -109,11 +109,21 @@ set-password link; the link works once and expires in one hour).
   has erasure entries is a deliberate act by the database owner (drop the trigger, delete, recreate
   it), to be decided and recorded.
 - **The audit log's period** (implement/22 C15, migration `0014`). Audit rows are deleted when they
-  are older than a period: `AUDIT_RETENTION_DAYS` for the deployment (default 730; 365 to 3650, or 0
-  to keep everything; platform-api refuses to start on another value), or an organisation's own
+  are older than a period: `AUDIT_RETENTION_DAYS` in the environment file for the deployment (default 730;
+  365 to 3650, or 0 to keep everything; platform-api refuses to start on another value; in the 0.5.0
+  bundle it could only be set with a compose overlay), or an organisation's own
   period, set on its Data protection page. The pass runs with the sweep (`SWEEP_INTERVAL_MS`) and
   leaves one audit row ("Old audit entries deleted") per organisation it deleted from. Sign-ins and
   rows of no organisation follow the deployment's period. The erasure log is never deleted.
+- **Approval by a second person** (implement/22 C17–C19). An organisation's owner or admin switches it
+  on from Approvals in the portal (it needs two people with one of those roles); from then on a fixed
+  list of changes waits until someone other than the person who asked approves it. The list is on
+  the page; what only closes access (revoke, remove, ban) never waits. A request expires after 7
+  days. Switching it off is itself a change that waits. For operator accounts (add, change role,
+  unban) the switch is `OPERATOR_APPROVALS=on` in the environment file, then `deploy.sh platform`; have
+  two operators first, because nobody approves their own request. If a deployment is left with one
+  operator while it is on, set it to `off` and deploy: that is a server change, made by whoever runs
+  the server. The break-glass admin token is not held and decides no request.
 - **System health** (implement/22 C16). Operators and auditors open it from the sidebar. It shows
   what platform-api can reach, the alerts monitoring reports, and the non-secret settings the
   deployment runs with. Alertmanager pushes its notifications to platform-api

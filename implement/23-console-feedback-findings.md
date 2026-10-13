@@ -1,6 +1,6 @@
 # Console feedback, set 1 — findings
 
-**Plan:** [22-console-feedback.md](22-console-feedback.md). **Set 2 is at the end of this file ("Set 2 — findings"): C15 and C16 are released as platform `v0.5.0`.** **Status (2026-10-12): set 1 (C10–C14) is released as platform `v0.4.0`** (commit `7cb5f44`, the release candidate's digests). Staging runs `0.4.0-rc.1`; every check and both Credo smokes passed there (see "On staging" and "Released as `v0.4.0`" below).
+**Plan:** [22-console-feedback.md](22-console-feedback.md). **Set 2 is at the end of this file ("Set 2 — findings"): C15 and C16 are released as platform `v0.5.0`; C17–C19 are built and pass locally.** **Status (2026-10-12): set 1 (C10–C14) is released as platform `v0.4.0`** (commit `7cb5f44`, the release candidate's digests). Staging runs `0.4.0-rc.1`; every check and both Credo smokes passed there (see "On staging" and "Released as `v0.4.0`" below).
 
 | Item | State |
 |---|---|
@@ -274,13 +274,13 @@ Commit `7cb5f44` on `master` (owner: "Commit and release"); CI green (`ci-servic
 
 # Set 2 — findings
 
-**Plan:** [22-console-feedback.md](22-console-feedback.md), "Set 2". **Status (2026-10-12): C15 and C16 are released as platform `v0.5.0`** (commit `86845a3`; staging runs `0.5.0-rc.1`; see "On staging" and "Released as `v0.5.0`" below). **C17–C19 (approval by a second person) are not started.**
+**Plan:** [22-console-feedback.md](22-console-feedback.md), "Set 2". **Status (2026-10-12): C15 and C16 are released as platform `v0.5.0`** (commit `86845a3`; staging runs `0.5.0-rc.1`; see "On staging" and "Released as `v0.5.0`" below). **C17–C19 (approval by a second person) are built and pass locally; not committed, not deployed** (see "C17–C19" at the end).
 
 | Item | State |
 |---|---|
 | C15 audit log period | **released in `v0.5.0`.** Migration `0014_audit_retention` |
 | C16 system health page | **released in `v0.5.0`.** Migration `0015_platform_alerts`; one new secret, `ALERT_WEBHOOK_SECRET` |
-| C17–C19 approval by a second person | not started; planned for `v0.6.0` |
+| C17–C19 approval by a second person | **done, local.** platform-api migration `0016_approvals`, biometric-service migration `0002_provider_pending`. Planned as `v0.6.0` |
 | Local run, 2026-10-12 | platform-api: `tsc` clean, `npm test` **144/144** (131 before set 2), `openapi.json` 34 paths (unchanged), `openapi.console.json` 59 → 61. Console: `tsc` clean, Vitest **80/80** (75 before), `vite build` and `check:client` clean. Playwright against a local platform-api, one run: **11/11** (the nine of set 1 and the two of `health-retention.spec.ts`). An earlier run was 10/11: the local database container's clock stepped back 23 seconds between two audit rows (ids 473 and 474 carry it), so the export spec found the two exports in the wrong order; alone it passed, and so did the next full run. Monitoring config: `promtool check rules` 27 rules, `amtool check-config` clean, and a real Alertmanager 0.34.0 delivered to the local platform-api. Not run: `biometrics.spec.ts` |
 | Staging, 2026-10-12, `0.5.0-rc.1` | deploy clean; `console-feedback-check` 31/31, `e2e:staging` 4/4, both Credo smokes passed (30/30), `conditional-gate-check` 7/7; a test alert through the real Alertmanager appeared, was mailed and cleared |
 
@@ -366,3 +366,57 @@ Commit `86845a3` on `master` (owner: "commit and release"). Tag `v0.5.0-rc.1` on
 - **Migrations:** platform-api `0014_audit_retention` (one column; replaces the trigger function) and `0015_platform_alerts` (one table). The service role owns the function it replaces (checked on staging for `0012`).
 - **The first audit pass** runs with the sweep, two minutes after platform-api starts. The console has existed on staging since September 2026, so on the default of 730 days it deletes nothing there.
 - **To check on staging:** the Watchdog signal is fresh; a test alert sent to Alertmanager (`amtool alert add`) appears on the page and by mail, and clears; `POST https://api.<domain>/internal/alerts` answers 404 from outside; the audit period set on a smoke tenant; `console-feedback-check`, `e2e:staging`, both Credo smokes.
+
+## C17–C19 — Approval by a second person (done, local)
+
+**Status (2026-10-12): built and passing locally. Not committed, not deployed.** Planned as platform `v0.6.0`.
+
+### What was built
+- **platform-api (C17).**
+  - `change_requests` and `tenants.approvals_required` (migration `0016_approvals`).
+  - `src/approvals/types.ts`: the 22 kinds of change that can wait (19 for an organization, 3 for operator accounts), each with who may ask and decide, what it is about, one line for the person who decides, and the value in force.
+  - `src/approvals/gate.ts`: one `preHandler`. A route opts in with `config: { approval: '<kind>' }`; for a console caller of a tenant that requires approval the validated call is stored and the answer is `202 { approval }`. Applying makes the stored call again with `app.inject`, as the person who asked, with a marker only the process knows.
+  - Routes: `GET/PUT /v1/approvals`, `/v1/change-requests` (list, get, ask, approve, reject, cancel, apply, applied), and the same under `/admin` for requests that belong to no tenant.
+  - The audit log: a held call is a row with `202` and the request it became; the call that applies it names who approved; a new `approval` kind keeps the whole story.
+- **biometric-service.** A waiting slot next to a tenant's active provider configuration (`provider_configs_pending`, migration `0002_provider_pending`): stored encrypted, activated or dropped.
+- **Console (C18, C19).**
+  - Every server function whose change can be held answers what it always answered or `{ held }` (19 over held routes, 5 account actions), and the form that called it says "Sent for approval" instead of "saved".
+  - Members and operators: `account-changes.server.ts` performs the five account actions; where a second person is required they are asked first and performed when the approved request is applied.
+  - Approvals pages for an organization, for an operator's view of a tenant, and for the operator area; an "Approvals" entry in each sidebar with the number that waits; a notice on the page a held change is about.
+
+### Decisions made while building (they differ from, or add to, the plan)
+1. **An account change is applied by the person who asked, not at approval.** The plan had only three kinds wait for Apply (those that hand out a secret). Member and operator changes run through Better Auth under the signed-in person's own session, and Better Auth re-checks that person's permissions. An admin may approve an owner's invitation, and Better Auth would refuse to send it under the admin's session. So these five kinds also wait for the person who asked to press Apply.
+2. **Who may approve a member change: an owner, an admin or an operator.** The plan said "another owner, or an operator". With one owner and one admin, an owner's invitation could then never be approved by anyone inside the organization. Since the approver no longer performs the action (1), any second person with a deciding role can approve.
+3. **The provider's configuration is not held by the generic gate.** It may carry vendor secrets and is by rule never stored in platform-api (review L10). The route stores the request with the provider's name, sends the configuration to biometric-service's waiting slot, and keeps the non-secret part biometric-service answers. Approval calls a route that only an approval can reach.
+4. **The operators' own key route refuses the console where a tenant requires approval.** `POST /admin/tenants/:id/api-keys` exists for the break-glass token. The console creates keys through `POST /v1/api-keys`, which is held; without this refusal the operator role could have used the other route to skip the hold.
+5. **`AUDIT_RETENTION_DAYS` could not be set from the environment file in `v0.5.0`.** The compose file passed neither it nor `RETENTION_DAYS`; only an overlay could. `compose.platform.yml` now passes both, and `OPERATOR_APPROVALS`, with platform-api's defaults; `template.env` lists them.
+6. **The operator area has no cross-tenant list of requests.** An operator sees a tenant's requests on that tenant's Approvals page, and the operator area's own on `/ops/approvals`. A list across tenants was in the plan as a possibility and is not built: an operator decides only API keys and periods for a tenant, and those are rare.
+7. **A request that is closed is deleted on the deployment's audit period**, not the organization's own. What was asked and decided is also in the organization's audit rows, which follow its period.
+
+### Findings
+1. **The typed client enforces the handling.** Each held route declares `202` in its response, so the console's generated client makes the answer a union. A server function that forgets the held case does not compile; that is how the call sites were found, not by search.
+2. **Two Apply clicks make one change.** Applying first takes the request (`applied_at` set where it is null); the second call finds it taken and answers 409. Tested with two calls at once: one API key.
+3. **The secret is nowhere but in the answer to the person who asked.** Tested by searching the request row and the whole audit table for the new key.
+4. **A change is checked again when it is applied.** A template changed, then deleted before the approval: the request ends as `failed` with "proof template not found".
+5. **Found by the browser run and fixed: a hydration mismatch on a page with a notice.** The list of open requests is read in the browser only. The shell hydrates first and starts that read; when the page hydrates later the list can already be there, while the server's HTML has no notice. The notice and the sidebar's count now render only after hydration. The specs' Content-Security-Policy guard (`e2e/csp.ts`) now fails a test on a hydration mismatch too, and both approval specs reload a page that carries a notice.
+6. **Found by the browser run and fixed: lists made by other people were shown from a 30-second cache.** A request another person just made did not appear. The approvals lists are read again on every visit, and after a decision or an Apply every page's data is read again, because an approved change alters what other pages show.
+7. **A race in a set 1 spec, fixed.** `ops-auditor.spec.ts` took "no such row" as "deleted"; while the confirmation dialog is open the table is hidden from the accessibility tree, so that was true before the deletion. It now waits for the confirmation message. It had passed every earlier run.
+8. **A spec file named `approvals.spec.ts` ran before `auth.spec.ts`**, which enrolls the run's operator. It is `second-person.spec.ts`.
+
+### Evidence (run, local, 2026-10-12)
+- **platform-api:** `tsc` clean, `npm test` **158/158** (144 before). `test/approvals.test.ts`, 14 tests: off is direct and on is immediate; a held change with its request, audit row and list; the asker, a member, an auditor, an operator without the right and another tenant cannot decide; one open request per thing, any number of new things; approved and applied as the asker with both names in the audit; the API key and the webhook secret reach only the asker, two Apply clicks make one key; reject needs a reason, cancel is for the asker; expiry; apply re-checks and can fail; templates, catalogue, the operators' key route, revoke not held, an API key unaffected; switching off is held; the provider's configuration in neither the request nor the audit, activation only by approval, a forged marker refused; an account change asked, approved, applied and reported; operator accounts with the setting on and off; the break-glass token decides nothing.
+- **biometric-service:** `npm test` **37/37** (35 before): the waiting slot in the service and over HTTP.
+- **Console:** `tsc` clean, Vitest **84/84** (80 before), `vite build` and `check:client` clean. `openapi.json` 34 paths (unchanged); `openapi.console.json` 61 → 78.
+- **Playwright, local, one run: 12 passed, 1 skipped, no hydration mismatch.** `second-person.spec.ts`: an owner and an admin of one organization; the requirement cannot be switched on with one approver and is switched on with two; a webhook endpoint held, approved by the admin, applied by the owner who gets the secret; a period asked by the admin and in force when the owner approves; an API key rejected with a reason; an invitation approved and applied under the owner's session; cancelling it not held; switching off held; the operator reads the same requests and the audit log.
+- **`second-operator.spec.ts`, its own run against a platform-api with `OPERATOR_APPROVALS=on`: passed.** An operator asks for a new account, a second operator approves, the first applies, the account exists and gets its link; banning does not wait and unbanning does. It is skipped in the normal run: with the setting on, the specs that add operators directly would be held.
+- Looked at: the Approvals page waiting, the details dialog, and the page after switching off.
+
+### Not run
+`biometrics.spec.ts` (needs a local biometric-service); anything on staging. The provider's waiting slot is tested in each service and with platform-api's double, not with the two real services together: staging will be the first place.
+
+## Deploy notes for `v0.6.0`
+- **No new secret.**
+- **Stacks that change:** `biometric` (migration `0002_provider_pending`), `platform` (migration `0016_approvals`, three settings passed from the environment file), `console`. The bundle's `compose.platform.yml` and `template.env` change. This release changes biometric-service, so `smoke:biometric-credo` is a real test of it, not only a regression run.
+- **Nothing is held after the deploy.** Every organization starts with the requirement off, and `OPERATOR_APPROVALS` defaults to off.
+- **To require a second operator:** have at least two operators, set `OPERATOR_APPROVALS=on` in the environment file, deploy `platform`.
+- **To check on staging:** `infra/smoke/approvals-check.ts` on a smoke tenant (it switches the requirement on, runs a change through approval, and puts the tenant back); `console-feedback-check` (it now reads the approvals routes); `e2e:staging` (the Approvals pages); both Credo smokes with the requirement off on their tenants; the change-request routes unreachable from outside with an API key.

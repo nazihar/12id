@@ -246,7 +246,7 @@ entry. `check:client` stays clean and the login page's bundle does not grow.
   `openapi.console.json`; `npm run openapi:client` in the console.
 
 ## Set 2 — audit log period, system health page, approval by a second person
-Approved by the owner on 2026-10-12, after the `v0.4.0` release. **Status (2026-10-12): C15 and C16 are released as platform `v0.5.0` (commit `86845a3`; staging runs `0.5.0-rc.1`); C17–C19 are not started.** Findings: [`23-console-feedback-findings.md`](23-console-feedback-findings.md), "Set 2 — findings".
+Approved by the owner on 2026-10-12, after the `v0.4.0` release. **Status (2026-10-12): C15 and C16 are released as platform `v0.5.0` (commit `86845a3`; staging runs `0.5.0-rc.1`); C17–C19 are built and pass locally, not committed.** Findings: [`23-console-feedback-findings.md`](23-console-feedback-findings.md), "Set 2 — findings".
 
 What the owner decided on 2026-10-12:
 - **Audit log period:** as proposed (its own period per organisation, default 2 years, not below 1).
@@ -368,7 +368,8 @@ Reasons for the less obvious ones:
   on needs at least two people who can approve. For operator accounts there is one deployment setting,
   `OPERATOR_APPROVALS`.
 - **Who may approve:** someone who could have made the change themselves, and who is not the person who
-  asked. Member changes: another owner, or an operator.
+  asked. Member changes: an owner, an admin or an operator (as built; the plan said "another owner, or
+  an operator", which would have left an organization with one owner unable to invite anyone).
 - **A request** waits 7 days, then expires. The person who asked can cancel it. A rejection needs a reason.
 - **One open request per thing at a time** (one for the webhook endpoint, one per template, and so on;
   requests for different things wait side by side). Why:
@@ -382,7 +383,9 @@ Reasons for the less obvious ones:
     catalogue entries can have any number of open requests.
 - **Approved changes take effect at once.** Three kinds hand a secret to the person who asked (a new API
   key, a new webhook endpoint, a new signing secret). Those wait for that person to press "Apply", and
-  the secret is shown to them once, as today.
+  the secret is shown to them once, as today. **As built, member and operator account changes wait for
+  Apply too:** they run under the signed-in person's own session, which the approver's could not replace
+  (findings, C17–C19, decision 1).
 - **The change is checked again when it is applied.** If it no longer fits (the template was deleted
   meanwhile), the request ends as "failed" with the reason.
 - **Audit:** asked, approved, rejected, cancelled, expired and applied are audit rows; the change's own

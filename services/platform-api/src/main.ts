@@ -17,6 +17,7 @@ import { expireIdempotencyKeys } from './http/idempotency.ts'
 import { createMediatorClient } from './mediator-client.ts'
 import { createOutboxConsumer } from './outbox-consumer.ts'
 import { handleMediatorWebhook } from './wake.ts'
+import { expireDue } from './approvals/requests.ts'
 import { startRetention } from './retention.ts'
 import { startSweep } from './sweep.ts'
 import { createDispatcher } from './webhooks/dispatcher.ts'
@@ -71,6 +72,16 @@ const expiry = setInterval(() => void expireIdempotencyKeys(db, config.IDEMPOTEN
 const stopRetention = config.SWEEP_INTERVAL_MS > 0
   ? startRetention({ db, agent, biometric: biometricClient, endpoints, logger, defaultDays: config.RETENTION_DAYS, auditDefaultDays: config.AUDIT_RETENTION_DAYS }, config.SWEEP_INTERVAL_MS)
   : async () => undefined
+// Change requests nobody decided in time (implement/22 C17) are closed, and a biometric provider
+// that waited with one is dropped from biometric-service. Reading a request closes it too; this
+// catches the ones nobody opens.
+const approvalExpiry = setInterval(
+  () =>
+    void expireDue(db)
+      .then((expired) => Promise.all(expired.filter((row) => row.type === 'biometrics.provider.set' && row.tenantId).map((row) => biometricClient?.deletePendingProvider(row.tenantId as string))))
+      .catch((error: unknown) => logger.warn({ err: error }, 'change request expiry failed')),
+  10 * 60 * 1000
+)
 const gateExpiry = gates ? setInterval(() => void gates.expireDue().catch((error: unknown) => logger.warn({ err: error }, 'biometric gate expiry failed')), config.BIOMETRIC_EXPIRY_POLL_MS) : undefined
 
 async function drain(signal: string) {
@@ -79,6 +90,7 @@ async function drain(signal: string) {
   const started = Date.now()
   logger.info({ signal }, 'drain started')
   clearInterval(expiry)
+  clearInterval(approvalExpiry)
   if (gateExpiry) clearInterval(gateExpiry)
   await Promise.all([stopConsumer(), stopDispatcher(), stopSweep(), stopRetention()])
   const deadline = started + config.DRAIN_DEADLINE_MS

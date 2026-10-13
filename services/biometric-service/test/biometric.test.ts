@@ -74,6 +74,38 @@ describe('biometric service (database)', async () => {
     await assert.rejects(service.createCheck(defaultCheck('tenant-a')), { code: 'provider_not_tested' })
   })
 
+  it('keeps a configuration that waits for approval apart from the active one', async (t) => {
+    if (skip()) return t.skip()
+    const service = testService(db!)
+    const tenantId = await mockTenant(service)
+    const active = await service.getTenantProvider(tenantId)
+    assert.equal(active.provider!.status, 'ok')
+
+    // Waiting: validated and encrypted like an active one, and nothing uses it.
+    await assert.rejects(service.putPendingProvider(tenantId, 'facetec', {}), { code: 'unknown_provider' })
+    await assert.rejects(service.putPendingProvider(tenantId, 'mock', { extra: 1 }), { code: 'invalid_provider_config' })
+    assert.deepEqual(await service.putPendingProvider(tenantId, 'mock', {}), { providerId: 'mock', publicConfig: {} })
+    const [waiting] = await db!.select().from(schema.providerConfigsPending)
+    assert.ok(waiting!.configCiphertext.length > 0)
+    assert.deepEqual((await service.getTenantProvider(tenantId)).provider, active.provider, 'the active configuration is untouched')
+    assert.ok((await service.createCheck(defaultCheck(tenantId))).checkId, 'checks still run on the active configuration')
+
+    // Dropped: nothing to activate.
+    await service.deletePendingProvider(tenantId)
+    await assert.rejects(service.activatePendingProvider(tenantId), { code: 'no_pending_provider' })
+
+    // Activated: it replaces the active one and must pass a connection test like any new configuration.
+    await service.putPendingProvider(tenantId, 'mock', {})
+    const activated = await service.activatePendingProvider(tenantId)
+    assert.equal(activated.provider!.status, 'untested')
+    assert.equal((await db!.select().from(schema.providerConfigsPending)).length, 0)
+    await assert.rejects(service.createCheck(defaultCheck(tenantId)), { code: 'provider_not_tested' })
+    assert.deepEqual(await service.testTenantProvider(tenantId), { status: 'ok', error: null })
+    // One tenant's waiting configuration is not another's.
+    await service.putPendingProvider('tenant-b', 'mock', {})
+    await assert.rejects(service.activatePendingProvider(tenantId), { code: 'no_pending_provider' })
+  })
+
   it('passes on the first attempt and wipes the reference image', async (t) => {
     if (skip()) return t.skip()
     const service = testService(db!)

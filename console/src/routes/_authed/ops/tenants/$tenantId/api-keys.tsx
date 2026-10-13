@@ -10,6 +10,7 @@ import { createApiKey, revokeApiKey } from '@/features/tenants/tenants.functions
 import { tenantApiKeysQuery, tenantQuery } from '@/features/tenants/tenants.queries'
 import { parseListSearch, searchPatcher } from '@/lib/list-search'
 import { useCanOperate } from '@/lib/use-can-operate'
+import { OpsPendingChanges } from '@/features/approvals/pending-changes'
 
 export const Route = createFileRoute('/_authed/ops/tenants/$tenantId/api-keys')({
   validateSearch: parseListSearch(apiKeySearch),
@@ -30,6 +31,7 @@ function ApiKeysPage() {
   return (
     <div className="space-y-5">
       <RateLimitCard tenantId={tenantId} rateLimitPerMin={tenant.rateLimitPerMin} />
+      <OpsPendingChanges tenantId={tenantId} types={['api_key.']} />
       <ApiKeysPanel
         data={keys}
         search={search}
