@@ -952,7 +952,7 @@ Xiaomi `lisa`, Android 14, on mobile data, the sample built from this tree (SDK 
 ### The API's per-address limit is now a setting (2026-10-08, not released)
 `api_per_ip` reads `EDGE_API_LIMIT` (`Caddyfile`, `compose.edge.yml`, `env/template.env`), like the mediator's and the agent's. The default is the old value, 600 a minute, so nothing changes until an environment sets it. The number is the owner's: one customer backend at the agent's ceiling needs about 600. It is in the bundle, so it ships with the next platform release, and `caddy validate` runs then on staging's binary (not run here).
 
-## v0.7.0: wallet token re-issue and the `id` attribute (2026-10-13, built, not released)
+## v0.7.0: wallet token re-issue and the `id` attribute (2026-10-13, released)
 The two platform items the reference integration found on 2026-10-10 (`21-reference-integration.md`, findings 1 and 5). Owner chose them as the next work on 2026-10-13; the plan is summarised here.
 
 ### Wallet token re-issue
@@ -972,5 +972,22 @@ The two platform items the reference integration found on 2026-10-10 (`21-refere
 - reference backend `tsc`, **17/17**.
 - `openapi.json` gains only the new path (35 paths); the console client regenerated.
 
-### Not done yet
-Commit, `v0.7.0-rc.1`, staging deploy and smokes (`smoke:platform-credo`, `smoke:biometric-credo`, `e2e:staging`, `smoke:reference-credo`, a curl probe of the new route), then `v0.7.0`: waiting for the owner.
+### On staging (2026-10-13, `0.7.0-rc.1`)
+Commit `922cfc9`; tag `v0.7.0-rc.1` built the nine images by CI. The owner said "do the rest yourself".
+
+| Check | Result |
+|---|---|
+| Deploy | only `release.env` changed (no bundle file changed since 0.6.0); seven stacks pulled and up in 294 s, no failed step; previous file kept as `release.env.prev-0.6.0-rc.1` |
+| `check-inspect-clean.sh` | 0 of 33 secret values in `docker inspect` (36 containers) |
+| Prometheus | 22/22 targets up; only the `Watchdog` heartbeat firing |
+| Probe of the new route (public edge, smoke tenant's key) | **10/10**: same wallet with a new token, old token 401 / new 200, unknown wallet 404, a wallet token refused, revoked wallet 409 `wallet_revoked`, the route in the customer `openapi.json` |
+| Schema with `id`, as the console inside the platform container | **400** `body/attributes id is reserved: …`; nothing reached agent-service |
+| `e2e:staging` | **4/4** |
+| `console-feedback-check` / `approvals-check` | **36/36** / **19/19** |
+| `smoke:platform-credo` (the owner's `-R 3200` tunnel, still open from the morning) | **PASSED** (connection, credential done, proof verified, one wake-up, signatures valid) |
+| `smoke:biometric-credo` | **PASSED 30/30** |
+| Reference backend on the VM (synced by `git archive`, recreated after the platform deploy) | started (its catalogue check passed). `smoke:reference-credo` **SKIPPED** (the backend uses face checks, tenant MTB). Instead, through `demo.`: a new sign-in, `/wallet-token` twice → the same token; with `refresh` → a new token, old 401 / new 200, and the store still holds one wallet at generation 0 (no second wallet). The probe user and its never-connected wallet stay; the sweep revokes the wallet after 7 days |
+
+Not run: the phone (nothing in the SDK changed; the app's provider already asks with `refresh` only after a rejection).
+
+**Released as `v0.7.0`** on the same commit; CI added `0.7.0` to the rc's digests. Production (W5 step 4) deploys `release-0.7.0.env` and the 0.7.0 bundle; no new secret, no migration. Staging keeps running `0.7.0-rc.1`. Rollback on the VM: `release.env.prev-0.6.0-rc.1`. Deploy order for anyone running the reference backend: platform first, then the backend (its refresh calls the new route).
