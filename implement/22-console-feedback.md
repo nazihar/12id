@@ -246,7 +246,7 @@ entry. `check:client` stays clean and the login page's bundle does not grow.
   `openapi.console.json`; `npm run openapi:client` in the console.
 
 ## Set 2 — audit log period, system health page, approval by a second person
-Approved by the owner on 2026-10-12, after the `v0.4.0` release. **Status (2026-10-12): C15 and C16 are released as platform `v0.5.0` (commit `86845a3`; staging runs `0.5.0-rc.1`); C17–C19 are built and pass locally, not committed.** Findings: [`23-console-feedback-findings.md`](23-console-feedback-findings.md), "Set 2 — findings".
+Approved by the owner on 2026-10-12, after the `v0.4.0` release. **Status (2026-10-12): C15 and C16 are released as platform `v0.5.0` (commit `86845a3`; staging runs `0.5.0-rc.1`); C17–C19 are released as platform `v0.6.0` (commit `ee2d699`; staging runs `0.6.0-rc.1`). Set 2 is complete; what remains is under "Later".** Findings: [`23-console-feedback-findings.md`](23-console-feedback-findings.md), "Set 2 — findings".
 
 What the owner decided on 2026-10-12:
 - **Audit log period:** as proposed (its own period per organisation, default 2 years, not below 1).

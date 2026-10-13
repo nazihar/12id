@@ -111,6 +111,33 @@ try {
   const revoke = await ada('DELETE', '/v1/api-keys/00000000-0000-4000-8000-000000000000')
   check('revoking a key is not held', revoke.status === 404, `${revoke.status}`)
 
+  // --- a biometric provider waits in biometric-service, not here ------------------------------------
+  // Only with the mock provider, whose configuration is known (empty): the same provider is set
+  // again, so the tenant ends with what it had. A new configuration must pass its connection test.
+  interface Biometrics {
+    enabled: boolean
+    provider: { id: string; status: string } | null
+  }
+  const biometrics = await ada<Biometrics>('GET', '/v1/biometrics')
+  if (biometrics.status === 200 && biometrics.json.provider?.id === 'mock') {
+    const direct = await ada('POST', '/v1/biometrics/provider/pending/activate')
+    const dropped = await ada<Held>('PUT', '/v1/biometrics/provider', { providerId: 'mock', config: {} })
+    const droppedBy = await bob<Request>('POST', `/v1/change-requests/${dropped.json.approval?.id}/reject`, { reason: 'Rejected by the approvals check.' })
+    const untouched = (await ada<Biometrics>('GET', '/v1/biometrics')).json
+    check('a provider change is held, and a rejected one leaves the provider as it was', direct.status === 403 && dropped.status === 202 && droppedBy.json.status === 'rejected' && untouched.provider?.status === biometrics.json.provider.status, `${direct.status}, ${dropped.status}, ${droppedBy.json.status}, provider ${untouched.provider?.status}`)
+
+    const waiting = await ada<Held & { approval: Request & { change: { providerId?: string; publicConfig?: unknown } } }>('PUT', '/v1/biometrics/provider', { providerId: 'mock', config: {} })
+    const shown = waiting.json.approval?.change
+    const activated = await bob<Request>('POST', `/v1/change-requests/${waiting.json.approval?.id}/approve`)
+    const fresh = (await ada<Biometrics>('GET', '/v1/biometrics')).json
+    check('approved, the waiting configuration becomes the active one, untested', waiting.status === 202 && shown?.providerId === 'mock' && activated.json.status === 'applied' && fresh.provider?.id === 'mock' && fresh.provider.status === 'untested', `${JSON.stringify(shown)}, ${activated.json.status}${activated.json.applyError ? `: ${activated.json.applyError}` : ''}, provider ${fresh.provider?.status}`)
+    const tested = await ada<{ status: string }>('POST', '/v1/biometrics/provider/test')
+    const ready = (await ada<Biometrics>('GET', '/v1/biometrics')).json
+    check('it passes its connection test and face checks are as they were', tested.json.status === 'ok' && ready.provider?.status === 'ok' && ready.enabled === biometrics.json.enabled, `test ${tested.json.status}, provider ${ready.provider?.status}, enabled ${ready.enabled}`)
+  } else {
+    console.log(`  note: the tenant's provider is ${biometrics.json.provider?.id ?? 'not set'}; the provider steps need the mock provider and were skipped`)
+  }
+
   // --- the audit log tells it ----------------------------------------------------------------------
   const audit = await operator.call<{ items: Array<{ route: string; statusCode: number; actorLabel: string | null; changes: { approval?: { approvedBy?: string } } | null }> }>('GET', `/admin/audit?kind=approval&tenantId=${env('PLATFORM_TENANT_ID')}&pageSize=100`)
   const made = audit.json.items?.find((entry) => entry.route === '/v1/data-retention' && entry.statusCode === 200 && entry.changes?.approval?.approvedBy)

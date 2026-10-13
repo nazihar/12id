@@ -1,6 +1,6 @@
 # Console feedback, set 1 — findings
 
-**Plan:** [22-console-feedback.md](22-console-feedback.md). **Set 2 is at the end of this file ("Set 2 — findings"): C15 and C16 are released as platform `v0.5.0`; C17–C19 are built and pass locally.** **Status (2026-10-12): set 1 (C10–C14) is released as platform `v0.4.0`** (commit `7cb5f44`, the release candidate's digests). Staging runs `0.4.0-rc.1`; every check and both Credo smokes passed there (see "On staging" and "Released as `v0.4.0`" below).
+**Plan:** [22-console-feedback.md](22-console-feedback.md). **Set 2 is at the end of this file ("Set 2 — findings"): C15 and C16 are released as platform `v0.5.0`, C17–C19 as `v0.6.0`.** **Status (2026-10-12): set 1 (C10–C14) is released as platform `v0.4.0`** (commit `7cb5f44`, the release candidate's digests). Staging runs `0.4.0-rc.1`; every check and both Credo smokes passed there (see "On staging" and "Released as `v0.4.0`" below).
 
 | Item | State |
 |---|---|
@@ -274,13 +274,13 @@ Commit `7cb5f44` on `master` (owner: "Commit and release"); CI green (`ci-servic
 
 # Set 2 — findings
 
-**Plan:** [22-console-feedback.md](22-console-feedback.md), "Set 2". **Status (2026-10-12): C15 and C16 are released as platform `v0.5.0`** (commit `86845a3`; staging runs `0.5.0-rc.1`; see "On staging" and "Released as `v0.5.0`" below). **C17–C19 (approval by a second person) are built and pass locally; not committed, not deployed** (see "C17–C19" at the end).
+**Plan:** [22-console-feedback.md](22-console-feedback.md), "Set 2". **Status (2026-10-12): C15 and C16 are released as platform `v0.5.0`** (commit `86845a3`; staging runs `0.5.0-rc.1`; see "On staging" and "Released as `v0.5.0`" below). **C17–C19 (approval by a second person) are released as platform `v0.6.0`** (commit `ee2d699`; staging runs `0.6.0-rc.1`; see "C17–C19" at the end).
 
 | Item | State |
 |---|---|
 | C15 audit log period | **released in `v0.5.0`.** Migration `0014_audit_retention` |
 | C16 system health page | **released in `v0.5.0`.** Migration `0015_platform_alerts`; one new secret, `ALERT_WEBHOOK_SECRET` |
-| C17–C19 approval by a second person | **done, local.** platform-api migration `0016_approvals`, biometric-service migration `0002_provider_pending`. Planned as `v0.6.0` |
+| C17–C19 approval by a second person | **released in `v0.6.0`.** platform-api migration `0016_approvals`, biometric-service migration `0002_provider_pending` |
 | Local run, 2026-10-12 | platform-api: `tsc` clean, `npm test` **144/144** (131 before set 2), `openapi.json` 34 paths (unchanged), `openapi.console.json` 59 → 61. Console: `tsc` clean, Vitest **80/80** (75 before), `vite build` and `check:client` clean. Playwright against a local platform-api, one run: **11/11** (the nine of set 1 and the two of `health-retention.spec.ts`). An earlier run was 10/11: the local database container's clock stepped back 23 seconds between two audit rows (ids 473 and 474 carry it), so the export spec found the two exports in the wrong order; alone it passed, and so did the next full run. Monitoring config: `promtool check rules` 27 rules, `amtool check-config` clean, and a real Alertmanager 0.34.0 delivered to the local platform-api. Not run: `biometrics.spec.ts` |
 | Staging, 2026-10-12, `0.5.0-rc.1` | deploy clean; `console-feedback-check` 31/31, `e2e:staging` 4/4, both Credo smokes passed (30/30), `conditional-gate-check` 7/7; a test alert through the real Alertmanager appeared, was mailed and cleared |
 
@@ -367,9 +367,9 @@ Commit `86845a3` on `master` (owner: "commit and release"). Tag `v0.5.0-rc.1` on
 - **The first audit pass** runs with the sweep, two minutes after platform-api starts. The console has existed on staging since September 2026, so on the default of 730 days it deletes nothing there.
 - **To check on staging:** the Watchdog signal is fresh; a test alert sent to Alertmanager (`amtool alert add`) appears on the page and by mail, and clears; `POST https://api.<domain>/internal/alerts` answers 404 from outside; the audit period set on a smoke tenant; `console-feedback-check`, `e2e:staging`, both Credo smokes.
 
-## C17–C19 — Approval by a second person (done, local)
+## C17–C19 — Approval by a second person (released in `v0.6.0`)
 
-**Status (2026-10-12): built and passing locally. Not committed, not deployed.** Planned as platform `v0.6.0`.
+**Status (2026-10-13): released as platform `v0.6.0`** (commit `ee2d699`; staging runs `0.6.0-rc.1`; see "On staging (2026-10-13)" and "Released as `v0.6.0`" below).
 
 ### What was built
 - **platform-api (C17).**
@@ -412,7 +412,32 @@ Commit `86845a3` on `master` (owner: "commit and release"). Tag `v0.5.0-rc.1` on
 - Looked at: the Approvals page waiting, the details dialog, and the page after switching off.
 
 ### Not run
-`biometrics.spec.ts` (needs a local biometric-service); anything on staging. The provider's waiting slot is tested in each service and with platform-api's double, not with the two real services together: staging will be the first place.
+`biometrics.spec.ts` (needs a local biometric-service); anything on staging. Locally the provider's waiting slot was tested in each service and with platform-api's double, not with the two real services together; that was done on staging (below).
+
+## On staging (2026-10-13, `v0.6.0-rc.1`)
+Commit `ee2d699` on `master` (owner: "commit and release"). Tag `v0.6.0-rc.1` on that commit; CI built the nine images. CI's test jobs could not be read (the credential helper still does not answer); the same suites passed locally. Deployed the same day: seven stacks, 289 s, no failed step.
+
+| Check on `0.6.0-rc.1` | Result |
+|---|---|
+| Bundle against the VM's tree | four files differ as expected (`compose.platform.yml`, a comment in `compose.monitoring.yml`, the console runbook, `template.env`). The old files are in `/opt/12id/infra.prev-20261013-v060/`, the old pins in `release.env.prev-0.5.0-rc.1` |
+| Containers, secrets in configuration, monitoring | 29 running, none unhealthy; `check-inspect-clean`: 33 secret values, 36 containers, 0 found; 22/22 targets up |
+| Migrations | platform-api `0016_approvals` (17 in all; `change_requests` and its five indexes owned by `platform_api`); biometric-service `0002_provider_pending` (3 in all; the table owned by `biometric`) |
+| Settings from the environment file | platform-api runs with `OPERATOR_APPROVALS=off`, `AUDIT_RETENTION_DAYS=730`, `RETENTION_DAYS=90`: the compose file's defaults, since staging's environment file names none of them |
+| Nothing is held after the deploy | 0 of 19 tenants require a second person |
+| `infra/smoke/approvals-check.ts` (new; it writes, and puts the tenant back) | **19/19** on the biometric smoke tenant. Switched on at once; a change of the retention period held, with the value in force, nothing changed; a second request for it refused; the asker (403 `same_person`) and an auditor cannot approve; approved by another person it took effect at once; a new API key rejected with a reason and never made; revoking not held; the audit names who asked and who approved; the period restored through approval; switching off held and approved; the tenant as it was |
+| The provider's waiting slot, the two real services together | part of that check: a provider change held (`202`, with the provider's name and public part); rejected, the active provider untouched; asked again and approved, the waiting configuration became the active one, untested; it passed its connection test; calling the activation route directly answers 403 |
+| `smoke:biometric-credo`, before the check and again after it | **30/30** both times: the provider the check re-activated runs face checks as before |
+| `smoke:platform-credo` (regression, the owner's tunnel) | **passed** |
+| `infra/smoke/console-feedback-check.ts` (still writes nothing) | **36/36**: the 31 of before and 5 new (the approvals setting and its kinds; an API key refused on both routes; an auditor reads requests and cannot switch; the operator area's setting; the activation route refused) |
+| `e2e:staging` | **4/4**. `staging-feedback.spec.ts` now also opens the operator area's Approvals page and the smoke tenant's, with its 19 kinds |
+| `conditional-gate-check` (regression) | 7/7 |
+| From outside | `GET /v1/approvals` and `GET /v1/change-requests` with an API key → 403, also with a forged replay header; `/admin/change-requests` with a console token header → 404; `POST /v1/biometrics/provider/pending/activate` with an API key → 403 |
+| Left on staging | no tenant requires a second person; no request is open (10 closed ones on the smoke tenant: 7 applied, 3 rejected); no provider configuration waits |
+
+**Not run on staging:** the browser flow with two people of one organization (staging has one owner account for its test organization; that flow ran locally), operator accounts with `OPERATOR_APPROVALS=on` (local, its own run), and the phone (nothing here reaches the SDK or agent-service).
+
+## Released as `v0.6.0` (2026-10-13)
+`v0.6.0` is on the release candidate's commit (`ee2d699`) and carries its digests. Staging keeps running `0.6.0-rc.1`. Production deploys `release-0.6.0.env` with the 0.6.0 bundle; no new secret. On `master` only, not in the tag: the provider steps of `approvals-check.ts` and this evidence.
 
 ## Deploy notes for `v0.6.0`
 - **No new secret.**
