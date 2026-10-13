@@ -95,4 +95,4 @@ The owner said "do the rest yourself". Commit `ce84002`; tag `v0.8.0-rc.1` built
 
 **Released as `v0.8.0`** on the same commit; CI added `0.8.0` to the rc's nine digests. Production (W5 step 4) deploys `release-0.8.0.env` and the 0.8.0 bundle; no new secret; the console migration runs by itself; the `CONSOLE_*` values are optional (defaults as above).
 
-Left: the MTB gap analysis rows of theme E (`mtb/Gap_Analysis_Sections_2-6.md`) to be updated against this release.
+**MTB gap analysis updated the same day** (`mtb/Gap_Analysis_Sections_2-6.md`, outside this repository): 13 rows of theme E and the two maker-checker rows (`v0.6.0`) rewritten, the scoreboard recounted from the rows (a script that first reproduced the earlier numbers). Comply rows: 81 Have, 95 Partly, 52 Missing (were 70, 96, 60); complete 57% by rows and 66% by MTB's weights (were 53% and 57%); Section 2 from 58% to 72%. What theme E leaves: a separate policy for privileged users (declined in the remark), the authenticator code at reset for accounts on emailed codes, a delay or captcha on API calls, and a closed tab told from an idle one.
