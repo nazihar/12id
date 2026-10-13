@@ -24317,6 +24317,11 @@
                       "auth.password_reset_requested",
                       "auth.password_reset",
                       "auth.two_factor_enrolled",
+                      "auth.locked",
+                      "auth.idle_sign_out",
+                      "auth.session_replaced",
+                      "auth.password_changed",
+                      "auth.password_expired",
                       "account.operator_invited",
                       "account.operator_updated",
                       "account.operator_role_changed",
@@ -24330,6 +24335,10 @@
                       "account.invitation_accepted",
                       "account.member_role_changed",
                       "account.member_removed",
+                      "account.unlocked",
+                      "account.reenabled",
+                      "account.disabled_inactive",
+                      "account.password_link_sent",
                       "export.run"
                     ]
                   },

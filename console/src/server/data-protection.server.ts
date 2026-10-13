@@ -3,14 +3,17 @@
  *   - an API key an operator creates for a tenant is announced to the tenant's owners by mail, so an
  *     operator can never act as a tenant's integration without the tenant knowing;
  *   - expired Better Auth rows (sessions, verification tokens, rate-limit counters) are deleted on a
- *     timer, so the console database keeps no sign-in history beyond what is live.
+ *     timer, so the console database keeps no sign-in history beyond what is live;
+ *   - on the same timer (implement/24): sessions idle past CONSOLE_IDLE_TIMEOUT_MINUTES are deleted, and
+ *     accounts unused for CONSOLE_INACTIVITY_DAYS are disabled with a notice by mail.
  */
-import { and, eq, lt } from 'drizzle-orm'
+import { and, eq, lt, or, sql } from 'drizzle-orm'
 
 import { consoleDb } from './db.server'
 import { member, organization, rateLimit, session, user, verification } from './db/auth-schema'
 import { sendMail } from './email.server'
 import { serverEnv } from './env.server'
+import { disableInactiveAccounts } from './sign-in-rules.server'
 
 /** Mails every owner of the tenant's organization. Best effort: a mail failure never undoes the key. */
 export async function notifyOwnersOfOperatorKey(input: { tenantId: string; label: string; operatorUserId: string }) {
@@ -45,10 +48,11 @@ export async function notifyOwnersOfOperatorKey(input: { tenantId: string; label
   }
 }
 
-/** Deletes expired sessions and verification tokens, and rate-limit counters idle for a day. */
+/** Deletes expired and idle sessions, expired verification tokens, and rate-limit counters idle for a day. */
 export async function purgeExpiredAuthRows(now = new Date()) {
   const { db } = consoleDb()
-  const sessions = await db.delete(session).where(lt(session.expiresAt, now))
+  const idleSince = new Date(now.getTime() - serverEnv().CONSOLE_IDLE_TIMEOUT_MINUTES * 60 * 1000)
+  const sessions = await db.delete(session).where(or(lt(session.expiresAt, now), lt(sql`coalesce(${session.lastActiveAt}, ${session.createdAt})`, idleSince)))
   const verifications = await db.delete(verification).where(lt(verification.expiresAt, now))
   const limits = await db.delete(rateLimit).where(lt(rateLimit.lastRequest, now.getTime() - 24 * 60 * 60 * 1000))
   return { sessions: sessions.rowCount ?? 0, verifications: verifications.rowCount ?? 0, rateLimits: limits.rowCount ?? 0 }
@@ -60,13 +64,20 @@ const HOUSEKEEPING = Symbol.for('12id.console.authHousekeeping')
 export function startAuthHousekeeping(intervalMs = 60 * 60 * 1000) {
   const global = globalThis as { [HOUSEKEEPING]?: NodeJS.Timeout }
   if (global[HOUSEKEEPING] || serverEnv().NODE_ENV === 'test') return
-  const run = () =>
-    purgeExpiredAuthRows().then(
+  const run = () => {
+    void purgeExpiredAuthRows().then(
       (removed) => {
         if (removed.sessions + removed.verifications + removed.rateLimits > 0) console.info('[auth-housekeeping]', JSON.stringify(removed))
       },
       (error: unknown) => console.error('[auth-housekeeping] purge failed', error)
     )
+    void disableInactiveAccounts().then(
+      (disabled) => {
+        if (disabled > 0) console.info('[auth-housekeeping]', JSON.stringify({ disabledInactive: disabled }))
+      },
+      (error: unknown) => console.error('[auth-housekeeping] inactivity pass failed', error)
+    )
+  }
   global[HOUSEKEEPING] = setInterval(run, intervalMs)
   global[HOUSEKEEPING].unref()
   setTimeout(run, 60_000).unref()

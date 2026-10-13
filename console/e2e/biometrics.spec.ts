@@ -16,6 +16,7 @@ import pg from 'pg'
 
 import { PLATFORM_DATABASE_URL } from './env'
 import { linkFromMail, signInWithTotp } from './operator'
+import { strongPassword } from './passwords'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -85,7 +86,7 @@ test('owners configure the biometric gate and audit it per exchange; operators s
   const name = `Biometric ${stamp}`
   const tenantId = await seed(name)
   const ownerEmail = `bio-owner+${stamp}@12id.test`
-  const password = `Bio-E2e-${stamp}`
+  const password = strongPassword()
 
   // Operator: an organization with its owner.
   await signInWithTotp(page)

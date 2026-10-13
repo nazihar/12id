@@ -30,6 +30,12 @@ export const AUDIT_EVENT_TYPES = [
   'auth.password_reset_requested',
   'auth.password_reset',
   'auth.two_factor_enrolled',
+  // implement/24 (sign-in rules): written by the console itself.
+  'auth.locked',
+  'auth.idle_sign_out',
+  'auth.session_replaced',
+  'auth.password_changed',
+  'auth.password_expired',
   'account.operator_invited',
   'account.operator_updated',
   'account.operator_role_changed',
@@ -43,6 +49,10 @@ export const AUDIT_EVENT_TYPES = [
   'account.invitation_accepted',
   'account.member_role_changed',
   'account.member_removed',
+  'account.unlocked',
+  'account.reenabled',
+  'account.disabled_inactive',
+  'account.password_link_sent',
   'export.run',
 ] as const
 export type AuditEventType = (typeof AUDIT_EVENT_TYPES)[number]

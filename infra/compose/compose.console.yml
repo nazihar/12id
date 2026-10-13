@@ -36,6 +36,12 @@ x-console-env: &console-env
   # Only the `console` service needs mail; the migration and CLI jobs run without SMTP_URL.
   SMTP_URL_FILE: /run/secrets/SMTP_URL
   MAIL_FROM: ${MAIL_FROM:?env file}
+  # Sign-in rules (implement/24-console-sign-in.md), one policy for every account; defaults as shown.
+  CONSOLE_IDLE_TIMEOUT_MINUTES: ${CONSOLE_IDLE_TIMEOUT_MINUTES:-15}
+  CONSOLE_PASSWORD_MAX_AGE_DAYS: ${CONSOLE_PASSWORD_MAX_AGE_DAYS:-90}
+  CONSOLE_INACTIVITY_DAYS: ${CONSOLE_INACTIVITY_DAYS:-90}
+  CONSOLE_LOCK_THRESHOLD: ${CONSOLE_LOCK_THRESHOLD:-5}
+  CONSOLE_LOCK_MINUTES: ${CONSOLE_LOCK_MINUTES:-15}
 
 x-console-secrets: &console-secrets [CONSOLE_DB_PASSWORD, BETTER_AUTH_SECRET, BETTER_AUTH_SECRET_PREVIOUS, CONSOLE_TOKEN, SMTP_URL]
 

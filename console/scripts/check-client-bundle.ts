@@ -20,6 +20,9 @@ const MARKERS = [
   'nodemailer', // mail
   'appendFileSync', // mail outbox (development)
   'x-console-token', // platform-api console scope
+  'COMMON_WORDS_SOURCE', // the common-password list (implement/24)
+  'aardvark abacab', // its content, should the name be minified away
+  'hmacKeySignatureSecret', // the captcha's signing (implement/24)
 ]
 
 const clientDir = fileURLToPath(new URL('../dist/client', import.meta.url))

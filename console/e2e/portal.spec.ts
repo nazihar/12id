@@ -9,6 +9,7 @@ import pg from 'pg'
 
 import { PLATFORM_DATABASE_URL } from './env'
 import { linkFromMail, signInWithTotp } from './operator'
+import { strongPassword } from './passwords'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -52,7 +53,7 @@ test('owners run their tenant, members are limited by role and organization', as
   const ownerA = `owner-a+${stamp}@12id.test`
   const ownerB = `owner-b+${stamp}@12id.test`
   const memberEmail = `member+${stamp}@12id.test`
-  const password = `Portal-E2e-${stamp}`
+  const password = strongPassword()
 
   // Operator: organizations with their first owners.
   await signInWithTotp(page)

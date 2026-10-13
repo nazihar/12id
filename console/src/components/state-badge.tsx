@@ -30,6 +30,8 @@ const TONES: Record<string, Tone> = {
   declined: 'bad',
   revoked: 'bad',
   banned: 'bad',
+  locked: 'bad',
+  inactive: 'bad',
   expired: 'bad',
   cancelled: 'neutral',
   untested: 'neutral',

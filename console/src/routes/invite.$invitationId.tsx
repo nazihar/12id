@@ -1,12 +1,13 @@
 import { Link, createFileRoute, useHydrated, useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
 
+import { useCaptcha } from '@/components/captcha'
 import { Form, formValidation, useAppForm } from '@/components/form/form'
 import { AuthLayout } from '@/components/shell/auth-layout'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { createInvitedAccount, getInvitationPreview } from '@/features/invitations/invitation.functions'
-import { type InvitedAccountForm, PASSWORD_MIN, invitedAccountForm } from '@/features/session/auth.schemas'
+import { type InvitedAccountForm, invitedAccountForm } from '@/features/session/auth.schemas'
 import { authClient } from '@/lib/auth-client'
 
 // Landing page of an organization invitation email.
@@ -113,6 +114,8 @@ function AcceptInvitation({ invitationId }: { invitationId: string }) {
 function CreateAccount({ invitationId, email }: { invitationId: string; email: string }) {
   const router = useRouter()
   const [error, setError] = useState<string | null>(null)
+  // The sign-in right after the account is made goes through the same check as the login page.
+  const { captcha, take } = useCaptcha()
 
   const form = useAppForm({
     defaultValues: { name: '', password: '', confirm: '' } satisfies InvitedAccountForm,
@@ -122,7 +125,8 @@ function CreateAccount({ invitationId, email }: { invitationId: string; email: s
       setError(null)
       try {
         await createInvitedAccount({ data: { invitationId, name: value.name, password: value.password } })
-        const signIn = await authClient.signIn.email({ email, password: value.password })
+        const proof = await take()
+        const signIn = await authClient.signIn.email({ email, password: value.password, rememberMe: false }, { headers: { 'x-captcha': proof ?? '' } })
         if (signIn.error) throw new Error('Your account was created, but signing in failed. Sign in from the login page.')
         const accepted = await authClient.organization.acceptInvitation({ invitationId })
         if (accepted.error) throw new Error(accepted.error.message ?? 'The invitation could not be accepted.')
@@ -139,8 +143,9 @@ function CreateAccount({ invitationId, email }: { invitationId: string; email: s
     <Form form={form}>
       <form.FormError error={error} />
       <form.AppField name="name">{(field) => <field.TextField label="Your name" autoComplete="name" autoFocus />}</form.AppField>
-      <form.AppField name="password">{(field) => <field.PasswordField label="Password" autoComplete="new-password" description={`At least ${PASSWORD_MIN} characters. Two-factor authentication is set up next.`} />}</form.AppField>
+      <form.AppField name="password">{(field) => <field.NewPasswordField label="Password" person={{ email }} description="Two-factor authentication is set up next." />}</form.AppField>
       <form.AppField name="confirm">{(field) => <field.PasswordField label="Repeat the password" autoComplete="new-password" />}</form.AppField>
+      {captcha}
       <form.SubmitButton pendingLabel="Creating your account…">Create account and join</form.SubmitButton>
     </Form>
   )

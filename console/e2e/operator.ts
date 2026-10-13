@@ -13,7 +13,8 @@ async function nextTotpWindow(page: Page) {
   await page.waitForTimeout(30_000 - (Date.now() % 30_000) + 1_000)
 }
 
-export async function signInWithTotp(page: Page) {
+/** `landing`: where the sign-in should end up (the operator console, unless a rule sends them elsewhere). */
+export async function signInWithTotp(page: Page, { landing = /\/ops/ }: { landing?: RegExp } = {}) {
   const { email, password } = operator()
   const secret = readFileSync(TOTP_SECRET_FILE, 'utf8').trim()
   await nextTotpWindow(page)
@@ -24,7 +25,7 @@ export async function signInWithTotp(page: Page) {
   await expect(page).toHaveURL(/\/verify-2fa/)
   await page.getByTestId('otp-code').fill(generateSync({ secret }))
   await page.getByRole('button', { name: 'Verify' }).click()
-  await expect(page).toHaveURL(/\/ops/)
+  await expect(page).toHaveURL(landing)
 }
 
 /** The newest link in a message to `to` matching `pattern`, waiting for the mail to arrive. */

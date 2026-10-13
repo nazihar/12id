@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { createColumnHelper } from '@tanstack/react-table'
-import { MailXIcon, UserMinusIcon } from 'lucide-react'
+import { KeyRoundIcon, LockOpenIcon, MailXIcon, UserCheckIcon, UserMinusIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { DataTable } from '@/components/data-table/data-table'
@@ -11,7 +11,7 @@ import { RouteError } from '@/components/route-error'
 import { RowAction, RowActions } from '@/components/row-action'
 import { StateBadge } from '@/components/state-badge'
 import { ChangeRoleAction, InviteMemberDialog } from '@/features/portal/member-dialogs'
-import { cancelMemberInvitation, type listMembers, removeOrganizationMember } from '@/features/portal/members.functions'
+import { cancelMemberInvitation, type listMembers, reenableMember, removeOrganizationMember, sendMemberPasswordLink, unlockMember } from '@/features/portal/members.functions'
 import { type MemberSearch, memberSearch, roleOptions } from '@/features/portal/members.schemas'
 import { portalKey, portalMembersQuery } from '@/features/portal/portal.queries'
 import { SelectFilter } from '@/components/data-table/list-toolbar'
@@ -58,6 +58,25 @@ function MembersPage() {
       await refresh()
     },
   })
+  // implement/24: the lock after wrong passwords, the inactivity rule and a password link.
+  const unlock = useMutation({
+    mutationFn: (memberId: string) => unlockMember({ data: { organizationId, memberId } }),
+    onSuccess: async () => {
+      toast.success('Member unlocked.')
+      await refresh()
+    },
+  })
+  const reenable = useMutation({
+    mutationFn: (memberId: string) => reenableMember({ data: { organizationId, memberId } }),
+    onSuccess: async () => {
+      toast.success('Member re-enabled.')
+      await refresh()
+    },
+  })
+  const passwordLink = useMutation({
+    mutationFn: (memberId: string) => sendMemberPasswordLink({ data: { organizationId, memberId } }),
+    onSuccess: () => toast.success('A password link was mailed.'),
+  })
   const cancel = useMutation({
     mutationFn: (invitationId: string) => cancelMemberInvitation({ data: { organizationId, invitationId } }),
     onSuccess: async () => {
@@ -72,6 +91,7 @@ function MembersPage() {
     memberColumn.accessor('role', { header: 'Role', cell: ({ getValue }) => <StateBadge state={getValue()} /> }),
     memberColumn.accessor('twoFactorEnabled', { header: '2FA', cell: ({ getValue }) => (getValue() ? 'on' : 'not set up') }),
     memberColumn.accessor('lastSignInAt', { header: 'Last sign-in', cell: ({ getValue }) => (getValue() ? formatDateTime(getValue() as string) : 'never') }),
+    memberColumn.accessor('state', { header: 'Status', cell: ({ getValue }) => <StateBadge state={getValue()} /> }),
     memberColumn.accessor('since', { header: 'Member since', cell: ({ getValue }) => formatDateTime(getValue()) }),
     memberColumn.display({
       id: 'actions',
@@ -80,6 +100,40 @@ function MembersPage() {
         canManage && !row.original.isYou ? (
           <RowActions>
             <ChangeRoleAction organizationId={organizationId} orgSlug={orgSlug} member={{ id: row.original.id, email: row.original.email, role: row.original.role as TenantRole }} />
+            {row.original.state === 'locked' && (
+              <RowAction
+                label="Unlock"
+                icon={LockOpenIcon}
+                confirm={{
+                  title: `Unlock ${row.original.email}?`,
+                  description: 'The account was locked after too many wrong passwords. Unlocking lets them try again now instead of waiting.',
+                  confirmLabel: 'Unlock',
+                  onConfirm: () => unlock.mutateAsync(row.original.id),
+                }}
+              />
+            )}
+            {row.original.state === 'inactive' && (
+              <RowAction
+                label="Re-enable"
+                icon={UserCheckIcon}
+                confirm={{
+                  title: `Re-enable ${row.original.email}?`,
+                  description: 'The account was disabled because it was not used. They can sign in again.',
+                  confirmLabel: 'Re-enable',
+                  onConfirm: () => reenable.mutateAsync(row.original.id),
+                }}
+              />
+            )}
+            <RowAction
+              label="Send password link"
+              icon={KeyRoundIcon}
+              confirm={{
+                title: `Send ${row.original.email} a password link?`,
+                description: 'They get an email to choose a new password. The link works once and for 10 minutes.',
+                confirmLabel: 'Send link',
+                onConfirm: () => passwordLink.mutateAsync(row.original.id),
+              }}
+            />
             <RowAction
               label="Remove"
               icon={UserMinusIcon}

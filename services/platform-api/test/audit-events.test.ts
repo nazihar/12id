@@ -150,4 +150,10 @@ describe('console audit events', { skip: db ? false : 'no test database' }, () =
     const [kept] = await db!.db.select().from(erasures)
     assert.equal(kept.reason, 'requested')
   })
+
+  it('accepts the sign-in rule events (implement/24)', async () => {
+    for (const type of ['auth.locked', 'auth.idle_sign_out', 'auth.session_replaced', 'auth.password_changed', 'auth.password_expired', 'account.unlocked', 'account.reenabled', 'account.disabled_inactive', 'account.password_link_sent']) {
+      assert.equal((await event({ type, outcome: 'success', actorLabel: 'someone@example.com' })).statusCode, 201, type)
+    }
+  })
 })

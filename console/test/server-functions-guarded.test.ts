@@ -17,6 +17,9 @@ const root = fileURLToPath(new URL('../src', import.meta.url))
 const PUBLIC_SERVER_FUNCTIONS = new Map<string, string>([
   ['features/session/session.functions.ts#getViewer', "returns only the caller's own identity (null when anonymous) for route guards; no tenant data"],
   ['features/session/session.functions.ts#getShellPreferences', "reads only the caller's own sidebar cookie; no account or tenant data"],
+  ['features/session/session.functions.ts#touchSession', "extends or reports only the caller's own session (implement/24 idle timeout); no tenant data"],
+  ['features/session/session.functions.ts#getCaptchaChallenge', 'a signed proof-of-work challenge for the login form; holds no data'],
+  ['features/session/session.functions.ts#getResetNeedsCode', 'needs the unguessable reset token from the mailbox; answers only whether that account uses an authenticator app'],
   ['features/invitations/invitation.functions.ts#getInvitationPreview', 'needs the unguessable invitation id from the invited mailbox; returns only what that mail says'],
   ['features/invitations/invitation.functions.ts#createInvitedAccount', 'the invitee has no account yet; acts only on a pending, unexpired invitation whose email has no account'],
 ])

@@ -10,6 +10,7 @@ import pg from 'pg'
 import { expect, test, watchCsp } from './csp'
 import { PLATFORM_DATABASE_URL } from './env'
 import { linkFromMail, signInWithTotp } from './operator'
+import { strongPassword } from './passwords'
 
 const RESET_LINK = /http:\/\/localhost:3600\/api\/auth\/reset-password\/\S+/g
 const INVITE_LINK = /http:\/\/localhost:3600\/invite\/\S+/g
@@ -57,7 +58,7 @@ test('a change waits for a second person: asked by one, decided by another, appl
   const base = `/t/${slugFor(name, tenantId)}`
   const ownerEmail = `owner+${stamp}@12id.test`
   const adminEmail = `admin+${stamp}@12id.test`
-  const password = `Approvals-E2e-${stamp}`
+  const password = strongPassword()
 
   // The operator gives the tenant an organization with its first owner.
   await signInWithTotp(page)

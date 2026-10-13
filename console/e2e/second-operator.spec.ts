@@ -17,6 +17,7 @@ import { generateSync } from 'otplib'
 import { expect, test, watchCsp } from './csp'
 import { consoleEnv } from './env'
 import { linkFromMail, operator, signInWithTotp } from './operator'
+import { strongPassword } from './passwords'
 
 const RESET_LINK = /http:\/\/localhost:3600\/api\/auth\/reset-password\/\S+/g
 
@@ -34,7 +35,7 @@ const operators = (page: Page) => page.getByTestId('operators-table')
 test('adding an operator account waits for a second operator, and is applied by the one who asked', async ({ browser, page, cspViolations }) => {
   test.setTimeout(300_000)
   const stamp = Date.now()
-  const second = { email: `second-operator+${stamp}@12id.test`, password: `E2e-Second-${stamp}` }
+  const second = { email: `second-operator+${stamp}@12id.test`, password: strongPassword() }
   const added = `added-operator+${stamp}@12id.test`
 
   // The second operator, with an authenticator app like every operator.

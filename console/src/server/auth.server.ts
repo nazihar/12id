@@ -22,6 +22,8 @@ import { consoleDb } from './db.server'
 import * as schema from './db/auth-schema'
 import { startAuthHousekeeping } from './data-protection.server'
 import { sendMail } from './email.server'
+import { afterAuthCall, beforeAuthCall } from './sign-in-hooks.server'
+import { rememberPassword } from './sign-in-rules.server'
 import { authSecretOptions } from './auth-secrets.server'
 import { serverEnv } from './env.server'
 
@@ -38,6 +40,10 @@ export const auth = betterAuth({
   user: {
     additionalFields: {
       lastSignInAt: { type: 'date', required: false, input: false },
+      // Sign-in rules (implement/24): the lock after wrong passwords and the password's age.
+      failedSignIns: { type: 'number', required: false, input: false, defaultValue: 0 },
+      lockedUntil: { type: 'date', required: false, input: false },
+      passwordChangedAt: { type: 'date', required: false, input: false },
     },
   },
   emailAndPassword: {
@@ -45,9 +51,12 @@ export const auth = betterAuth({
     disableSignUp: true,
     minPasswordLength: 12,
     revokeSessionsOnPasswordReset: true,
+    // MTB 2.33: a reset link works once and for 10 minutes. The rest of the password rules are in the hooks.
+    resetPasswordTokenExpiresIn: 10 * 60,
     // The link reached the mailbox, so the address is verified; accepting organization invitations requires it.
     onPasswordReset: async ({ user }, request) => {
       await consoleDb().db.update(schema.user).set({ emailVerified: true }).where(eq(schema.user.id, user.id))
+      await rememberPassword(user.id)
       await reportPasswordReset(user, request, request ? getIP(request, auth.options) : null)
     },
     // Also the first-password link for accounts an operator created (tenant owners), so the wording covers both.
@@ -55,24 +64,30 @@ export const auth = betterAuth({
       await sendMail({
         to: user.email,
         subject: 'Set your 12id Console password',
-        text: `Choose a password for your 12id Console account (${user.email}):\n${url}\n\nThe link works once and expires in one hour. If you did not expect this email, ignore it.`,
+        text: `Choose a password for your 12id Console account (${user.email}):\n${url}\n\nThe link works once and expires in 10 minutes; if it has expired, use "Forgot password" on the sign-in page. If you did not expect this email, ignore it.`,
       })
     },
   },
   // 24 h from sign-in, not extended by activity (review L11, owner 2026-09-28; was 7 days sliding).
   // Operators get 12 h; that cap and this one are enforced per request from lib/permissions.ts.
+  // Also ended after CONSOLE_IDLE_TIMEOUT_MINUTES without activity (implement/24, middleware.ts).
   session: {
     expiresIn: SESSION_MAX_AGE_MS / 1000,
     disableSessionRefresh: true,
+    additionalFields: {
+      lastActiveAt: { type: 'date', required: false, input: false },
+    },
   },
   rateLimit: {
     enabled: true,
     storage: 'database',
   },
-  // Both hooks also report to the audit log (implement/22 C13, auth-audit.server.ts).
+  // Both hooks also report to the audit log (implement/22 C13, auth-audit.server.ts) and apply the
+  // sign-in rules (implement/24, sign-in-hooks.server.ts).
   hooks: {
     before: createAuthMiddleware(async (ctx) => {
       await reportSignOut(ctx)
+      await beforeAuthCall(ctx)
     }),
     after: createAuthMiddleware(async (ctx) => {
       let refusal: APIError | undefined
@@ -81,6 +96,7 @@ export const auth = betterAuth({
         await ctx.context.internalAdapter.deleteSession(created.session.token)
         refusal = new APIError('FORBIDDEN', { message: 'operators must use an authenticator app' })
       }
+      await afterAuthCall(ctx, refusal)
       await reportAuthCall(ctx, refusal)
       if (refusal) throw refusal
     }),

@@ -64,14 +64,17 @@ Checks from outside: `https://12id.naziharitsolution.com/api/health` 200; `/` re
 cd /opt/12id
 infra/scripts/deploy.sh console run --rm console-tools \
   npx auth create-admin --config src/server/auth.server.ts \
-  --email you@example.com --password "$(openssl rand -base64 18)" --name 'Your Name' --role operator --yes
+  --email you@example.com --password "Tmp-$(openssl rand -hex 12)-Q7!" --name 'Your Name' --role operator --yes
 ```
 
-Then, in the console: sign in with the temporary password (or use **Forgot your password?** on the
-login page, which emails the same set-password link), and the console forces authenticator-app
+The password must pass the console's rules (implement/24; the command refuses one that does not, and the
+random middle can, rarely, hold a sequence such as `abcd`: run it again). Then, in the console: sign in
+with the temporary password (or use **Forgot your password?** on the login page, which emails the same
+set-password link), and the console forces authenticator-app
 enrollment before anything else. Operators cannot use
 emailed codes. Further operators are invited from **Operators** in the console (they receive a
-set-password link; the link works once and expires in one hour).
+set-password link; the link works once and expires in 10 minutes, after which they use **Forgot your
+password?** or an operator sends a new one from the row's **Send password link**).
 
 ## Tenant portal (stage 4b)
 
@@ -91,6 +94,33 @@ set-password link; the link works once and expires in one hour).
   emailed codes, which recover through the mailbox.
 
 ## Operating notes
+
+- **Sign-in rules** (implement/24-console-sign-in.md; MTB Section 2). One policy for every account, set
+  per deployment in the environment file (`CONSOLE_*`, defaults in `infra/env/template.env`), then
+  `deploy.sh console`:
+  - **Idle timeout** 15 minutes (`CONSOLE_IDLE_TIMEOUT_MINUTES`): only a person's pointer or key
+    counts, and a dialog warns 2 minutes before. Staff keep the 12 h and others the 24 h cap from
+    sign-in. Closing the browser ends the session (no remembered cookie).
+  - **One session per account:** a completed sign-in (after the second factor) ends the others.
+  - **Passwords:** 12 characters or more with upper and lower case, a digit and a symbol; no
+    sequences, repeats, own name or common words; not one of the last 3; a meter on every form.
+    Changed after 90 days (`CONSOLE_PASSWORD_MAX_AGE_DAYS`): until then every page sends the
+    person to **Change password** (also in the account menu).
+  - **Lock:** 5 wrong passwords in a row lock the account for 15 minutes
+    (`CONSOLE_LOCK_THRESHOLD`, `CONSOLE_LOCK_MINUTES`), with a growing delay from the first. Operators
+    unlock from Operators (**Unlock**), owners from Members. The lock after 10 wrong second
+    factors is Better Auth's own and lifts by itself after 15 minutes.
+  - **Captcha:** a proof of work on the sign-in and forgot-password forms (ALTCHA, self-hosted, no
+    internet access needed).
+  - **Reset links** last 10 minutes; an account with an authenticator app also gives its code on
+    the reset page, and a wrong code spends the link. Operators and owners can mail a link from
+    the row (**Send password link**).
+  - **Unused accounts:** no sign-in for 90 days (`CONSOLE_INACTIVITY_DAYS`) disables the account
+    (ban reason `inactive: …`) and mails a notice, checked hourly. Operators re-enable from
+    Operators (**Re-enable**; held where `OPERATOR_APPROVALS=on`, like an unban), owners from Members.
+    If every operator is disabled, create one with console-tools (First operator, above). In the
+    database: `update "user" set banned = false, ban_reason = null, last_sign_in_at = now() where email = '…';`
+    (and `failed_sign_ins = 0, locked_until = null` for a lock).
 
 - **Break-glass.** `x-admin-token` on `/admin/*` over an SSH tunnel still works (see
   `platform-api.md`); every use is in the console audit log as actor `admin-token`.

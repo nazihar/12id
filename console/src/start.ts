@@ -29,6 +29,8 @@ export function contentSecurityPolicy(nonce: string): string {
     "img-src 'self' data:",
     "font-src 'self' data:",
     "connect-src 'self'",
+    // The captcha's proof of work runs in a worker file from our own origin (implement/24).
+    "worker-src 'self'",
     "object-src 'none'",
     "frame-ancestors 'none'",
     "base-uri 'none'",

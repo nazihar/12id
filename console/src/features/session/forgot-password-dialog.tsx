@@ -1,5 +1,6 @@
 import { useState } from 'react'
 
+import { useCaptcha } from '@/components/captcha'
 import { Form, formValidation, useAppForm } from '@/components/form/form'
 import { FormDialog } from '@/components/form/form-dialog'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -23,7 +24,7 @@ export function ForgotPasswordDialog() {
         </Button>
       }
       title="Reset your password"
-      description="We email a link that lets you choose a new password. It works once and expires in an hour."
+      description="We email a link that lets you choose a new password. It works once and expires in 10 minutes."
       onOpenChange={(open) => !open && setSent(false)}
     >
       {({ close }) => (sent ? <Sent onDone={close} /> : <RequestForm onSent={() => setSent(true)} />)}
@@ -33,16 +34,26 @@ export function ForgotPasswordDialog() {
 
 function RequestForm({ onSent }: { onSent: () => void }) {
   const [error, setError] = useState<string | null>(null)
+  const { captcha, take } = useCaptcha()
   const form = useAppForm({
     defaultValues: { email: '' } satisfies ForgotPasswordForm,
     validationLogic: formValidation,
     validators: { onDynamic: forgotPasswordForm },
     onSubmit: async ({ value }) => {
       setError(null)
-      const result = await authClient.requestPasswordReset({ email: forgotPasswordForm.parse(value).email, redirectTo: '/reset-password' })
+      const proof = await take()
+      if (!proof) {
+        setError('The check that you are not a robot did not finish. Reload the page and try again.')
+        return
+      }
+      const result = await authClient.requestPasswordReset({ email: forgotPasswordForm.parse(value).email, redirectTo: '/reset-password' }, { headers: { 'x-captcha': proof } })
       // A refusal for an unknown address is not reported: the page must not reveal who has an account.
       if (result.error && result.error.status === 429) {
         setError('Too many requests. Wait a minute and try again.')
+        return
+      }
+      if (result.error?.code === 'CAPTCHA_REQUIRED') {
+        setError(result.error.message ?? 'The check did not complete. Try again.')
         return
       }
       onSent()
@@ -52,6 +63,7 @@ function RequestForm({ onSent }: { onSent: () => void }) {
     <Form form={form}>
       <form.FormError error={error} />
       <form.AppField name="email">{(field) => <field.TextField label="Email" type="email" autoComplete="username" autoFocus />}</form.AppField>
+      {captcha}
       <DialogFooter>
         <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
         <form.SubmitButton pendingLabel="Sending…">Email me a link</form.SubmitButton>

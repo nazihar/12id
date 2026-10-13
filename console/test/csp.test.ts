@@ -8,6 +8,6 @@ describe('content security policy (review M12)', () => {
     expect(policy).toContain("script-src 'nonce-abc123==' 'strict-dynamic'")
     expect(policy).not.toMatch(/script-src[^;]*'unsafe-inline'/)
     expect(policy).not.toMatch(/script-src[^;]*'unsafe-eval'/)
-    for (const directive of ["default-src 'self'", "object-src 'none'", "frame-ancestors 'none'", "base-uri 'none'", "form-action 'self'", "connect-src 'self'"]) expect(policy).toContain(directive)
+    for (const directive of ["default-src 'self'", "object-src 'none'", "frame-ancestors 'none'", "base-uri 'none'", "form-action 'self'", "connect-src 'self'", "worker-src 'self'"]) expect(policy).toContain(directive)
   })
 })

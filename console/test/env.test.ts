@@ -26,6 +26,20 @@ describe('serverEnv', () => {
   })
 })
 
+describe('serverEnv sign-in rules (implement/24)', () => {
+  it('defaults to 15 minutes idle, 90-day passwords and accounts, a 15-minute lock after 5 wrong passwords', () => {
+    const env = serverEnv({ ...base, NODE_ENV: 'development' })
+    expect([env.CONSOLE_IDLE_TIMEOUT_MINUTES, env.CONSOLE_PASSWORD_MAX_AGE_DAYS, env.CONSOLE_INACTIVITY_DAYS, env.CONSOLE_LOCK_THRESHOLD, env.CONSOLE_LOCK_MINUTES]).toEqual([15, 90, 90, 5, 15])
+  })
+
+  it('takes blank as the default, 0 as off where allowed, and refuses what is out of range', () => {
+    expect(serverEnv({ ...base, NODE_ENV: 'development', CONSOLE_IDLE_TIMEOUT_MINUTES: '' }).CONSOLE_IDLE_TIMEOUT_MINUTES).toBe(15)
+    expect(serverEnv({ ...base, NODE_ENV: 'development', CONSOLE_INACTIVITY_DAYS: '0' }).CONSOLE_INACTIVITY_DAYS).toBe(0)
+    expect(() => serverEnv({ ...base, NODE_ENV: 'development', CONSOLE_IDLE_TIMEOUT_MINUTES: '0' })).toThrow(/CONSOLE_IDLE_TIMEOUT_MINUTES/)
+    expect(() => serverEnv({ ...base, NODE_ENV: 'development', CONSOLE_LOCK_THRESHOLD: 'five' })).toThrow(/CONSOLE_LOCK_THRESHOLD/)
+  })
+})
+
 describe('serverEnv with file secrets (Phase 9 M11)', () => {
   const dir = mkdtempSync(join(tmpdir(), 'console-env-'))
   const file = (name: string, content: string) => {

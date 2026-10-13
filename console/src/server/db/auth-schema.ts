@@ -26,6 +26,9 @@ export const user = pgTable("user", {
   banReason: text("ban_reason"),
   banExpires: timestamp("ban_expires"),
   lastSignInAt: timestamp("last_sign_in_at"),
+  failedSignIns: integer("failed_sign_ins").default(0).notNull(),
+  lockedUntil: timestamp("locked_until"),
+  passwordChangedAt: timestamp("password_changed_at"),
 });
 
 export const session = pgTable(
@@ -45,6 +48,7 @@ export const session = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     activeOrganizationId: text("active_organization_id"),
     impersonatedBy: text("impersonated_by"),
+    lastActiveAt: timestamp("last_active_at"),
   },
   (table) => [index("session_userId_idx").on(table.userId)],
 );
@@ -165,6 +169,23 @@ export const rateLimit = pgTable("rate_limit", {
   count: integer("count").notNull(),
   lastRequest: bigint("last_request", { mode: "number" }).notNull(),
 });
+
+/**
+ * Not a Better Auth table (implement/24, MTB row 2.22): the hashes of an account's last passwords,
+ * the current one included, so a new password can be checked against them. Kept to three per account.
+ */
+export const passwordHistory = pgTable(
+  "password_history",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    hash: text("hash").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [index("password_history_userId_idx").on(table.userId, table.createdAt)],
+);
 
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),

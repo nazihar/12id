@@ -1,7 +1,7 @@
 import { keepPreviousData, queryOptions, useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { createColumnHelper } from '@tanstack/react-table'
-import { BanIcon, LogOutIcon, Trash2Icon, UserCheckIcon } from 'lucide-react'
+import { BanIcon, KeyRoundIcon, LockOpenIcon, LogOutIcon, Trash2Icon, UserCheckIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { DataTable } from '@/components/data-table/data-table'
@@ -11,7 +11,7 @@ import { RouteError } from '@/components/route-error'
 import { RowAction, RowActions } from '@/components/row-action'
 import { StateBadge } from '@/components/state-badge'
 import { EditOperatorAction, InviteOperatorDialog } from '@/features/operators/invite-operator-dialog'
-import { banOperator, deleteOperator, listOperators, revokeOperatorSessions, unbanOperator } from '@/features/operators/operators.functions'
+import { banOperator, deleteOperator, listOperators, revokeOperatorSessions, sendOperatorPasswordLink, unbanOperator, unlockOperator } from '@/features/operators/operators.functions'
 import { type OperatorSearch, operatorSearch, operatorStatusOptions, staffRoleOptions } from '@/features/operators/operators.schemas'
 import { SelectFilter } from '@/components/data-table/list-toolbar'
 import { useListPending } from '@/components/data-table/use-list-pending'
@@ -77,7 +77,8 @@ function operatorColumns(currentUserId: string, canManage: boolean) {
     column.accessor('role', { header: 'Role', cell: ({ getValue }) => <StateBadge state={getValue()} /> }),
     column.accessor((row) => (row.twoFactorEnabled ? 'set up' : 'not set up'), { id: 'twoFactor', header: 'Two-factor' }),
     column.accessor('lastSignInAt', { header: 'Last sign-in', cell: ({ getValue }) => (getValue() ? formatDateTime(getValue() as string) : 'never') }),
-    column.accessor((row) => (row.banned ? 'banned' : 'active'), { id: 'status', header: 'Status', cell: ({ getValue }) => <StateBadge state={getValue()} /> }),
+    // implement/24: `locked` after wrong passwords, `inactive` when disabled for not signing in.
+    column.accessor('state', { id: 'status', header: 'Status', cell: ({ getValue }) => <StateBadge state={getValue()} /> }),
     column.accessor('createdAt', { header: 'Created', cell: ({ getValue }) => formatDateTime(getValue()) }),
     column.display({
       id: 'actions',
@@ -106,6 +107,17 @@ function OperatorActions({ operator }: { operator: OperatorRow }) {
       await refresh()
     },
   })
+  const unlock = useMutation({
+    mutationFn: () => unlockOperator({ data: { userId: operator.id } }),
+    onSuccess: async () => {
+      toast.success(`${operator.email} is unlocked.`)
+      await refresh()
+    },
+  })
+  const passwordLink = useMutation({
+    mutationFn: () => sendOperatorPasswordLink({ data: { userId: operator.id } }),
+    onSuccess: () => toast.success(`A password link was mailed to ${operator.email}.`),
+  })
   const revoke = useMutation({
     mutationFn: () => revokeOperatorSessions({ data: { userId: operator.id } }),
     onSuccess: () => toast.success(`Signed ${operator.email} out everywhere.`),
@@ -120,6 +132,28 @@ function OperatorActions({ operator }: { operator: OperatorRow }) {
   return (
     <RowActions>
       <EditOperatorAction operator={operator} />
+      {operator.state === 'locked' && (
+        <RowAction
+          label="Unlock"
+          icon={LockOpenIcon}
+          confirm={{
+            title: `Unlock ${operator.email}?`,
+            description: 'The account was locked after too many wrong passwords. Unlocking lets them try again now instead of waiting.',
+            confirmLabel: 'Unlock',
+            onConfirm: () => unlock.mutateAsync(),
+          }}
+        />
+      )}
+      <RowAction
+        label="Send password link"
+        icon={KeyRoundIcon}
+        confirm={{
+          title: `Send ${operator.email} a password link?`,
+          description: 'They get an email to choose a new password. The link works once, for 10 minutes, and also asks for the code from their authenticator app.',
+          confirmLabel: 'Send link',
+          onConfirm: () => passwordLink.mutateAsync(),
+        }}
+      />
       <RowAction
         label="Sign out everywhere"
         icon={LogOutIcon}
@@ -132,12 +166,12 @@ function OperatorActions({ operator }: { operator: OperatorRow }) {
       />
       {operator.banned ? (
         <RowAction
-          label="Unban"
+          label={operator.state === 'inactive' ? 'Re-enable' : 'Unban'}
           icon={UserCheckIcon}
           confirm={{
-            title: `Unban ${operator.email}?`,
-            description: 'They can sign in again and see every tenant.',
-            confirmLabel: 'Unban',
+            title: operator.state === 'inactive' ? `Re-enable ${operator.email}?` : `Unban ${operator.email}?`,
+            description: operator.state === 'inactive' ? 'The account was disabled because it was not used. They can sign in again and see every tenant.' : 'They can sign in again and see every tenant.',
+            confirmLabel: operator.state === 'inactive' ? 'Re-enable' : 'Unban',
             onConfirm: () => unban.mutateAsync(),
           }}
         />

@@ -17,9 +17,12 @@ import { getRequestHeaders, setResponseHeader, setResponseStatus } from '@tansta
 import { and, eq } from 'drizzle-orm'
 
 import { AUDITOR_ROLE, OPERATOR_ROLE, type StaffRole, type TenantRole, sessionExpired, staffRoleOf, tenantRoles } from '../lib/permissions'
+import { passwordExpired, sessionIdle } from '../lib/sign-in-rules'
 import { auth } from './auth.server'
 import { consoleDb } from './db.server'
 import { member, organization, twoFactor } from './db/auth-schema'
+import { serverEnv } from './env.server'
+import { endIdleSession } from './sign-in-rules.server'
 
 declare const principalBrand: unique symbol
 
@@ -68,7 +71,16 @@ export const authMiddleware = createMiddleware({ type: 'function' }).server(asyn
   if (!session) signInAgain()
   // Operators 12 h, everyone else 24 h from sign-in (lib/permissions.ts, review L11).
   if (sessionExpired(session.user.role, session.session.createdAt)) signInAgain()
+  // No activity for CONSOLE_IDLE_TIMEOUT_MINUTES (implement/24). Only touchSession extends it: a call
+  // made by a page in the background is not activity, or a page left open would never time out.
+  const env = serverEnv()
+  if (sessionIdle(session.session.lastActiveAt, session.session.createdAt, env.CONSOLE_IDLE_TIMEOUT_MINUTES)) {
+    await endIdleSession(session.session.token, session.user)
+    signInAgain()
+  }
   if (!session.user.twoFactorEnabled) refuse(403, 'set up two-factor authentication first')
+  // An old password must be changed first (implement/24); the change itself goes to Better Auth, not here.
+  if (passwordExpired(session.user.passwordChangedAt, env.CONSOLE_PASSWORD_MAX_AGE_DAYS)) refuse(403, 'your password has expired; change it first')
   // Everything behind this middleware depends on who is asking.
   setResponseHeader('Cache-Control', 'no-store')
   return next({ context: { session } })

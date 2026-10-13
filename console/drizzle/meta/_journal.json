@@ -15,6 +15,13 @@
       "when": 1791713422405,
       "tag": "0001_last_sign_in",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791875683009,
+      "tag": "0002_sign_in_rules",
+      "breakpoints": true
     }
   ]
 }

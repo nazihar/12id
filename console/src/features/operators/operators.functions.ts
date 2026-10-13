@@ -24,6 +24,7 @@ import { type SQL, and, count, desc, eq, ilike, inArray, isNull, or } from 'driz
 import { editOperatorInput, inviteOperatorInput, operatorSearch } from '@/features/operators/operators.schemas'
 import { likeContains, pageParams } from '@/lib/list-search'
 import { STAFF_ROLES, staffRoleOf } from '@/lib/permissions'
+import { accountState } from '@/lib/sign-in-rules'
 import { performAccountChange, staffAccount } from '@/server/account-changes.server'
 import { askForAccountChange } from '@/server/approvals.server'
 import { principalActor, recordEvent } from '@/server/audit.server'
@@ -31,6 +32,7 @@ import { auth } from '@/server/auth.server'
 import { consoleDb } from '@/server/db.server'
 import { user } from '@/server/db/auth-schema'
 import { operatorMiddleware, operatorReadMiddleware } from '@/server/middleware'
+import { unlockAccount } from '@/server/sign-in-rules.server'
 
 const userInput = z.object({ userId: z.string().min(1).max(100) })
 
@@ -56,7 +58,7 @@ export const listOperators = createServerFn({ method: 'GET' })
     const where = and(...filters)
     const [rows, [{ total }]] = await Promise.all([
       db
-        .select({ id: user.id, email: user.email, name: user.name, role: user.role, banned: user.banned, twoFactorEnabled: user.twoFactorEnabled, lastSignInAt: user.lastSignInAt, createdAt: user.createdAt })
+        .select({ id: user.id, email: user.email, name: user.name, role: user.role, banned: user.banned, banReason: user.banReason, lockedUntil: user.lockedUntil, twoFactorEnabled: user.twoFactorEnabled, lastSignInAt: user.lastSignInAt, createdAt: user.createdAt })
         .from(user)
         .where(where)
         .orderBy(desc(user.createdAt), desc(user.id))
@@ -64,8 +66,10 @@ export const listOperators = createServerFn({ method: 'GET' })
         .offset((page - 1) * pageSize),
       db.select({ total: count() }).from(user).where(where),
     ])
-    const items = rows.map((account) => ({
+    const items = rows.map(({ banReason: _reason, lockedUntil, ...account }) => ({
       ...account,
+      // implement/24: locked after wrong passwords, or disabled for inactivity.
+      state: accountState({ banned: account.banned, banReason: _reason, lockedUntil }),
       role: staffRoleOf(account.role) ?? 'operator',
       banned: Boolean(account.banned),
       twoFactorEnabled: Boolean(account.twoFactorEnabled),
@@ -147,4 +151,27 @@ export const revokeOperatorSessions = createServerFn({ method: 'POST' })
     await auth.api.revokeUserSessions({ headers: getRequestHeaders(), body: { userId: data.userId } })
     await recordEvent({ type: 'account.operator_sessions_revoked', actor: principalActor(context.principal), detail: { account: await emailOf(data.userId), userId: data.userId } })
     return { revoked: true }
+  })
+
+/** Lifts the lock after wrong passwords at once (implement/24, MTB 2.26). Never held: it only restores what the rules took. */
+export const unlockOperator = createServerFn({ method: 'POST' })
+  .middleware([operatorMiddleware])
+  .validator(userInput)
+  .handler(async ({ context, data }) => {
+    if (!(await staffAccount(data.userId))) throw new Error('No such operator account.')
+    await unlockAccount(data.userId, principalActor(context.principal), await emailOf(data.userId))
+    return { unlocked: true }
+  })
+
+/** Mails the account a link to choose a new password (implement/24, MTB 2.37 item 5). It works for 10 minutes. */
+export const sendOperatorPasswordLink = createServerFn({ method: 'POST' })
+  .middleware([operatorMiddleware])
+  .validator(userInput)
+  .handler(async ({ context, data }) => {
+    if (data.userId === context.principal.actor) throw new Error('Change your own password from your account menu.')
+    const email = await emailOf(data.userId)
+    if (!email || !(await staffAccount(data.userId))) throw new Error('No such operator account.')
+    await auth.api.requestPasswordReset({ body: { email, redirectTo: '/reset-password' } })
+    await recordEvent({ type: 'account.password_link_sent', actor: principalActor(context.principal), detail: { account: email, userId: data.userId } })
+    return { sent: true }
   })

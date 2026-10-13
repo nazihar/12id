@@ -10,6 +10,8 @@ import { z } from 'zod'
 import { resolveFileEnv } from './file-env.server'
 
 const secret = z.string().min(32, 'secrets must be at least 32 characters; generate them, never hand-type them')
+/** A whole-number setting; blank (compose passes an empty string for an unset variable) takes the default. */
+const setting = (min: number, max: number, fallback: number) => z.preprocess((value) => (value === '' ? undefined : value), z.coerce.number().int().min(min).max(max).default(fallback))
 const postgresUrl = z.url().refine((url) => url.startsWith('postgres://') || url.startsWith('postgresql://'), 'must be a postgres URL')
 
 const schema = z
@@ -31,6 +33,16 @@ const schema = z
     MAIL_FROM: z.string().min(3).default('12id Console <no-reply@localhost>'),
     /** Development and tests only: also append every outgoing mail as a JSON line to this file. */
     MAIL_OUTBOX_PATH: z.string().min(1).optional(),
+    // Sign-in rules (implement/24-console-sign-in.md). One policy for every account, set per deployment.
+    /** A session with no activity for this long is ended (MTB 2.25: 10 to 15 minutes). */
+    CONSOLE_IDLE_TIMEOUT_MINUTES: setting(1, 1440, 15),
+    /** A password older than this must be changed before anything else; 0 = never. */
+    CONSOLE_PASSWORD_MAX_AGE_DAYS: setting(0, 3650, 90),
+    /** An account with no sign-in for this long is disabled and told by mail; 0 = never. */
+    CONSOLE_INACTIVITY_DAYS: setting(0, 3650, 90),
+    /** Wrong passwords in a row that lock an account, and for how long. */
+    CONSOLE_LOCK_THRESHOLD: setting(1, 100, 5),
+    CONSOLE_LOCK_MINUTES: setting(1, 1440, 15),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === 'production' && !env.SMTP_URL) {

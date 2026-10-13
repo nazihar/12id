@@ -8,6 +8,7 @@ import { type Browser, type Page, expect, test } from '@playwright/test'
 import { generateSync } from 'otplib'
 
 import { linkFromMail, operator, signInWithTotp } from './operator'
+import { strongPassword } from './passwords'
 
 const RESET_LINK = /http:\/\/localhost:3600\/api\/auth\/reset-password\/\S+/g
 
@@ -22,7 +23,7 @@ test('an auditor reads the operator area and changes nothing; an operator edits 
   test.setTimeout(240_000)
   const stamp = Date.now()
   const auditorEmail = `auditor+${stamp}@12id.test`
-  const password = `E2e-Auditor-${stamp}`
+  const password = strongPassword()
 
   // The operator adds an auditor.
   await signInWithTotp(page)

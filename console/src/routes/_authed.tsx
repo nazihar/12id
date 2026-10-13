@@ -10,6 +10,8 @@ export const Route = createFileRoute('/_authed')({
   beforeLoad: ({ context, location }) => {
     if (!context.viewer) throw redirect({ to: '/login', search: { redirect: location.href } })
     if (!context.viewer.twoFactorEnabled) throw redirect({ to: '/setup-2fa' })
+    // An expired password is changed before anything else (implement/24).
+    if (context.viewer.passwordExpired) throw redirect({ to: '/change-password' })
     return { viewer: context.viewer }
   },
   // The shell needs the organization list (workspace switcher) and the sidebar's remembered state.

@@ -17,9 +17,12 @@ import { askForAccountChange } from '@/server/approvals.server'
 import { principalActor, recordEvent } from '@/server/audit.server'
 import { auth } from '@/server/auth.server'
 import { consoleDb } from '@/server/db.server'
-import { invitation } from '@/server/db/auth-schema'
-import { listOrganizationInvitations, listOrganizationMembers } from '@/server/members.server'
+import { invitation, user } from '@/server/db/auth-schema'
+import { listOrganizationInvitations, listOrganizationMembers, memberAccount } from '@/server/members.server'
 import { tenantMiddleware } from '@/server/middleware'
+import { staffRoleOf } from '@/lib/permissions'
+import { INACTIVE_BAN_PREFIX } from '@/lib/sign-in-rules'
+import { unlockAccount } from '@/server/sign-in-rules.server'
 
 import { assertSameOrganization, organizationInput } from './organization-input'
 
@@ -80,4 +83,57 @@ export const removeOrganizationMember = createServerFn({ method: 'POST' })
     await auth.api.removeMember({ headers: getRequestHeaders(), body: { memberIdOrEmail: data.memberId, organizationId: data.organizationId } })
     await recordEvent({ type: 'account.member_removed', actor: principalActor(context.principal), tenantId: context.principal.tenantId, detail: { account, memberId: data.memberId } })
     return { removed: true }
+  })
+
+const memberInput = organizationInput.extend({ memberId: z.string().min(1).max(100) })
+
+/**
+ * A member's account that an owner may act on (implement/24): in this organization, and never an
+ * operator's or auditor's account, which only operators manage.
+ */
+async function ownersMemberAccount(organizationId: string, memberId: string) {
+  const account = await memberAccount(organizationId, memberId)
+  if (!account || staffRoleOf(account.role)) throw new Error('No such member in this organization.')
+  return account
+}
+
+/** Lifts the lock after wrong passwords at once (implement/24, MTB 2.26). */
+export const unlockMember = createServerFn({ method: 'POST' })
+  .middleware([tenantMiddleware({ member: ['update'] })])
+  .validator(memberInput)
+  .handler(async ({ context, data }) => {
+    assertSameOrganization(context.organization.id, data.organizationId)
+    const account = await ownersMemberAccount(data.organizationId, data.memberId)
+    await unlockAccount(account.userId, principalActor(context.principal), account.email)
+    return { unlocked: true }
+  })
+
+/**
+ * Re-enables a member the inactivity rule disabled (implement/24, MTB 2.28). Only that: an account a
+ * person banned stays banned. Not held for a second person: it restores what a rule took away.
+ */
+export const reenableMember = createServerFn({ method: 'POST' })
+  .middleware([tenantMiddleware({ member: ['update'] })])
+  .validator(memberInput)
+  .handler(async ({ context, data }) => {
+    assertSameOrganization(context.organization.id, data.organizationId)
+    const account = await ownersMemberAccount(data.organizationId, data.memberId)
+    if (!account.banned || !account.banReason?.startsWith(INACTIVE_BAN_PREFIX)) throw new Error('Only an account disabled for not being used can be re-enabled here.')
+    // Counts as a fresh start: without it the next hourly pass would disable the account again.
+    await consoleDb().db.update(user).set({ banned: false, banReason: null, banExpires: null, lastSignInAt: new Date() }).where(eq(user.id, account.userId))
+    await recordEvent({ type: 'account.reenabled', actor: principalActor(context.principal), tenantId: context.principal.tenantId, detail: { account: account.email, memberId: data.memberId } })
+    return { reenabled: true }
+  })
+
+/** Mails the member a link to choose a new password (implement/24, MTB 2.37 item 5). It works for 10 minutes. */
+export const sendMemberPasswordLink = createServerFn({ method: 'POST' })
+  .middleware([tenantMiddleware({ member: ['update'] })])
+  .validator(memberInput)
+  .handler(async ({ context, data }) => {
+    assertSameOrganization(context.organization.id, data.organizationId)
+    const account = await ownersMemberAccount(data.organizationId, data.memberId)
+    if (account.userId === context.session.user.id) throw new Error('Change your own password from your account menu.')
+    await auth.api.requestPasswordReset({ body: { email: account.email, redirectTo: '/reset-password' } })
+    await recordEvent({ type: 'account.password_link_sent', actor: principalActor(context.principal), tenantId: context.principal.tenantId, detail: { account: account.email, memberId: data.memberId } })
+    return { sent: true }
   })

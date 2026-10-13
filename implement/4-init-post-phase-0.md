@@ -933,6 +933,13 @@ One app, two roles: **platform operator** (all tenants) and **tenant member** (o
   - **`v0.5.0`, released 2026-10-12 (commit `86845a3`, staging on `0.5.0-rc.1`).** **C15 audit log period:** audit rows are deleted after a period of their own (per organisation, default 730 days, a year at least, or kept), separate from and longer than the period for end users' data; the append-only trigger lets only that pass delete (migration `0014_audit_retention`). **C16 system health page:** Alertmanager pushes its alerts to platform-api (`POST /internal/alerts`, one new secret), and `/ops/health` shows the readiness checks, the alerts, a heartbeat from monitoring and the non-secret settings (migration `0015_platform_alerts`).
   - **`v0.6.0`, released 2026-10-13 (commit `ee2d699`, staging on `0.6.0-rc.1`).** **C17–C19 approval by a second person:** 22 kinds of change (keys, webhook, biometric provider and policies, proof templates, catalogue publishing, the two periods, member and operator accounts, switching it off) wait for someone other than the person who asked, where an organisation has switched it on (operator accounts: `OPERATOR_APPROVALS`). One hold in platform-api (`approvals/gate.ts`, migration `0016_approvals`) stores the call and makes it again when it is applied; what only closes access is never held.
   - Later: security events, in-console notifications.
+- [~] **Console sign-in rules (MTB theme E; plan [`24-console-sign-in.md`](24-console-sign-in.md), evidence [`25-console-sign-in-findings.md`](25-console-sign-in-findings.md)): built and verified locally 2026-10-13, not released (planned `v0.8.0`).**
+  - Idle timeout 15 min (server-side, warning dialog), one session per account, browser-session cookie.
+  - Password rules with a meter, common words refused, last 3 refused, 90-day age.
+  - Lock after 5 wrong passwords (15 min, operators and owners unlock), self-hosted ALTCHA captcha.
+  - 10-minute reset links with the authenticator code, unused accounts disabled after 90 days with a mail.
+  - Change password and "Send password link" for operators and owners.
+  - Values per deployment (`CONSOLE_*`); 9 new audit event types.
 
 Original checklist: tenant management; catalogue (both identifier forms); proof template builder (expiry predicate enforced); credential and connection browser; webhook delivery log.
 

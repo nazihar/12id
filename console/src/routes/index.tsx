@@ -5,6 +5,7 @@ export const Route = createFileRoute('/')({
   beforeLoad: ({ context }) => {
     if (!context.viewer) throw redirect({ to: '/login' })
     if (!context.viewer.twoFactorEnabled) throw redirect({ to: '/setup-2fa' })
+    if (context.viewer.passwordExpired) throw redirect({ to: '/change-password' })
     throw redirect({ to: context.viewer.isStaff ? '/ops' : '/account' })
   },
 })

@@ -105,6 +105,9 @@ export async function performAccountChange(principal: Principal, type: AccountCh
       const data = operatorUnban.parse(payload)
       const account = await staffAccount(data.userId)
       await auth.api.unbanUser({ headers, body: { userId: account.id } })
+      // An account disabled for not being used starts its count again, or the next hourly pass would
+      // disable it at once (implement/24).
+      await consoleDb().db.update(user).set({ lastSignInAt: new Date() }).where(eq(user.id, account.id))
       await recordEvent({ type: 'account.operator_unbanned', actor, detail: { account: account.email, userId: account.id, ...approval } })
       return
     }

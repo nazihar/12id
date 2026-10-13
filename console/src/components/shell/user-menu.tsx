@@ -1,5 +1,5 @@
 import { Link, useHydrated, useRouteContext, useRouter } from '@tanstack/react-router'
-import { BuildingIcon, LogOutIcon, ShieldUserIcon } from 'lucide-react'
+import { BuildingIcon, KeyRoundIcon, LogOutIcon, ShieldUserIcon } from 'lucide-react'
 
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -14,13 +14,15 @@ export function initials(name: string, email: string) {
 
 /** Profile button in the header: who is signed in, where else they can go, and sign out. */
 export function UserMenu() {
-  const { viewer } = useRouteContext({ from: '/_authed' })
+  const { viewer, queryClient } = useRouteContext({ from: '/_authed' })
   const router = useRouter()
   // A click before hydration would do nothing; the trigger waits for the handlers.
   const hydrated = useHydrated()
 
   async function signOut() {
     await authClient.signOut()
+    // Nothing read while signed in stays in this tab's memory (MTB 2.73).
+    queryClient.clear()
     await router.invalidate()
     await router.navigate({ to: '/login' })
   }
@@ -58,6 +60,10 @@ export function UserMenu() {
               Operator console
             </DropdownMenuItem>
           )}
+          <DropdownMenuItem render={<Link to="/change-password" />}>
+            <KeyRoundIcon />
+            Change password
+          </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => void signOut()}>

@@ -20,8 +20,10 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Combobox, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, ComboboxList } from '@/components/ui/combobox'
 import { Field, FieldContent, FieldDescription, FieldError, FieldLabel, FieldSet, FieldTitle } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { Progress } from '@/components/ui/progress'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { passwordProblems, passwordStrength } from '@/lib/password-policy'
 import { cn } from '@/lib/utils'
 
 export const { fieldContext, formContext, useFieldContext, useFormContext } = createFormHookContexts()
@@ -110,6 +112,53 @@ export function PasswordField(props: FieldChromeProps & InputExtras) {
           aria-describedby={describedBy}
           {...input}
         />
+      )}
+    </FieldShell>
+  )
+}
+
+/**
+ * A new password, with the strength meter and the rules still unmet (implement/24, MTB 2.31). The
+ * same rules run on the server, which also refuses common words and the last three passwords.
+ * `person` lets the meter count the person's own name and address against the password.
+ */
+export function NewPasswordField(props: FieldChromeProps & InputExtras & { person?: { email?: string; name?: string } }) {
+  const field = useFieldContext<string>()
+  const { label, description, className, person, ...input } = props
+  const value = field.state.value
+  const strength = passwordStrength(value, person)
+  const unmet = value ? passwordProblems(value, person) : []
+  return (
+    <FieldShell label={label} description={description} className={className}>
+      {({ id, invalid, describedBy, hydrated }) => (
+        <>
+          <Input
+            id={id}
+            name={field.name}
+            type="password"
+            readOnly={!hydrated}
+            value={value}
+            onBlur={field.handleBlur}
+            onChange={(event) => field.handleChange(event.target.value)}
+            aria-invalid={invalid || undefined}
+            aria-describedby={[describedBy, `${id}-strength`].filter(Boolean).join(' ')}
+            autoComplete="new-password"
+            {...input}
+          />
+          <div id={`${id}-strength`} aria-live="polite" className="flex flex-col gap-1.5">
+            <Progress value={strength.score * 25} aria-label="Password strength" />
+            <p className="text-muted-foreground text-xs">
+              {value ? `Strength: ${strength.label}` : `At least 12 characters with upper and lower case, a digit and a symbol.`}
+            </p>
+            {unmet.length > 0 && (
+              <ul className="text-muted-foreground list-disc pl-4 text-xs">
+                {unmet.map((problem) => (
+                  <li key={problem}>{problem}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </>
       )}
     </FieldShell>
   )
@@ -417,7 +466,7 @@ export function FormError({ error }: { error?: Error | string | null }) {
 export const { useAppForm, withForm } = createFormHook({
   fieldContext,
   formContext,
-  fieldComponents: { TextField, PasswordField, TextareaField, NumberField, CheckboxField, SwitchField, CheckboxGroupField, ComboboxField },
+  fieldComponents: { TextField, PasswordField, NewPasswordField, TextareaField, NumberField, CheckboxField, SwitchField, CheckboxGroupField, ComboboxField },
   formComponents: { SubmitButton, FormError },
 })
 
