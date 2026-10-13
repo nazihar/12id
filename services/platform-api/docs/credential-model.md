@@ -99,6 +99,7 @@ all names and values together. Credentials carry claims, not documents.
 - **Adding or renaming a field means a new schema version** (and a new credential definition).
 - Deprecate the old version in the console to stop new offers. Proof templates that name the schema accept every version, so credentials issued before the change keep working.
 - Plan names carefully: use lower camel case, no personal data in names, and include `expiresOn` (added for you).
+- **Do not name an attribute `id`.** Wallets treat `id` as the identifier of the credential's subject and cannot store the credential, so the console and the API refuse it. Use a specific name such as `memberId` or `customerId`.
 
 ## Checklist before your first schema
 

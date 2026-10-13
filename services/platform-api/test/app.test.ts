@@ -10,7 +10,8 @@ import { before, describe, it } from 'node:test'
 import { eq } from 'drizzle-orm'
 
 import type { WakeOutcome } from '../src/wake.ts'
-import { idempotencyKeys, webhookEndpoints } from '../src/db/schema.ts'
+import { API_KEY_PREFIX, generateSecret, hashSecret, lookupPrefix } from '../src/auth/tokens.ts'
+import { apiKeys, idempotencyKeys, tenants, webhookEndpoints } from '../src/db/schema.ts'
 import { buildApp } from '../src/http/app.ts'
 import { fakeAgent, silentLogger, testConfig, testDatabase } from './helpers.ts'
 
@@ -200,6 +201,40 @@ describe('platform-api HTTP', { skip: db ? false : 'no test database' }, () => {
     assert.equal(afterRevoke.json().error, 'wallet_revoked')
   })
 
+  it('issues a new token for an existing wallet after the Idempotency-Key is forgotten, and never stores it', async () => {
+    const auth = { authorization: `Bearer ${apiKey}` }
+    const created = await app.inject({ method: 'POST', url: '/v1/wallets', headers: { ...auth, 'idempotency-key': 'install-reissue' }, payload: { externalId: 'user-9' } })
+    assert.equal(created.statusCode, 201, created.body)
+    await db!.db.delete(idempotencyKeys)
+
+    const reissued = await app.inject({ method: 'POST', url: `/v1/wallets/${created.json().id}/token`, headers: auth })
+    assert.equal(reissued.statusCode, 201, reissued.body)
+    assert.equal(reissued.json().id, created.json().id, 'same wallet')
+    assert.equal(reissued.json().externalId, 'user-9')
+    assert.ok((reissued.json().walletToken as string).startsWith('12id_wt_'))
+    assert.equal((await app.inject({ method: 'GET', url: '/v1/wallet', headers: { authorization: `Bearer ${created.json().walletToken}` } })).statusCode, 401, 'the earlier token stops working')
+    assert.equal((await app.inject({ method: 'GET', url: '/v1/wallet', headers: { authorization: `Bearer ${reissued.json().walletToken}` } })).statusCode, 200)
+
+    // An Idempotency-Key on this route is ignored: nothing is reserved or stored.
+    const again = await app.inject({ method: 'POST', url: `/v1/wallets/${created.json().id}/token`, headers: { ...auth, 'idempotency-key': 'reissue-1' } })
+    assert.equal(again.statusCode, 201)
+    assert.notEqual(again.json().walletToken, reissued.json().walletToken)
+    assert.equal((await db!.db.select().from(idempotencyKeys)).length, 0, 'no wallet token is stored')
+
+    const unknown = await app.inject({ method: 'POST', url: '/v1/wallets/00000000-0000-4000-8000-000000000000/token', headers: auth })
+    assert.equal(unknown.statusCode, 404)
+    const [other] = await db!.db.insert(tenants).values({ name: 'Other', agentTenantId: 'agent-other', status: 'ready' }).returning()
+    const otherKey = generateSecret(API_KEY_PREFIX)
+    await db!.db.insert(apiKeys).values({ tenantId: other!.id, prefix: lookupPrefix(otherKey), keyHash: hashSecret(otherKey), label: 'backend' })
+    const crossTenant = await app.inject({ method: 'POST', url: `/v1/wallets/${created.json().id}/token`, headers: { authorization: `Bearer ${otherKey}` } })
+    assert.equal(crossTenant.statusCode, 404, "another tenant's wallet")
+
+    await app.inject({ method: 'DELETE', url: `/v1/wallets/${created.json().id}`, headers: auth })
+    const revoked = await app.inject({ method: 'POST', url: `/v1/wallets/${created.json().id}/token`, headers: auth })
+    assert.equal(revoked.statusCode, 409)
+    assert.equal(revoked.json().error, 'wallet_revoked')
+  })
+
   it('keeps setup routes to the console: an API key gets 403 on every write, and still reads (K1)', async () => {
     const key = { authorization: `Bearer ${apiKey}` }
     const template = { name: 'k1', groups: [{ key: 'employee', attributes: ['name'], credentials: [{ schemaName: 'employee-badge' }] }] }
@@ -230,6 +265,9 @@ describe('platform-api HTTP', { skip: db ? false : 'no test database' }, () => {
     }
     const published = await app.inject({ method: 'POST', url: '/v1/schemas', headers: consoleHeaders(), payload: { name: 'k1', version: '1.0', attributes: ['name', 'expiresOn'] } })
     assert.equal(published.statusCode, 201, published.body)
+    const withId = await app.inject({ method: 'POST', url: '/v1/schemas', headers: consoleHeaders(), payload: { name: 'k2', version: '1.0', attributes: ['id', 'expiresOn'] } })
+    assert.equal(withId.statusCode, 400, withId.body)
+    assert.match(withId.json().reason, /id is reserved/)
 
     const spec = (await app.inject({ method: 'GET', url: '/openapi.json' })).json() as { paths: Record<string, Record<string, unknown>> }
     assert.equal(spec.paths['/v1/schemas']?.post, undefined, 'publishing is left out of the customer document')

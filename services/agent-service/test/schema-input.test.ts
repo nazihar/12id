@@ -15,6 +15,13 @@ describe('schemaInput', () => {
     assert.match(JSON.stringify(result.error?.issues), /cannot be added later/)
   })
 
+  it('refuses an attribute named id, which Credo-based wallets cannot store', () => {
+    const result = schemaInput.safeParse({ name: 'customer', version: '1.0', attributes: ['id', 'expiresOn'] })
+    assert.equal(result.success, false)
+    assert.match(JSON.stringify(result.error?.issues), /id is reserved/)
+    assert.equal(schemaInput.safeParse({ name: 'customer', version: '1.0', attributes: ['Id', 'customerId', 'expiresOn'] }).success, true)
+  })
+
   it('refuses names that would break unqualified ids', () => {
     for (const name of ['badge:v1', '', '-badge', 'a'.repeat(101)]) {
       assert.equal(schemaInput.safeParse({ name, version: '1.0', attributes: ['a', 'expiresOn'] }).success, false, name)

@@ -9,9 +9,10 @@ import kotlin.time.Duration
  * @property apiBaseUrl the 12id platform API, e.g. `https://api.12id.com`. Must be https, except in a
  *   debuggable build: the wallet token travels on it, and Android only blocks cleartext by default from
  *   API 28.
- * @property walletTokenProvider returns this installation's wallet token. Your backend creates it with
- *   `POST /v1/wallets` (installation id as `Idempotency-Key`). The SDK asks again once when the platform
- *   rejects a token, because a retried `POST /v1/wallets` rotates it.
+ * @property walletTokenProvider returns this installation's wallet token. Your backend creates it once with
+ *   `POST /v1/wallets` (installation id as `Idempotency-Key`) and keeps it. The SDK keeps the token for the
+ *   life of the process and asks again only when the platform rejects it; your backend then issues a new
+ *   one with `POST /v1/wallets/{id}/token`.
  * @property label the name issuers and verifiers see for this wallet. It is fixed at first onboarding;
  *   later changes are ignored because the wallet's storage is keyed by it.
  * @property logSink receives SDK and framework log lines; `null` logs nothing.

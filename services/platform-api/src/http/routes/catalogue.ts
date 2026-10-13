@@ -75,8 +75,17 @@ export const catalogueRoutes = (deps: CatalogueDeps): FastifyPluginAsyncZod => a
       schema: {
         tags: writeTags,
         summary: 'Publish a schema',
-        description: 'Attributes are strings on the wire (no nested values, no native numbers). `expiresOn` (the expiry date as `YYYYMMDD`, UTC) is mandatory: v1 has no revocation, so every credential carries an expiry that every proof request checks.',
-        body: z.object({ name: z.string().min(1).max(200), version: z.string().regex(/^\d+(\.\d+){0,2}$/, 'version like 1.0'), attributes: z.array(z.string().min(1).max(100)).min(1).max(125) }),
+        description: 'Attributes are strings on the wire (no nested values, no native numbers). `expiresOn` (the expiry date as `YYYYMMDD`, UTC) is mandatory: v1 has no revocation, so every credential carries an expiry that every proof request checks. An attribute named `id` is refused: wallets treat it as the credential subject\'s identifier and cannot store the credential.',
+        body: z.object({
+          name: z.string().min(1).max(200),
+          version: z.string().regex(/^\d+(\.\d+){0,2}$/, 'version like 1.0'),
+          // Refused here as well as in agent-service, so that a request held for approval is not doomed (C17).
+          attributes: z
+            .array(z.string().min(1).max(100))
+            .min(1)
+            .max(125)
+            .refine((attributes) => !attributes.includes('id'), "id is reserved: wallets treat it as the credential subject's identifier and cannot store the credential; use a specific name such as memberId"),
+        }),
         response: { 201: schemaView, ...held, 400: errorBody, 403: errorBody, 409: errorBody, 422: errorBody },
       },
     },

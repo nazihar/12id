@@ -60,7 +60,7 @@ No code is sent by SMS and nothing is typed: the phone proves it holds the card 
 - **Tell the wallet when to look.** The wallet does not poll. When the app asks its backend for something that makes 12iD send a message, it calls `expectMessages()` at the same moment (`Wallet.kt`).
 - **A refused request keeps its key.** 12iD remembers the answer to an `Idempotency-Key` for 24 hours, refusals (4xx) included, and the same key with a different body is refused too. Derive the key from what you send, so a corrected request gets a new one (`offerCredential` in `webhooks.ts`).
 - **Check your settings against the catalogue at start.** An offer must carry exactly the schema's attributes; a mismatch is otherwise only visible as a card that never arrives (`tenant-check.ts`).
-- **Keep the wallet token you were given.** `POST /v1/wallets` shows it once. Asking again with the same `Idempotency-Key` returns the same wallet with a new token for 24 hours; after that it creates another wallet (`walletToken()` in `server.ts`).
+- **Keep the wallet token you were given.** `POST /v1/wallets` shows it once, so call it once per installation and keep the wallet id and token. When the SDK says the token was rejected, `POST /v1/wallets/{id}/token` issues a new one for the same wallet; only a revoked wallet is replaced by a new one (`walletToken()` in `server.ts`).
 - **Trust `verified`, nothing else.** An action is approved only by a `proof.state_changed` event with `state: done` and `verified: true`.
 - **Every wait ends.** A message may never arrive; the app gives up after a time and lets the user try again.
 

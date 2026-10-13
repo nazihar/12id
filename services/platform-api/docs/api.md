@@ -32,13 +32,15 @@ Every command returns immediately (`202`) with the exchange record. The holder a
 **Rate limits.** Each API key may make 300 requests per minute, unless 12id raised the limit for your organisation. Each wallet token (the SDK) may make 60 requests per minute, and 3 mediator invitations per 10 minutes. Above a limit the API answers `429 rate_limited` with a `Retry-After` header (seconds). Wait that long, then retry.
 
 **Wallet lifecycle.**
+- **Keep the wallet id and the `walletToken`** you were given, and hand the same token to the app on every start. Do not call `POST /v1/wallets` again for an installation that already has a wallet: once its `Idempotency-Key` is forgotten (24 hours), that call creates a second wallet.
+- When the SDK asks again because the platform rejected the token, call `POST /v1/wallets/{id}/token`. It returns the same wallet with a new `walletToken`, and earlier tokens stop working at once. A revoked wallet answers **409 `wallet_revoked`**.
 - `DELETE /v1/wallets/{id}` revokes the wallet token at once: the app gets 401. Thirty days later 12id also removes the wallet's mediator connection, so the installation can no longer receive messages. The app must call the SDK's `reset()`, and you issue its credentials again.
 - A wallet that never connected to the mediator within 7 days of creation is revoked by 12id. For example, the app never started, or was uninstalled during onboarding. `GET /v1/wallets/{id}` then shows `revokedReason: "never_connected"`. Nothing had reached it, so nothing is lost.
 - If that app starts later, your backend's `POST /v1/wallets` retry with the same installation id answers **409 `wallet_revoked`** during the first 24 hours after the original call. Create a new wallet with a new `Idempotency-Key` (for example the installation id plus a suffix). After 24 hours the same call simply creates a new wallet.
 - `connectedAt` shows when 12id first saw the wallet's mediator connection.
 
 Responses that carry a secret are never stored for replays:
-- `POST /v1/wallets`: use your app's **installation id** (a UUID the app creates once and keeps) as the key. A retry returns the same wallet with a **new** `walletToken`; earlier tokens for that wallet stop working, so hand the app the most recent one. Each device or reinstall has its own installation id, so a user can have several wallets (share your user id through `externalId`).
+- `POST /v1/wallets`: use your app's **installation id** (a UUID the app creates once and keeps) as the key. A retry returns the same wallet with a **new** `walletToken`; earlier tokens for that wallet stop working, so hand the app the most recent one. The retry is for a create whose answer was lost; to replace a token later, use `POST /v1/wallets/{id}/token`. Each device or reinstall has its own installation id, so a user can have several wallets (share your user id through `externalId`).
 
 | Exchange | States you will see |
 |---|---|
@@ -49,7 +51,7 @@ Responses that carry a secret are never stored for replays:
 ## Typical flow
 
 1. In the console: publish the schema and its credential definition (once per credential type/version), set the webhook endpoint, and create proof templates. Your backend reads the result with `GET /v1/credential-definitions` and `GET /v1/proof-templates`.
-2. `POST /v1/wallets` for each app installation; hand `walletToken` to the app.
+2. `POST /v1/wallets` once for each app installation; keep the wallet id and hand `walletToken` to the app.
 3. App/SDK: `GET /v1/ledger` (genesis URL + sha256 + signature; cacheable for 5 minutes), `GET /v1/wallet/mediator-invitation` (once, at first launch). The Android SDK does both itself; see `sdk-android/docs/integration.md`.
 4. `POST /v1/connections/invitations` → show `invitationUrl` as a link or QR code → `connection.state_changed: completed`.
 5. `POST /v1/credentials/offer` → `credential.state_changed`.
@@ -64,6 +66,7 @@ The full guide, with encoding recipes for dates, amounts and yes/no values, vali
 - Predicates (`>=`, `>`, `<=`, `<`) work only on attributes whose values are integers.
 - Predicates compare whole numbers from `-2147483648` to `2147483647` only; any other value is hashed and can be disclosed but not compared.
 - Every schema must contain `expiresOn`: the expiry date as `YYYYMMDD` (UTC), today or later on an offer, any date up to the year 9999. The credential is accepted through the end of that day. **Credentials cannot be revoked in v1**; every proof request automatically checks `expiresOn >= today`, so expiry is how a credential stops being accepted. `expiresOn` can therefore never be disclosed.
+- No attribute may be named `id`: wallets take it as the credential subject's identifier and cannot store the credential.
 - A schema cannot change. Adding a field means a new version; deprecate the old one to stop new offers while templates referencing the schema by name keep accepting both.
 - Size limits on an offer: at most 125 attributes, names up to 100 characters, each value up to 4 KB, and 64 KB for all names and values together (400 otherwise). Credentials are meant for claims, not documents; store a document elsewhere and put its hash or reference in an attribute.
 ## Webhooks

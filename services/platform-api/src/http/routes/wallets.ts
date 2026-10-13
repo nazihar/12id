@@ -20,6 +20,17 @@ import { containsI, createdBetween, createdRange, listPage, newestFirst, pageOf,
 
 const errorBody = z.object({ error: z.string(), reason: z.string() })
 
+/** A new token for a wallet that is not revoked; earlier tokens stop working. Undefined when no such wallet. */
+async function reissueToken(db: Database, tenantId: string, walletId: string) {
+  const token = generateSecret(WALLET_TOKEN_PREFIX)
+  const [row] = await db
+    .update(wallets)
+    .set({ tokenHash: hashSecret(token) })
+    .where(and(eq(wallets.tenantId, tenantId), eq(wallets.id, walletId), isNull(wallets.revokedAt)))
+    .returning()
+  return row ? { ...toWalletView(row), walletToken: token } : undefined
+}
+
 export const walletCustomerRoutes = (deps: { db: Database }): FastifyPluginAsyncZod => async (app) => {
   const tenant = (request: { tenant?: TenantContext }) => request.tenant as TenantContext
 
@@ -43,15 +54,9 @@ export const walletCustomerRoutes = (deps: { db: Database }): FastifyPluginAsync
           },
           // Nobody received the first token (that is why the request is retried): mint a new one for the same wallet.
           replay: async (request, reply, stored) => {
-            const walletId = (stored.body as { id: string }).id
-            const token = generateSecret(WALLET_TOKEN_PREFIX)
-            const [row] = await deps.db
-              .update(wallets)
-              .set({ tokenHash: hashSecret(token) })
-              .where(and(eq(wallets.tenantId, tenant(request).id), eq(wallets.id, walletId), isNull(wallets.revokedAt)))
-              .returning()
-            if (!row) return reply.code(409).send({ error: 'wallet_revoked', reason: 'The wallet created for this Idempotency-Key has been revoked; use a new key to create another wallet' })
-            return reply.code(201).send({ ...toWalletView(row), walletToken: token })
+            const reissued = await reissueToken(deps.db, tenant(request).id, (stored.body as { id: string }).id)
+            if (!reissued) return reply.code(409).send({ error: 'wallet_revoked', reason: 'The wallet created for this Idempotency-Key has been revoked; use a new key to create another wallet' })
+            return reply.code(201).send(reissued)
           },
         },
       },
@@ -60,6 +65,29 @@ export const walletCustomerRoutes = (deps: { db: Database }): FastifyPluginAsync
       const token = generateSecret(WALLET_TOKEN_PREFIX)
       const [row] = await deps.db.insert(wallets).values({ tenantId: tenant(request).id, externalId: request.body.externalId ?? null, tokenHash: hashSecret(token) }).returning()
       return reply.code(201).send({ ...toWalletView(row), walletToken: token })
+    }
+  )
+
+  app.post(
+    '/v1/wallets/:id/token',
+    {
+      schema: {
+        tags: ['wallets'],
+        summary: 'Issue a new wallet token',
+        description:
+          'Keep the `walletToken` you were given and hand the same one to the app on every start. Call this only when the SDK asks again because the platform rejected the token: it returns the same wallet with a new `walletToken`, and earlier tokens stop working at once. Tokens are never stored. A revoked wallet answers 409 `wallet_revoked`; create a new wallet instead.',
+        params: z.object({ id: z.uuid() }),
+        response: { 201: walletView.extend({ walletToken: z.string() }), 404: errorBody, 409: errorBody },
+      },
+      // The answer holds a secret, and calling again only rotates the token again.
+      config: { idempotency: false },
+    },
+    async (request, reply) => {
+      const reissued = await reissueToken(deps.db, tenant(request).id, request.params.id)
+      if (reissued) return reply.code(201).send(reissued)
+      const [row] = await deps.db.select({ id: wallets.id }).from(wallets).where(and(eq(wallets.tenantId, tenant(request).id), eq(wallets.id, request.params.id)))
+      if (!row) throw notFound('wallet')
+      return reply.code(409).send({ error: 'wallet_revoked', reason: 'This wallet has been revoked; create a new wallet with a new Idempotency-Key' })
     }
   )
 

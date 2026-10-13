@@ -72,9 +72,12 @@ class MyApp : Application() {
   launch creates it, fetches the ledger genesis (verified by checksum) and connects to the mediator.
 - **Wallet token.** Your backend creates one wallet per app installation with `POST /v1/wallets`,
   sending the app's installation id (a UUID you generate once and keep) as `Idempotency-Key`, and
-  returns `walletToken` to the app. A retry of that call returns the same wallet with a *new* token,
-  so the provider should always fetch the latest one; the SDK calls it again once when the platform
-  rejects a token. The app never holds a platform API key.
+  returns `walletToken` to the app. **Keep the wallet id and the token on your backend** and return the
+  same token each time the provider is called; do not create a wallet again on each app start. The
+  SDK keeps the token for the life of the process and calls the provider again only when the platform
+  rejects it, so a second call in the same process means "rejected": pass that to your backend, which
+  then issues a new token with `POST /v1/wallets/{id}/token` (earlier tokens stop working). The app
+  never holds a platform API key.
 - **Revoked wallets.** If your backend's `POST /v1/wallets` answers `409 wallet_revoked`, the wallet for
   that installation was revoked. You did it, or 12id did because it never connected to the mediator
   within 7 days. Create a new wallet with a new `Idempotency-Key` and return its token; the SDK then

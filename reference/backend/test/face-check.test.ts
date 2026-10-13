@@ -36,6 +36,7 @@ const proofs: { input: any; key: string }[] = []
 const state = { requireReference: false }
 const platform: Platform = {
   createWallet: async () => ({ id: 'wallet-1', walletToken: '12id_wt_1' }),
+  reissueWalletToken: async (walletId) => ({ id: walletId, walletToken: '12id_wt_2' }),
   createInvitation: async () => ({ invitationId: 'oob-1', invitationUrl: 'https://agent.test/?oob=abc' }),
   async offerCredential(input, key) {
     offers.push({ input, key })

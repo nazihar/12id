@@ -30,7 +30,7 @@ const config: Config = {
   },
 }
 
-/** Records every call and answers like the platform; `revoked` makes that Idempotency-Key answer 409 wallet_revoked. */
+/** Records every call and answers like the platform; a key or wallet id in `revoked` answers 409 wallet_revoked. */
 function fakePlatform() {
   const calls: { call: string; input: unknown; key?: string }[] = []
   const revoked = new Set<string>()
@@ -42,6 +42,12 @@ function fakePlatform() {
       if (revoked.has(key)) throw new PlatformError('POST', '/v1/wallets', 409, { error: 'wallet_revoked' })
       n += 1
       return { id: `wallet-${n}`, walletToken: `12id_wt_${n}` }
+    },
+    async reissueWalletToken(walletId) {
+      calls.push({ call: 'reissueWalletToken', input: { walletId } })
+      if (revoked.has(walletId)) throw new PlatformError('POST', `/v1/wallets/${walletId}/token`, 409, { error: 'wallet_revoked' })
+      n += 1
+      return { id: walletId, walletToken: `12id_wt_${n}` }
     },
     async createInvitation(externalId) {
       calls.push({ call: 'createInvitation', input: { externalId } })
@@ -194,14 +200,17 @@ test('an abandoned offer is offered again on the next enrol', async () => {
   assert.equal(fake.of('offerCredential').length, before + 1)
 })
 
-test('a rejected token is refreshed; a revoked wallet is replaced under a new key', async () => {
+test('a rejected token is re-issued for the same wallet; a revoked wallet is replaced under a new key', async () => {
   const session = await call('POST', '/session', { name: 'Ada Lovelace', accessCode: 'open-sesame', installationId })
   const token = session.json.sessionToken as string
+  const created = fake.of('createWallet').length
   const refreshed = await call('POST', '/wallet-token', { refresh: true }, token)
   assert.equal(refreshed.json.walletToken, '12id_wt_2')
-  assert.equal(fake.of('createWallet').at(-1)!.key, `${installationId}:0`)
+  assert.deepEqual(fake.of('reissueWalletToken').at(-1)!.input, { walletId: 'wallet-1' })
+  assert.equal(fake.of('createWallet').length, created, 'no second wallet')
+  assert.equal((await call('POST', '/wallet-token', {}, token)).json.walletToken, '12id_wt_2')
 
-  fake.revoked.add(`${installationId}:0`)
+  fake.revoked.add('wallet-1')
   const replaced = await call('POST', '/wallet-token', { refresh: true }, token)
   assert.equal(replaced.status, 200)
   assert.equal(fake.of('createWallet').at(-1)!.key, `${installationId}:1`)
@@ -343,6 +352,9 @@ test('the platform client sends the API key and the idempotency key, and reports
     assert.deepEqual(JSON.parse(seen[0].body), { externalId: 'user-1' })
     await assert.rejects(client.createInvitation('user-1'), (error: unknown) => error instanceof PlatformError && error.status === 409)
     assert.equal(seen[1].headers['idempotency-key'], undefined)
+    await assert.rejects(client.reissueWalletToken('w'), (error: unknown) => error instanceof PlatformError && error.status === 409)
+    assert.equal(seen[2].url, '/v1/wallets/w/token')
+    assert.equal(seen[2].headers['idempotency-key'], undefined)
   } finally {
     await new Promise((resolve) => server.close(resolve))
   }

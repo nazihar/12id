@@ -5,7 +5,12 @@ import { EXPIRY_ATTRIBUTE, attributeName } from '@/lib/template-schema'
 
 export const schemaName = z.string().trim().min(1, 'Enter a schema name.').max(200, 'Use at most 200 characters.')
 export const schemaVersion = z.string().trim().regex(/^\d+(\.\d+){0,2}$/, 'Use a version like 1.0 or 2.1.3.')
-export const schemaAttributes = z.array(attributeName).min(1, 'Add at least one attribute.').max(124, 'A schema holds at most 124 attributes.')
+export const schemaAttributes = z
+  .array(attributeName)
+  .min(1, 'Add at least one attribute.')
+  .max(124, 'A schema holds at most 124 attributes.')
+  // Mirrors platform-api and agent-service: Credo-based wallets take `id` as the subject's identifier.
+  .refine((attributes) => !attributes.includes('id'), 'Wallets cannot store an attribute named id. Use a specific name such as memberId.')
 
 /** What the server accepts: attributes already split into names. */
 export const publishSchemaInput = z.object({ name: schemaName, version: schemaVersion, attributes: schemaAttributes })

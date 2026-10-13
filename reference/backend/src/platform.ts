@@ -36,6 +36,7 @@ export interface ProofFaceCheck {
 
 export interface Platform {
   createWallet(externalId: string, idempotencyKey: string): Promise<{ id: string; walletToken: string }>
+  reissueWalletToken(walletId: string): Promise<{ id: string; walletToken: string }>
   createInvitation(externalId: string): Promise<{ invitationId: string; invitationUrl: string }>
   offerCredential(input: { connectionId: string; credentialDefinitionId: string; attributes: Record<string, string>; externalId: string; biometric?: FaceReference }, idempotencyKey: string): Promise<{ id: string; state: string }>
   requestProof(input: { connectionId: string; templateId: string; externalId: string; biometric?: ProofFaceCheck }, idempotencyKey: string): Promise<{ id: string; state: string }>
@@ -62,6 +63,8 @@ export function platformClient(baseUrl: string, apiKey: string): Platform {
   return {
     // One wallet per app installation. `externalId` is our own reference; the platform never learns who the user is.
     createWallet: (externalId, idempotencyKey) => post('/v1/wallets', { externalId }, idempotencyKey),
+    // A new token for the same wallet, when the SDK says the previous one was rejected; that one stops working.
+    reissueWalletToken: (walletId) => post(`/v1/wallets/${encodeURIComponent(walletId)}/token`, {}),
     // The invitation the app passes to the SDK's connect(). `externalId` comes back on the connection's webhooks.
     createInvitation: (externalId) => post('/v1/connections/invitations', { externalId }),
     // Asynchronous: the answer is the exchange record; progress arrives as credential.state_changed webhooks.

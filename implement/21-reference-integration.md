@@ -39,7 +39,7 @@ A client demo needed a stand-in backend on the dev PC behind an SSH tunnel, hand
 
 ## Found while building
 
-1. **A wallet token cannot be re-issued after 24 hours.** `POST /v1/wallets` returns the same wallet with a new token for the same `Idempotency-Key` only while the key is kept (24 h, `docs/api.md`); after that the same call creates a second wallet. The SDK asks the app for the token on every process start, so a backend that follows the guide literally ("always fetch the latest one") creates a new, never-connected wallet each day a phone is used; the hourly sweep revokes them after 7 days. The reference keeps the token it was given and asks again only when the SDK reports a rejection. **Open (platform, owner):** a route that issues a new token for an existing wallet, and a line in the SDK guide.
+1. **A wallet token cannot be re-issued after 24 hours.** `POST /v1/wallets` returns the same wallet with a new token for the same `Idempotency-Key` only while the key is kept (24 h, `docs/api.md`); after that the same call creates a second wallet. The SDK asks the app for the token on every process start, so a backend that follows the guide literally ("always fetch the latest one") creates a new, never-connected wallet each day a phone is used; the hourly sweep revokes them after 7 days. The reference keeps the token it was given and asks again only when the SDK reports a rejection. **Open (platform, owner):** a route that issues a new token for an existing wallet, and a line in the SDK guide. **Built 2026-10-13 for platform `v0.7.0` (not yet released):** `POST /v1/wallets/{id}/token`; the guides say to keep the token; the backend's refresh now calls the route (`19-phase-9-production-findings.md`, "v0.7.0").
 2. **`.gitignore` ignores `.env*`,** so the backend's template is `env.example`, not `.env.example`.
 3. **A sync must never carry the tenant settings** (trap 45 again): `tenant.json` is git-ignored like `.env`; the committed file is `tenant.example.json`, and the backend refuses to start while an id still says `REPLACE`.
 
@@ -49,6 +49,7 @@ A client demo needed a stand-in backend on the dev PC behind an SSH tunnel, hand
    - Source read, `@credo-ts/core` 0.7.0 `W3cCredentialSubject`: `const { id, ...claims } = options.claims`. Credo keeps AnonCreds credentials in W3C form and takes `id` out of the claims as the subject's identifier.
    - **Not established:** whether the Android SDK (the Kotlin holder) stores such a credential; no phone was attached.
    - **Open (platform, owner):** the schema routes accept `id` as an attribute name. Refusing it at publication, or at least a line in `credential-model.md`, would keep a tenant from publishing a schema some wallets cannot hold. A published schema cannot be changed.
+   - **Built 2026-10-13 for platform `v0.7.0` (not yet released):** `id` is refused by agent-service, platform-api and the console form, and `credential-model.md` says so.
 
 6. **A tenant file that does not fit the catalogue showed up only as "Your card did not arrive"** (2026-10-10, the owner's swap to schema `customer 3.0`: the new credential definition id with the old schema's attribute).
    - The platform refused every offer (`400 missing attributes: memberId`), the backend answered the connection webhook with 502, and the app waited out its 60 s.

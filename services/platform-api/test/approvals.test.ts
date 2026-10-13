@@ -274,6 +274,8 @@ describe('approval by a second person', { skip: database ? false : 'no test data
     // The same template: its change and its deletion are about one thing.
     assert.equal((await call('DELETE', `/v1/proof-templates/${row!.id}`, as('admin', 'bob'))).statusCode, 409)
     assert.equal((await call('POST', '/v1/schemas', as('owner', 'ada'), { name: 'badge', version: '1.0', attributes: ['name', 'expiresOn'] })).statusCode, 202)
+    // A schema no wallet could hold is refused before it waits for anyone.
+    assert.equal((await call('POST', '/v1/schemas', as('owner', 'ada'), { name: 'customer', version: '1.0', attributes: ['id', 'expiresOn'] })).statusCode, 400)
     assert.equal(agent.calls.filter((c) => c.method === 'publishSchema').length, 0, 'nothing was written to the ledger')
 
     // The operators' own key route is the break-glass path: the console is sent to the held one.

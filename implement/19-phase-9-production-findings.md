@@ -951,3 +951,26 @@ Xiaomi `lisa`, Android 14, on mobile data, the sample built from this tree (SDK 
 
 ### The API's per-address limit is now a setting (2026-10-08, not released)
 `api_per_ip` reads `EDGE_API_LIMIT` (`Caddyfile`, `compose.edge.yml`, `env/template.env`), like the mediator's and the agent's. The default is the old value, 600 a minute, so nothing changes until an environment sets it. The number is the owner's: one customer backend at the agent's ceiling needs about 600. It is in the bundle, so it ships with the next platform release, and `caddy validate` runs then on staging's binary (not run here).
+
+## v0.7.0: wallet token re-issue and the `id` attribute (2026-10-13, built, not released)
+The two platform items the reference integration found on 2026-10-10 (`21-reference-integration.md`, findings 1 and 5). Owner chose them as the next work on 2026-10-13; the plan is summarised here.
+
+### Wallet token re-issue
+- **New route `POST /v1/wallets/{id}/token`** (API key, customer document). Same wallet, new `walletToken`, earlier tokens stop at once; 404 for an unknown or another tenant's wallet, 409 `wallet_revoked` for a revoked one. `idempotency: false`: the answer holds a secret and a second call only rotates again, so nothing is reserved or stored. The idempotent replay of `POST /v1/wallets` now uses the same helper (`reissueToken` in `routes/wallets.ts`).
+- **Guides:** `docs/api.md` (wallet lifecycle: keep the wallet id and token; re-issue on a rejection; the `POST /v1/wallets` retry is for a create whose answer was lost) and `sdk-android/docs/integration.md` (the SDK keeps the token for the process, so a second provider call in the same process means "rejected"). `OneTwoIdConfig` KDoc says the same; it ships with the next SDK release, no SDK change in behaviour.
+- **Reference backend:** a refresh calls the new route; only a revoked wallet is replaced under the next `Idempotency-Key`. README updated.
+
+### Attribute `id` refused
+- Refused in three places with the same reason: agent-service `schemaInput` (`RESERVED_ATTRIBUTES`, the authoritative check before the ledger), platform-api's `POST /v1/schemas` body (so a request **held for approval** (C17) is refused at once instead of failing after someone approves it), and the console's publish form (on the attributes field). Exact match only: `Id`, `customerId` stay allowed (Credo removes exactly `id`).
+- `credential-model.md` ("Schemas cannot change") and `api.md` (attribute rules) say so.
+- Schemas already published with `id` are not touched (staging: tenant MTB's `customer 1.0`, deprecated).
+
+### Verified locally
+- platform-api `tsc` clean, **159/159** (new: re-issue after the key is forgotten, old token 401 / new 200, no `idempotency_keys` row, unknown 404, other tenant 404, revoked 409; a schema with `id` 400 from the console principal and 400 before a hold).
+- agent-service **72/72** (new `schemaInput` case).
+- console `tsc`, Vitest **86/86** (new `test/catalogue-schemas.test.ts`), `vite build`, `check:client` clean.
+- reference backend `tsc`, **17/17**.
+- `openapi.json` gains only the new path (35 paths); the console client regenerated.
+
+### Not done yet
+Commit, `v0.7.0-rc.1`, staging deploy and smokes (`smoke:platform-credo`, `smoke:biometric-credo`, `e2e:staging`, `smoke:reference-credo`, a curl probe of the new route), then `v0.7.0`: waiting for the owner.

@@ -158,7 +158,7 @@ export interface paths {
         put?: never;
         /**
          * Publish a schema
-         * @description Attributes are strings on the wire (no nested values, no native numbers). `expiresOn` (the expiry date as `YYYYMMDD`, UTC) is mandatory: v1 has no revocation, so every credential carries an expiry that every proof request checks.
+         * @description Attributes are strings on the wire (no nested values, no native numbers). `expiresOn` (the expiry date as `YYYYMMDD`, UTC) is mandatory: v1 has no revocation, so every credential carries an expiry that every proof request checks. An attribute named `id` is refused: wallets treat it as the credential subject's identifier and cannot store the credential.
          */
         post: {
             parameters: {
@@ -4276,6 +4276,82 @@ export interface paths {
                             revokedAt: string | null;
                             revokedReason: string | null;
                             walletToken: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/wallets/{id}/token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Issue a new wallet token
+         * @description Keep the `walletToken` you were given and hand the same one to the app on every start. Call this only when the SDK asks again because the platform rejected the token: it returns the same wallet with a new `walletToken`, and earlier tokens stop working at once. Tokens are never stored. A revoked wallet answers 409 `wallet_revoked`; create a new wallet instead.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            id: string;
+                            externalId: string | null;
+                            hasMediatorInvitation: boolean;
+                            lastSyncRequestedAt: string | null;
+                            /** Format: date-time */
+                            createdAt: string;
+                            connectedAt: string | null;
+                            revokedAt: string | null;
+                            revokedReason: string | null;
+                            walletToken: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            reason: string;
                         };
                     };
                 };

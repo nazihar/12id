@@ -71,20 +71,31 @@ export function createApp(deps: AppDeps): Server {
   /**
    * The wallet token for this installation. The platform shows a token once, so we keep it and hand the
    * same one back. `refresh` is what the app sends when the SDK reports the token was rejected: the
-   * same Idempotency-Key then returns the same wallet with a new token (for 24 hours; after that the
-   * platform has forgotten the key and creates a new wallet).
+   * platform then issues a new token for the same wallet. A revoked wallet is replaced by a new one,
+   * created under the next Idempotency-Key.
    */
   async function walletToken(user: User, refresh: boolean): Promise<string> {
     if (user.walletToken && !refresh) return user.walletToken
-    for (let generation = user.walletGeneration; ; generation += 1) {
+    // 409 wallet_revoked: that wallet is gone for good; the next key creates a new one.
+    const revoked = (error: unknown) => error instanceof PlatformError && error.status === 409 && (error.body as { error?: string }).error === 'wallet_revoked'
+    let generation = user.walletGeneration
+    if (user.walletId) {
+      try {
+        const wallet = await platform.reissueWalletToken(user.walletId)
+        store.saveUser({ ...store.user(user.id)!, walletToken: wallet.walletToken })
+        return wallet.walletToken
+      } catch (error) {
+        if (!revoked(error)) throw error
+        generation += 1
+      }
+    }
+    for (const first = generation; ; generation += 1) {
       try {
         const wallet = await platform.createWallet(user.id, `${user.installationId}:${generation}`)
         store.saveUser({ ...store.user(user.id)!, walletId: wallet.id, walletToken: wallet.walletToken, walletGeneration: generation })
         return wallet.walletToken
       } catch (error) {
-        // 409 wallet_revoked: that wallet is gone for good; the next key creates a new one.
-        const revoked = error instanceof PlatformError && error.status === 409 && (error.body as { error?: string }).error === 'wallet_revoked'
-        if (!revoked || generation > user.walletGeneration) throw error
+        if (!revoked(error) || generation > first) throw error
       }
     }
   }
