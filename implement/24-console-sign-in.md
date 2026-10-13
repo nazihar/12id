@@ -1,6 +1,6 @@
 # Console sign-in rules (MTB theme E): plan
 
-**Status:** built and verified locally 2026-10-13 (owner chose the three decisions below the same day, all as recommended); not committed or released. Evidence: [`25-console-sign-in-findings.md`](25-console-sign-in-findings.md).
+**Status:** released as platform `v0.8.0` on 2026-10-13 (commit `ce84002`, staging on `0.8.0-rc.1`; the owner chose the three decisions below the same day, all as recommended). Evidence: [`25-console-sign-in-findings.md`](25-console-sign-in-findings.md).
 
 ## Context
 MTB's requirement sheet (`mtb/Part1_Sections_2-6.md`, Section 2) commits us to console sign-in rules the build does not have. The gap analysis (`mtb/Gap_Analysis_Sections_2-6.md` §4 theme E, §5) found the following:

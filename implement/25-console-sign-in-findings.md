@@ -1,6 +1,6 @@
 # Console sign-in rules (MTB theme E): findings
 
-Plan: [`24-console-sign-in.md`](24-console-sign-in.md). Built 2026-10-13, all three owner decisions as recommended: defaults 15 min / 90 d / 90 d / 5 → 15 min; ALTCHA; a temporary lock only. **Not committed or released yet.**
+Plan: [`24-console-sign-in.md`](24-console-sign-in.md). Built 2026-10-13, all three owner decisions as recommended: defaults 15 min / 90 d / 90 d / 5 → 15 min; ALTCHA; a temporary lock only. **Released as platform `v0.8.0` on 2026-10-13** (commit `ce84002`; staging runs `0.8.0-rc.1`).
 
 ## As built
 
@@ -79,6 +79,20 @@ Both OpenAPI documents and the console client were regenerated. Nothing else cha
 - **Audit:** platform-api recorded `auth.locked`, `account.unlocked`, `auth.idle_sign_out`, `auth.session_replaced` (11), `auth.password_changed` and `auth.password_expired`.
 - **Under the real CSP** (the production build served by `srvx` as in the image; Vite dev sends no CSP), the header carries `worker-src 'self'`. The captcha reached `verified` in 637 ms with no CSP violation and no page error.
 
-## Not done yet
-- Commit, `v0.8.0-rc.1`, staging deploy, then on staging: `e2e:staging` (it signs in through the captcha), `console-feedback-check`, `approvals-check`, both Credo smokes, and by hand one lock and unlock and one idle sign-out.
-- Then `v0.8.0`, and the MTB gap analysis rows of theme E updated.
+## On staging (2026-10-13, `0.8.0-rc.1`)
+The owner said "do the rest yourself". Commit `ce84002`; tag `v0.8.0-rc.1` built the nine images by CI.
+
+| Check | Result |
+|---|---|
+| Deploy | the bundle's three changed files (`compose.console.yml`, `template.env`, `runbooks/console.md`) installed, old ones in `/opt/12id/infra.prev-20261013-v080`; `release.env` replaced (previous: `release.env.prev-0.7.0-rc.1`); seven stacks up in 341 s, no failed step |
+| Console migration `0002` | applied by console-migrate; 10 accounts, all with `password_changed_at`, 10 history rows, no session without `last_active_at` |
+| The running console | `CONSOLE_*` at the defaults; the CSP carries `worker-src 'self'`; `docker inspect` clean (0 of 33) |
+| `e2e:staging` (every sign-in through the captcha; a CSP violation fails a spec) | **4/4** |
+| `console-feedback-check` / `approvals-check` | **36/36** / **19/19** |
+| `smoke:platform-credo` / `smoke:biometric-credo` (the owner's tunnel, still open) | **PASSED** / **PASSED 30/30** |
+| By hand, a one-off Playwright script with a throwaway operator made by console-tools | **14/14**: five wrong passwords (11 s apart) refused, the account locked, the right password refused with the reason; "locked" in the operators list, **Unlock**, then the right password signs in (to 2FA setup); the e2e operator's session set back 20 minutes is ended on its next request and leaves no session; the throwaway operator deleted through the console; no CSP violation |
+| Audit on staging | `auth.locked`, `account.unlocked`, `auth.idle_sign_out`, `auth.session_replaced`, `account.operator_deleted` |
+
+**Released as `v0.8.0`** on the same commit; CI added `0.8.0` to the rc's nine digests. Production (W5 step 4) deploys `release-0.8.0.env` and the 0.8.0 bundle; no new secret; the console migration runs by itself; the `CONSOLE_*` values are optional (defaults as above).
+
+Left: the MTB gap analysis rows of theme E (`mtb/Gap_Analysis_Sections_2-6.md`) to be updated against this release.
