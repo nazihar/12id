@@ -38,6 +38,7 @@ import { Route as AuthedTOrgSlugCatalogueRouteImport } from './routes/_authed/t/
 import { Route as AuthedTOrgSlugDataProtectionRouteImport } from './routes/_authed/t/$orgSlug/data-protection'
 import { Route as AuthedTOrgSlugExchangesRouteImport } from './routes/_authed/t/$orgSlug/exchanges'
 import { Route as AuthedTOrgSlugMembersRouteImport } from './routes/_authed/t/$orgSlug/members'
+import { Route as AuthedTOrgSlugRolesRouteImport } from './routes/_authed/t/$orgSlug/roles'
 import { Route as AuthedTOrgSlugVerificationRouteImport } from './routes/_authed/t/$orgSlug/verification'
 import { Route as AuthedTOrgSlugWalletsRouteImport } from './routes/_authed/t/$orgSlug/wallets'
 import { Route as AuthedTOrgSlugWebhooksRouteImport } from './routes/_authed/t/$orgSlug/webhooks'
@@ -205,6 +206,11 @@ const AuthedTOrgSlugMembersRoute = AuthedTOrgSlugMembersRouteImport.update({
   path: '/members',
   getParentRoute: () => AuthedTOrgSlugRoute,
 } as any)
+const AuthedTOrgSlugRolesRoute = AuthedTOrgSlugRolesRouteImport.update({
+  id: '/roles',
+  path: '/roles',
+  getParentRoute: () => AuthedTOrgSlugRoute,
+} as any)
 const AuthedTOrgSlugVerificationRoute =
   AuthedTOrgSlugVerificationRouteImport.update({
     id: '/verification',
@@ -345,6 +351,7 @@ export interface FileRoutesByFullPath {
   '/t/$orgSlug/data-protection': typeof AuthedTOrgSlugDataProtectionRoute
   '/t/$orgSlug/exchanges': typeof AuthedTOrgSlugExchangesRoute
   '/t/$orgSlug/members': typeof AuthedTOrgSlugMembersRoute
+  '/t/$orgSlug/roles': typeof AuthedTOrgSlugRolesRoute
   '/t/$orgSlug/verification': typeof AuthedTOrgSlugVerificationRoute
   '/t/$orgSlug/wallets': typeof AuthedTOrgSlugWalletsRoute
   '/t/$orgSlug/webhooks': typeof AuthedTOrgSlugWebhooksRoute
@@ -391,6 +398,7 @@ export interface FileRoutesByTo {
   '/t/$orgSlug/data-protection': typeof AuthedTOrgSlugDataProtectionRoute
   '/t/$orgSlug/exchanges': typeof AuthedTOrgSlugExchangesRoute
   '/t/$orgSlug/members': typeof AuthedTOrgSlugMembersRoute
+  '/t/$orgSlug/roles': typeof AuthedTOrgSlugRolesRoute
   '/t/$orgSlug/verification': typeof AuthedTOrgSlugVerificationRoute
   '/t/$orgSlug/wallets': typeof AuthedTOrgSlugWalletsRoute
   '/t/$orgSlug/webhooks': typeof AuthedTOrgSlugWebhooksRoute
@@ -442,6 +450,7 @@ export interface FileRoutesById {
   '/_authed/t/$orgSlug/data-protection': typeof AuthedTOrgSlugDataProtectionRoute
   '/_authed/t/$orgSlug/exchanges': typeof AuthedTOrgSlugExchangesRoute
   '/_authed/t/$orgSlug/members': typeof AuthedTOrgSlugMembersRoute
+  '/_authed/t/$orgSlug/roles': typeof AuthedTOrgSlugRolesRoute
   '/_authed/t/$orgSlug/verification': typeof AuthedTOrgSlugVerificationRoute
   '/_authed/t/$orgSlug/wallets': typeof AuthedTOrgSlugWalletsRoute
   '/_authed/t/$orgSlug/webhooks': typeof AuthedTOrgSlugWebhooksRoute
@@ -493,6 +502,7 @@ export interface FileRouteTypes {
     | '/t/$orgSlug/data-protection'
     | '/t/$orgSlug/exchanges'
     | '/t/$orgSlug/members'
+    | '/t/$orgSlug/roles'
     | '/t/$orgSlug/verification'
     | '/t/$orgSlug/wallets'
     | '/t/$orgSlug/webhooks'
@@ -539,6 +549,7 @@ export interface FileRouteTypes {
     | '/t/$orgSlug/data-protection'
     | '/t/$orgSlug/exchanges'
     | '/t/$orgSlug/members'
+    | '/t/$orgSlug/roles'
     | '/t/$orgSlug/verification'
     | '/t/$orgSlug/wallets'
     | '/t/$orgSlug/webhooks'
@@ -589,6 +600,7 @@ export interface FileRouteTypes {
     | '/_authed/t/$orgSlug/data-protection'
     | '/_authed/t/$orgSlug/exchanges'
     | '/_authed/t/$orgSlug/members'
+    | '/_authed/t/$orgSlug/roles'
     | '/_authed/t/$orgSlug/verification'
     | '/_authed/t/$orgSlug/wallets'
     | '/_authed/t/$orgSlug/webhooks'
@@ -830,6 +842,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedTOrgSlugMembersRouteImport
       parentRoute: typeof AuthedTOrgSlugRoute
     }
+    '/_authed/t/$orgSlug/roles': {
+      id: '/_authed/t/$orgSlug/roles'
+      path: '/roles'
+      fullPath: '/t/$orgSlug/roles'
+      preLoaderRoute: typeof AuthedTOrgSlugRolesRouteImport
+      parentRoute: typeof AuthedTOrgSlugRoute
+    }
     '/_authed/t/$orgSlug/verification': {
       id: '/_authed/t/$orgSlug/verification'
       path: '/verification'
@@ -1045,6 +1064,7 @@ interface AuthedTOrgSlugRouteChildren {
   AuthedTOrgSlugDataProtectionRoute: typeof AuthedTOrgSlugDataProtectionRoute
   AuthedTOrgSlugExchangesRoute: typeof AuthedTOrgSlugExchangesRoute
   AuthedTOrgSlugMembersRoute: typeof AuthedTOrgSlugMembersRoute
+  AuthedTOrgSlugRolesRoute: typeof AuthedTOrgSlugRolesRoute
   AuthedTOrgSlugVerificationRoute: typeof AuthedTOrgSlugVerificationRoute
   AuthedTOrgSlugWalletsRoute: typeof AuthedTOrgSlugWalletsRoute
   AuthedTOrgSlugWebhooksRoute: typeof AuthedTOrgSlugWebhooksRoute
@@ -1063,6 +1083,7 @@ const AuthedTOrgSlugRouteChildren: AuthedTOrgSlugRouteChildren = {
   AuthedTOrgSlugDataProtectionRoute: AuthedTOrgSlugDataProtectionRoute,
   AuthedTOrgSlugExchangesRoute: AuthedTOrgSlugExchangesRoute,
   AuthedTOrgSlugMembersRoute: AuthedTOrgSlugMembersRoute,
+  AuthedTOrgSlugRolesRoute: AuthedTOrgSlugRolesRoute,
   AuthedTOrgSlugVerificationRoute: AuthedTOrgSlugVerificationRoute,
   AuthedTOrgSlugWalletsRoute: AuthedTOrgSlugWalletsRoute,
   AuthedTOrgSlugWebhooksRoute: AuthedTOrgSlugWebhooksRoute,

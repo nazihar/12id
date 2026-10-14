@@ -68,9 +68,79 @@ export const tenantRoles = {
 
 export type TenantRole = keyof typeof tenantRoles
 
-/** For hiding actions in the UI. The server functions enforce the same rules. */
-export function tenantCan(role: TenantRole, request: Parameters<(typeof tenantRoles)['owner']['authorize']>[0]) {
-  return tenantRoles[role].authorize(request).success
+/** The built-in organization roles, strongest first. They cannot be changed; custom roles sit beside them. */
+export const BUILT_IN_TENANT_ROLES = ['owner', 'admin', 'member'] as const satisfies readonly TenantRole[]
+
+export const isBuiltInTenantRole = (role: string): role is TenantRole => (BUILT_IN_TENANT_ROLES as readonly string[]).includes(role)
+
+/**
+ * What a role allows, as plain data: resource → actions. It crosses to the browser (the viewer's
+ * permissions hide buttons) and is what Better Auth stores for a custom role (implement/26).
+ */
+export type Permissions = Record<string, readonly string[]>
+
+export type PermissionRequest = Parameters<(typeof tenantRoles)['owner']['authorize']>[0]
+
+/** True when every action asked for is in the permissions (Better Auth's AND). */
+export function canDo(permissions: Permissions, request: PermissionRequest): boolean {
+  return Object.entries(request).every(([resource, asked]) => {
+    const held = (action: string) => Boolean(permissions[resource]?.includes(action))
+    if (!asked) return true
+    if (Array.isArray(asked)) return (asked as readonly string[]).every(held)
+    const { actions, connector } = asked as { actions: readonly string[]; connector: 'OR' | 'AND' }
+    return connector === 'OR' ? actions.some(held) : actions.every(held)
+  })
+}
+
+/** Several sets as one: a person holding several roles may do what any of them allows. */
+export function mergePermissions(...sets: Permissions[]): Permissions {
+  const merged: Record<string, string[]> = {}
+  for (const set of sets) for (const [resource, actions] of Object.entries(set)) merged[resource] = [...new Set([...(merged[resource] ?? []), ...actions])]
+  return merged
+}
+
+/** What comes with membership: every page of the organization opens. Changing anything needs an action below. */
+export const VIEW_PERMISSIONS = { ac: ['read'] } as const satisfies Permissions
+
+/**
+ * The portal's actions, in the order the role editor shows them (implement/26). Every check in the
+ * portal asks for a statement below; a role is a name for a set of these actions.
+ */
+export const PORTAL_ACTIONS = [
+  { key: 'people', label: 'Manage people', help: 'Invite, change roles, disable, remove and unlock members; manage roles.', statements: { member: ['create', 'update', 'delete'], invitation: ['create', 'cancel'], ac: ['create', 'update', 'delete'] } },
+  { key: 'integration', label: 'Manage integration', help: 'API keys, the webhook and connection invitations.', statements: { apiKey: ['create', 'revoke'], webhook: ['update', 'rotate', 'retry'], exchange: ['create'] } },
+  { key: 'setup', label: 'Manage setup', help: 'Catalogue, proof templates, face checks, data periods and the approvals switch.', statements: { organization: ['update'], catalogue: ['publish', 'deprecate'], template: ['create', 'update', 'delete'], biometrics: ['update'], retention: ['update'], approval: ['configure'] } },
+  { key: 'erase', label: 'Erase personal data', help: "Erase an exchange's or a connection's personal data.", statements: { exchange: ['erase'] } },
+  { key: 'export', label: 'Export', help: 'Take lists out of the console as Excel or CSV.', statements: { export: ['run'] } },
+  { key: 'approve', label: 'Approve changes', help: 'Decide a change another person asked for.', statements: { approval: ['decide'] } },
+] as const satisfies readonly { key: string; label: string; help: string; statements: Permissions }[]
+
+export type PortalAction = (typeof PORTAL_ACTIONS)[number]['key']
+
+export const PORTAL_ACTION_KEYS = PORTAL_ACTIONS.map((action) => action.key) as [PortalAction, ...PortalAction[]]
+
+/** The permissions a custom role gets for these actions: membership's view plus each action's statements. */
+export function permissionsForActions(actions: readonly PortalAction[]): Permissions {
+  return mergePermissions(VIEW_PERMISSIONS, ...PORTAL_ACTIONS.filter((action) => actions.includes(action.key)).map((action) => action.statements))
+}
+
+/** The actions a set of permissions holds in full. */
+export function actionsOf(permissions: Permissions): PortalAction[] {
+  return PORTAL_ACTIONS.filter((action) => canDo(permissions, action.statements)).map((action) => action.key)
+}
+
+/** The built-in roles' permissions, as data. */
+export const builtInPermissions = (role: TenantRole): Permissions => tenantRoles[role].statements as Permissions
+
+/**
+ * The built-in role platform-api is told about (`x-console-role`). platform-api knows only the
+ * built-in names; its own checks are the ceiling and the console checks the exact actions first.
+ * Anyone who manages people counts as owner, anyone who may change anything else as admin, the rest as member.
+ */
+export function baseRoleFor(permissions: Permissions): TenantRole {
+  if (actionsOf(permissions).includes('people')) return 'owner'
+  const changes = Object.entries(permissions).some(([resource, actions]) => actions.some((action) => !(resource === 'ac' && action === 'read')))
+  return changes ? 'admin' : 'member'
 }
 
 export const platformAc = createAccessControl(platformStatements)
@@ -105,6 +175,24 @@ export function sessionExpired(role: string | null | undefined, createdAt: Date 
 export function hasPlatformRole(role: string | null | undefined, wanted: string) {
   return (role ?? '').split(',').map((r) => r.trim()).includes(wanted)
 }
+
+/**
+ * The operator area's actions (implement/26). Its two roles stay fixed for now; the checks ask for an
+ * action so that custom staff roles can be added later without touching them.
+ *   view-tenants   read every organization (personal data masked), the audit log and health
+ *   operate        create organizations and owners, change setup, retry
+ *   manage-staff   staff accounts: invite, role, disable, unlock, sessions, delete
+ *   reveal         show personal data, with an audited reason
+ */
+export const STAFF_ACTIONS = ['view-tenants', 'operate', 'manage-staff', 'reveal'] as const
+export type StaffAction = (typeof STAFF_ACTIONS)[number]
+
+const STAFF_ROLE_ACTIONS: Record<StaffRole, readonly StaffAction[]> = {
+  [OPERATOR_ROLE]: STAFF_ACTIONS,
+  [AUDITOR_ROLE]: ['view-tenants'],
+}
+
+export const staffCan = (role: StaffRole | null | undefined, action: StaffAction) => Boolean(role && STAFF_ROLE_ACTIONS[role].includes(action))
 
 /** The role an account has in the operator area: operator wins over auditor; null for everyone else. */
 export function staffRoleOf(role: string | null | undefined): StaffRole | null {

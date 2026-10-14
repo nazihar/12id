@@ -8,7 +8,7 @@ import { createPortalApiKey, revokePortalApiKey } from '@/features/portal/portal
 import { portalApiKeysQuery, portalKey } from '@/features/portal/portal.queries'
 import { ApiKeysPanel } from '@/features/tenant-data/panels'
 import { parseListSearch, searchPatcher } from '@/lib/list-search'
-import { tenantCan } from '@/lib/permissions'
+import { canDo } from '@/lib/permissions'
 import { PortalPendingChanges } from '@/features/approvals/pending-changes'
 
 export const Route = createFileRoute('/_authed/t/$orgSlug/api-keys')({
@@ -36,8 +36,8 @@ function PortalApiKeysPage() {
         onSearch={onSearch}
         fetching={fetching}
         invalidateKey={portalKey(orgSlug, 'api-keys')}
-        createKey={tenantCan(organization.role, { apiKey: ['create'] }) ? (label) => createPortalApiKey({ data: { organizationId, label } }) : undefined}
-        revokeKey={tenantCan(organization.role, { apiKey: ['revoke'] }) ? (apiKeyId) => revokePortalApiKey({ data: { organizationId, apiKeyId } }) : undefined}
+        createKey={canDo(organization.permissions, { apiKey: ['create'] }) ? (label) => createPortalApiKey({ data: { organizationId, label } }) : undefined}
+        revokeKey={canDo(organization.permissions, { apiKey: ['revoke'] }) ? (apiKeyId) => revokePortalApiKey({ data: { organizationId, apiKeyId } }) : undefined}
       />
     </div>
   )

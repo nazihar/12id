@@ -11,17 +11,20 @@ import { getRequestHeaders } from '@tanstack/react-start/server'
 import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
 
+import { disableInput, disabledUntil } from '@/features/operators/operators.schemas'
 import { inviteMemberInput, memberSearch, tenantRole } from '@/features/portal/members.schemas'
 import { memberEmail, performAccountChange } from '@/server/account-changes.server'
 import { askForAccountChange } from '@/server/approvals.server'
 import { principalActor, recordEvent } from '@/server/audit.server'
 import { auth } from '@/server/auth.server'
 import { consoleDb } from '@/server/db.server'
-import { invitation, user } from '@/server/db/auth-schema'
+import { invitation, member, user } from '@/server/db/auth-schema'
+import { liveSessions, memberAccessReport } from '@/server/access-report.server'
+import { memberRoleNames } from '@/server/permissions.server'
 import { listOrganizationInvitations, listOrganizationMembers, memberAccount } from '@/server/members.server'
 import { tenantMiddleware } from '@/server/middleware'
 import { staffRoleOf } from '@/lib/permissions'
-import { INACTIVE_BAN_PREFIX } from '@/lib/sign-in-rules'
+import { INACTIVE_BAN_PREFIX, membershipDisabled } from '@/lib/sign-in-rules'
 import { unlockAccount } from '@/server/sign-in-rules.server'
 
 import { assertSameOrganization, organizationInput } from './organization-input'
@@ -137,3 +140,52 @@ export const sendMemberPasswordLink = createServerFn({ method: 'POST' })
     await recordEvent({ type: 'account.password_link_sent', actor: principalActor(context.principal), tenantId: context.principal.tenantId, detail: { account: account.email, memberId: data.memberId } })
     return { sent: true }
   })
+
+/**
+ * implement/26: disable a member in this organization only, until a date or until re-enabled, with a
+ * note. Their other organizations and their account are untouched; this one refuses them from their
+ * next request. Not held for a second person: it only closes access.
+ */
+export const disableMembership = createServerFn({ method: 'POST' })
+  .middleware([tenantMiddleware({ member: ['update'] })])
+  .validator(memberInput.extend(disableInput.shape))
+  .handler(async ({ context, data }) => {
+    assertSameOrganization(context.organization.id, data.organizationId)
+    const account = await ownersMemberAccount(data.organizationId, data.memberId)
+    if (account.userId === context.session.user.id) throw new Error('You cannot disable yourself.')
+    // An organization keeps at least one owner who can open it, or nobody could manage its people.
+    const owners = await consoleDb()
+      .db.select({ id: member.id, role: member.role, disabledAt: member.disabledAt, disabledUntil: member.disabledUntil })
+      .from(member)
+      .where(eq(member.organizationId, data.organizationId))
+    const isOwner = (row: { role: string }) => memberRoleNames(row.role).includes('owner')
+    const target = owners.find((row) => row.id === data.memberId)
+    if (target && isOwner(target) && !owners.some((row) => row.id !== data.memberId && isOwner(row) && !membershipDisabled(row))) throw new Error('This is the only owner who can open the organization. Make someone else owner first.')
+    const until = disabledUntil(data.until)
+    await consoleDb().db.update(member).set({ disabledAt: new Date(), disabledUntil: until, disabledNote: data.note }).where(and(eq(member.id, data.memberId), eq(member.organizationId, data.organizationId)))
+    await recordEvent({ type: 'account.membership_disabled', actor: principalActor(context.principal), tenantId: context.principal.tenantId, detail: { account: account.email, memberId: data.memberId, until: until?.toISOString() ?? null, note: data.note } })
+    return { disabled: true }
+  })
+
+/** Lifts an owner's disable of this membership at once (implement/26). Restores access, so it is not held either: the disable was. */
+export const reenableMembership = createServerFn({ method: 'POST' })
+  .middleware([tenantMiddleware({ member: ['update'] })])
+  .validator(memberInput)
+  .handler(async ({ context, data }) => {
+    assertSameOrganization(context.organization.id, data.organizationId)
+    const account = await ownersMemberAccount(data.organizationId, data.memberId)
+    if (!membershipDisabled(account)) throw new Error('This membership is not disabled.')
+    await consoleDb().db.update(member).set({ disabledAt: null, disabledUntil: null, disabledNote: null }).where(and(eq(member.id, data.memberId), eq(member.organizationId, data.organizationId)))
+    await recordEvent({ type: 'account.membership_reenabled', actor: principalActor(context.principal), tenantId: context.principal.tenantId, detail: { account: account.email, memberId: data.memberId } })
+    return { reenabled: true }
+  })
+
+/** Totals for the Members page (implement/26): states, never signed in, without 2FA, signed in now, by role. */
+export const getMemberAccessReport = createServerFn({ method: 'GET' })
+  .middleware([tenantMiddleware()])
+  .handler(async ({ context }) => memberAccessReport(context.organization.id))
+
+/** Members signed in now (MTB 6.106). Read-only here: an owner disables a membership instead of ending a session, which would sign the person out of their other organizations too. */
+export const listMemberSessions = createServerFn({ method: 'GET' })
+  .middleware([tenantMiddleware()])
+  .handler(async ({ context }) => liveSessions({ organizationId: context.organization.id }))

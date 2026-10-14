@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { AUDITOR_ROLE, OPERATOR_ROLE, hasPlatformRole, platformRoles, sessionExpired, staffRoleOf, tenantRoles } from '../src/lib/permissions'
+import { AUDITOR_ROLE, OPERATOR_ROLE, PORTAL_ACTION_KEYS, STAFF_ACTIONS, actionsOf, baseRoleFor, builtInPermissions, canDo, hasPlatformRole, mergePermissions, permissionsForActions, platformRoles, sessionExpired, staffCan, staffRoleOf, tenantRoles } from '../src/lib/permissions'
 
 type TenantRequest = Parameters<(typeof tenantRoles)['member']['authorize']>[0]
 
@@ -76,5 +76,49 @@ describe('auditor role (implement/22 C14)', () => {
     expect(sessionExpired('auditor', signedIn)).toBe(true)
     expect(sessionExpired('user', signedIn)).toBe(false)
     expect(sessionExpired('auditor', Date.now() - 11 * 60 * 60 * 1000)).toBe(false)
+  })
+})
+
+describe('roles by action (implement/26)', () => {
+  it('gives the built-in roles exactly their actions', () => {
+    expect(actionsOf(builtInPermissions('owner'))).toEqual(PORTAL_ACTION_KEYS)
+    expect(actionsOf(builtInPermissions('admin'))).toEqual(PORTAL_ACTION_KEYS.filter((action) => action !== 'people'))
+    expect(actionsOf(builtInPermissions('member'))).toEqual([])
+  })
+
+  it('tells platform-api the nearest built-in role', () => {
+    expect(baseRoleFor(builtInPermissions('owner'))).toBe('owner')
+    expect(baseRoleFor(builtInPermissions('admin'))).toBe('admin')
+    expect(baseRoleFor(builtInPermissions('member'))).toBe('member')
+    expect(baseRoleFor(permissionsForActions(['people']))).toBe('owner')
+    expect(baseRoleFor(permissionsForActions(['export']))).toBe('admin')
+    expect(baseRoleFor(permissionsForActions([]))).toBe('member')
+  })
+
+  it('builds a custom role from actions, view included', () => {
+    const integrations = permissionsForActions(['integration'])
+    expect(canDo(integrations, { webhook: ['rotate'], apiKey: ['create'] })).toBe(true)
+    expect(canDo(integrations, { catalogue: ['publish'] })).toBe(false)
+    expect(canDo(integrations, { ac: ['read'] })).toBe(true)
+    expect(actionsOf(integrations)).toEqual(['integration'])
+  })
+
+  it('checks every action asked for, or any with OR', () => {
+    const exportOnly = permissionsForActions(['export'])
+    expect(canDo(exportOnly, { export: ['run'], exchange: ['erase'] })).toBe(false)
+    expect(canDo(exportOnly, { exchange: { actions: ['erase', 'create'], connector: 'OR' } })).toBe(false)
+    expect(canDo(builtInPermissions('admin'), { exchange: { actions: ['erase', 'create'], connector: 'OR' } })).toBe(true)
+  })
+
+  it('merges several roles into what any of them allows', () => {
+    const both = mergePermissions(permissionsForActions(['export']), permissionsForActions(['erase']))
+    expect(actionsOf(both)).toEqual(['erase', 'export'])
+  })
+
+  it('keeps the operator area on actions: operators do everything, auditors only read', () => {
+    for (const action of STAFF_ACTIONS) expect(staffCan(OPERATOR_ROLE, action)).toBe(true)
+    expect(staffCan(AUDITOR_ROLE, 'view-tenants')).toBe(true)
+    for (const action of ['operate', 'manage-staff', 'reveal'] as const) expect(staffCan(AUDITOR_ROLE, action)).toBe(false)
+    expect(staffCan(null, 'view-tenants')).toBe(false)
   })
 })

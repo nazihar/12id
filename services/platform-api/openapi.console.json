@@ -17220,7 +17220,8 @@
                     "type": "string",
                     "enum": [
                       "member.invite",
-                      "member.role"
+                      "member.role",
+                      "role.change"
                     ]
                   },
                   "payload": {
@@ -24339,6 +24340,12 @@
                       "account.reenabled",
                       "account.disabled_inactive",
                       "account.password_link_sent",
+                      "account.role_created",
+                      "account.role_updated",
+                      "account.role_deleted",
+                      "account.membership_disabled",
+                      "account.membership_reenabled",
+                      "account.session_ended",
                       "export.run"
                     ]
                   },

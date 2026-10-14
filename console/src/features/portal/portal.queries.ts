@@ -17,6 +17,7 @@ import {
   listPortalTemplates,
   listPortalWallets, getPortalRetention, getPortalAuditRetention, listPortalErasures } from './portal-data.functions'
 import { listMyOrganizations } from './portal-session.functions'
+import { listRoles } from './roles.functions'
 
 // Keyed by organization slug: the server functions resolve the tenant from the active organization,
 // so the cache must never serve one organization's data under another.
@@ -25,6 +26,8 @@ export const portalKey = (slug: string, ...rest: unknown[]) => ['portal', slug, 
 // Lists are keyed by their URL search (Phase 4 C9); the previous page stays on screen while the next loads.
 const list = { placeholderData: keepPreviousData }
 
+/** The organization's roles, built-in and custom (implement/26). */
+export const portalRolesQuery = (slug: string) => queryOptions({ queryKey: portalKey(slug, 'roles'), queryFn: () => listRoles() })
 export const myOrganizationsQuery = () => queryOptions({ queryKey: ['portal', 'my-organizations'], queryFn: () => listMyOrganizations() })
 /** Every schema and credential definition, for the template builder and the Overview counts. */
 export const portalCatalogueQuery = (slug: string) => queryOptions({ queryKey: portalKey(slug, 'catalogue', 'all'), queryFn: () => getPortalCatalogue() })

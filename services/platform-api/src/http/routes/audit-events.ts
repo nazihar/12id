@@ -53,6 +53,13 @@ export const AUDIT_EVENT_TYPES = [
   'account.reenabled',
   'account.disabled_inactive',
   'account.password_link_sent',
+  // implement/26: custom roles, disabling with a period, ending a session.
+  'account.role_created',
+  'account.role_updated',
+  'account.role_deleted',
+  'account.membership_disabled',
+  'account.membership_reenabled',
+  'account.session_ended',
   'export.run',
 ] as const
 export type AuditEventType = (typeof AUDIT_EVENT_TYPES)[number]

@@ -5997,7 +5997,7 @@ export interface paths {
                 content: {
                     "application/json": {
                         /** @enum {string} */
-                        type: "member.invite" | "member.role";
+                        type: "member.invite" | "member.role" | "role.change";
                         payload: {
                             [key: string]: unknown;
                         };
@@ -8755,7 +8755,7 @@ export interface paths {
                 content: {
                     "application/json": {
                         /** @enum {string} */
-                        type: "auth.sign_in" | "auth.sign_in_failed" | "auth.second_factor_failed" | "auth.sign_out" | "auth.password_reset_requested" | "auth.password_reset" | "auth.two_factor_enrolled" | "auth.locked" | "auth.idle_sign_out" | "auth.session_replaced" | "auth.password_changed" | "auth.password_expired" | "account.operator_invited" | "account.operator_updated" | "account.operator_role_changed" | "account.operator_banned" | "account.operator_unbanned" | "account.operator_sessions_revoked" | "account.operator_deleted" | "account.organization_created" | "account.member_invited" | "account.invitation_cancelled" | "account.invitation_accepted" | "account.member_role_changed" | "account.member_removed" | "account.unlocked" | "account.reenabled" | "account.disabled_inactive" | "account.password_link_sent" | "export.run";
+                        type: "auth.sign_in" | "auth.sign_in_failed" | "auth.second_factor_failed" | "auth.sign_out" | "auth.password_reset_requested" | "auth.password_reset" | "auth.two_factor_enrolled" | "auth.locked" | "auth.idle_sign_out" | "auth.session_replaced" | "auth.password_changed" | "auth.password_expired" | "account.operator_invited" | "account.operator_updated" | "account.operator_role_changed" | "account.operator_banned" | "account.operator_unbanned" | "account.operator_sessions_revoked" | "account.operator_deleted" | "account.organization_created" | "account.member_invited" | "account.invitation_cancelled" | "account.invitation_accepted" | "account.member_role_changed" | "account.member_removed" | "account.unlocked" | "account.reenabled" | "account.disabled_inactive" | "account.password_link_sent" | "account.role_created" | "account.role_updated" | "account.role_deleted" | "account.membership_disabled" | "account.membership_reenabled" | "account.session_ended" | "export.run";
                         /** @enum {string} */
                         outcome: "success" | "failure";
                         /** @description The console user id; absent when nobody is signed in. */

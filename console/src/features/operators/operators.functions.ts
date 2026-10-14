@@ -8,6 +8,9 @@
  * Every change is reported to the audit log (C13), naming the account by its email: after a deletion
  * that is all that is left of it.
  *
+ * Account changes need the operator area's `manage-staff` action (implement/26); reading the lists,
+ * the access report and who is signed in needs `view-tenants`, so an auditor sees them too.
+ *
  * Where the deployment requires a second operator (`OPERATOR_APPROVALS`, implement/22 C18), adding an
  * account, changing a role and unbanning are stored as a request and answer `{ held }`. Banning,
  * signing out and deleting never wait: they only close access.
@@ -19,22 +22,22 @@ import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { z } from 'zod'
 
-import { type SQL, and, count, desc, eq, ilike, inArray, isNull, or } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 
-import { editOperatorInput, inviteOperatorInput, operatorSearch } from '@/features/operators/operators.schemas'
-import { likeContains, pageParams } from '@/lib/list-search'
-import { STAFF_ROLES, staffRoleOf } from '@/lib/permissions'
-import { accountState } from '@/lib/sign-in-rules'
+import { disableInput, disabledUntil, editOperatorInput, inviteOperatorInput, operatorSearch } from '@/features/operators/operators.schemas'
 import { performAccountChange, staffAccount } from '@/server/account-changes.server'
 import { askForAccountChange } from '@/server/approvals.server'
 import { principalActor, recordEvent } from '@/server/audit.server'
 import { auth } from '@/server/auth.server'
 import { consoleDb } from '@/server/db.server'
-import { user } from '@/server/db/auth-schema'
-import { operatorMiddleware, operatorReadMiddleware } from '@/server/middleware'
+import { session, user } from '@/server/db/auth-schema'
+import { liveSessions, staffAccessReport } from '@/server/access-report.server'
+import { listStaffAccounts } from '@/server/staff-accounts.server'
+import { operatorReadMiddleware, staffMiddleware } from '@/server/middleware'
 import { unlockAccount } from '@/server/sign-in-rules.server'
 
 const userInput = z.object({ userId: z.string().min(1).max(100) })
+
 
 /** The audit names the account an action was taken on by its email, which outlives the account. */
 async function emailOf(userId: string) {
@@ -42,45 +45,14 @@ async function emailOf(userId: string) {
   return row?.email ?? null
 }
 
-/** One page of operator and auditor accounts, newest first (Phase 4 C9): search by name or email, filter by role and status. */
+/** One page of operator and auditor accounts, newest first (Phase 4 C9): search by name or email, filter by role and state. */
 export const listOperators = createServerFn({ method: 'GET' })
   .middleware([operatorReadMiddleware])
   .validator(operatorSearch)
-  .handler(async ({ data }) => {
-    const { db } = consoleDb()
-    const { page, pageSize, q } = pageParams(data)
-    const filters: SQL[] = [data.role ? eq(user.role, data.role) : inArray(user.role, [...STAFF_ROLES])]
-    if (data.status) filters.push(data.status === 'banned' ? eq(user.banned, true) : or(isNull(user.banned), eq(user.banned, false))!)
-    if (q) {
-      const pattern = likeContains(q)
-      filters.push(or(ilike(user.email, pattern), ilike(user.name, pattern))!)
-    }
-    const where = and(...filters)
-    const [rows, [{ total }]] = await Promise.all([
-      db
-        .select({ id: user.id, email: user.email, name: user.name, role: user.role, banned: user.banned, banReason: user.banReason, lockedUntil: user.lockedUntil, twoFactorEnabled: user.twoFactorEnabled, lastSignInAt: user.lastSignInAt, createdAt: user.createdAt })
-        .from(user)
-        .where(where)
-        .orderBy(desc(user.createdAt), desc(user.id))
-        .limit(pageSize)
-        .offset((page - 1) * pageSize),
-      db.select({ total: count() }).from(user).where(where),
-    ])
-    const items = rows.map(({ banReason: _reason, lockedUntil, ...account }) => ({
-      ...account,
-      // implement/24: locked after wrong passwords, or disabled for inactivity.
-      state: accountState({ banned: account.banned, banReason: _reason, lockedUntil }),
-      role: staffRoleOf(account.role) ?? 'operator',
-      banned: Boolean(account.banned),
-      twoFactorEnabled: Boolean(account.twoFactorEnabled),
-      lastSignInAt: account.lastSignInAt?.toISOString() ?? null,
-      createdAt: account.createdAt.toISOString(),
-    }))
-    return { items, total, page, pageSize }
-  })
+  .handler(({ data }) => listStaffAccounts(data))
 
 export const inviteOperator = createServerFn({ method: 'POST' })
-  .middleware([operatorMiddleware])
+  .middleware([staffMiddleware('manage-staff')])
   .validator(inviteOperatorInput)
   .handler(async ({ context, data }) => {
     const held = await askForAccountChange(context.principal, null, 'operator.invite', data)
@@ -91,7 +63,7 @@ export const inviteOperator = createServerFn({ method: 'POST' })
 
 /** Name and role of an operator or auditor account. A role change applies to the account's next request. */
 export const editOperator = createServerFn({ method: 'POST' })
-  .middleware([operatorMiddleware])
+  .middleware([staffMiddleware('manage-staff')])
   .validator(userInput.extend(editOperatorInput.shape))
   .handler(async ({ context, data }) => {
     if (data.userId === context.principal.actor) throw new Error('You cannot change your own account here.')
@@ -113,7 +85,7 @@ export const editOperator = createServerFn({ method: 'POST' })
 
 /** Removes the account and its sessions for good. Its past audit entries keep its email (C13). */
 export const deleteOperator = createServerFn({ method: 'POST' })
-  .middleware([operatorMiddleware])
+  .middleware([staffMiddleware('manage-staff')])
   .validator(userInput)
   .handler(async ({ context, data }) => {
     if (data.userId === context.principal.actor) throw new Error('You cannot delete your own account.')
@@ -123,19 +95,24 @@ export const deleteOperator = createServerFn({ method: 'POST' })
     return { deleted: true }
   })
 
+/**
+ * Disables the account until a day or until re-enabled, with a note (implement/26). Better Auth lifts a
+ * dated disable at the next sign-in after it ends; it also ends the account's sessions now.
+ */
 export const banOperator = createServerFn({ method: 'POST' })
-  .middleware([operatorMiddleware])
-  .validator(userInput.extend({ reason: z.string().trim().max(200).optional() }))
+  .middleware([staffMiddleware('manage-staff')])
+  .validator(userInput.extend(disableInput.shape))
   .handler(async ({ context, data }) => {
-    if (data.userId === context.principal.actor) throw new Error('You cannot ban your own account.')
-    // Banning also revokes the user's sessions.
-    await auth.api.banUser({ headers: getRequestHeaders(), body: { userId: data.userId, banReason: data.reason } })
-    await recordEvent({ type: 'account.operator_banned', actor: principalActor(context.principal), detail: { account: await emailOf(data.userId), userId: data.userId, reason: data.reason } })
+    if (data.userId === context.principal.actor) throw new Error('You cannot disable your own account.')
+    const until = disabledUntil(data.until)
+    const banExpiresIn = until ? Math.ceil((until.getTime() - Date.now()) / 1000) : undefined
+    await auth.api.banUser({ headers: getRequestHeaders(), body: { userId: data.userId, banReason: data.note, banExpiresIn } })
+    await recordEvent({ type: 'account.operator_banned', actor: principalActor(context.principal), detail: { account: await emailOf(data.userId), userId: data.userId, reason: data.note, until: until?.toISOString() ?? null } })
     return { banned: true }
   })
 
 export const unbanOperator = createServerFn({ method: 'POST' })
-  .middleware([operatorMiddleware])
+  .middleware([staffMiddleware('manage-staff')])
   .validator(userInput)
   .handler(async ({ context, data }) => {
     const held = await askForAccountChange(context.principal, null, 'operator.unban', { userId: data.userId, account: await emailOf(data.userId) })
@@ -145,7 +122,7 @@ export const unbanOperator = createServerFn({ method: 'POST' })
   })
 
 export const revokeOperatorSessions = createServerFn({ method: 'POST' })
-  .middleware([operatorMiddleware])
+  .middleware([staffMiddleware('manage-staff')])
   .validator(userInput)
   .handler(async ({ context, data }) => {
     await auth.api.revokeUserSessions({ headers: getRequestHeaders(), body: { userId: data.userId } })
@@ -155,7 +132,7 @@ export const revokeOperatorSessions = createServerFn({ method: 'POST' })
 
 /** Lifts the lock after wrong passwords at once (implement/24, MTB 2.26). Never held: it only restores what the rules took. */
 export const unlockOperator = createServerFn({ method: 'POST' })
-  .middleware([operatorMiddleware])
+  .middleware([staffMiddleware('manage-staff')])
   .validator(userInput)
   .handler(async ({ context, data }) => {
     if (!(await staffAccount(data.userId))) throw new Error('No such operator account.')
@@ -165,7 +142,7 @@ export const unlockOperator = createServerFn({ method: 'POST' })
 
 /** Mails the account a link to choose a new password (implement/24, MTB 2.37 item 5). It works for 10 minutes. */
 export const sendOperatorPasswordLink = createServerFn({ method: 'POST' })
-  .middleware([operatorMiddleware])
+  .middleware([staffMiddleware('manage-staff')])
   .validator(userInput)
   .handler(async ({ context, data }) => {
     if (data.userId === context.principal.actor) throw new Error('Change your own password from your account menu.')
@@ -174,4 +151,27 @@ export const sendOperatorPasswordLink = createServerFn({ method: 'POST' })
     await auth.api.requestPasswordReset({ body: { email, redirectTo: '/reset-password' } })
     await recordEvent({ type: 'account.password_link_sent', actor: principalActor(context.principal), detail: { account: email, userId: data.userId } })
     return { sent: true }
+  })
+
+/** Totals for the Operators page (implement/26): states, never signed in, without 2FA, signed in now, by role. */
+export const getStaffAccessReport = createServerFn({ method: 'GET' })
+  .middleware([operatorReadMiddleware])
+  .handler(() => staffAccessReport())
+
+/** Operator-area accounts signed in now (MTB 6.106). */
+export const listStaffSessions = createServerFn({ method: 'GET' })
+  .middleware([operatorReadMiddleware])
+  .handler(() => liveSessions({ staff: true }))
+
+/** Ends one session of a staff account at once (implement/26). Never held: it only closes access. */
+export const endStaffSession = createServerFn({ method: 'POST' })
+  .middleware([staffMiddleware('manage-staff')])
+  .validator(z.object({ sessionId: z.string().min(1).max(100) }))
+  .handler(async ({ context, data }) => {
+    const [row] = await consoleDb().db.select({ userId: session.userId, token: session.token }).from(session).where(eq(session.id, data.sessionId))
+    if (!row || !(await staffAccount(row.userId))) throw new Error('This session has ended already.')
+    if (row.userId === context.principal.actor) throw new Error('Sign out from your account menu instead.')
+    await consoleDb().db.delete(session).where(eq(session.id, data.sessionId))
+    await recordEvent({ type: 'account.session_ended', actor: principalActor(context.principal), detail: { account: await emailOf(row.userId), userId: row.userId } })
+    return { ended: true }
   })

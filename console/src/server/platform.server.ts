@@ -6,6 +6,7 @@
 import createClient from 'openapi-fetch'
 
 import type { Held } from '@/lib/held'
+import { STAFF_ROLES, type StaffRole, staffCan } from '@/lib/permissions'
 
 import { serverEnv } from './env.server'
 import type { Principal } from './middleware'
@@ -55,7 +56,8 @@ export function unwrapHeld<T>(result: { data?: T; error?: unknown; response: Res
 export function platformFor(principal: Principal, options: { tenantId?: string; revealReason?: string } = {}) {
   const env = serverEnv()
   let tenantId: string | null
-  if (principal.role === 'operator' || principal.role === 'auditor') {
+  const staffRole = (STAFF_ROLES as readonly string[]).includes(principal.role) ? (principal.role as StaffRole) : null
+  if (staffRole) {
     tenantId = options.tenantId ?? null
   } else {
     // Tenant members act for the tenant their membership resolved to, never one named by input.
@@ -70,6 +72,6 @@ export function platformFor(principal: Principal, options: { tenantId?: string; 
   // URI-encoded: a header cannot carry every character an address may hold.
   if (principal.email) headers['x-console-actor-label'] = encodeURIComponent(principal.email)
   if (tenantId) headers['x-console-tenant'] = tenantId
-  if (options.revealReason && principal.role === 'operator') headers['x-console-reveal-reason'] = encodeURIComponent(options.revealReason)
+  if (options.revealReason && staffCan(staffRole, 'reveal')) headers['x-console-reveal-reason'] = encodeURIComponent(options.revealReason)
   return createClient<paths>({ baseUrl: env.PLATFORM_API_URL, headers })
 }

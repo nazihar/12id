@@ -5,7 +5,7 @@ import { type ExportTable, OPS_EXPORTS, TENANT_EXPORTS, exportFilename, tableOf 
 import type { CredentialRow, ProofRow } from '../src/features/tenant-data/types'
 import { toCsv } from '../src/lib/export/csv'
 import { toXlsx } from '../src/lib/export/xlsx'
-import { tenantCan } from '../src/lib/permissions'
+import { builtInPermissions, canDo } from '../src/lib/permissions'
 
 const table: ExportTable = {
   name: 'credential-exchanges',
@@ -138,8 +138,8 @@ describe('what an export contains', () => {
   })
 
   it('is for owners and admins of an organization, not for members', () => {
-    expect(tenantCan('owner', { export: ['run'] })).toBe(true)
-    expect(tenantCan('admin', { export: ['run'] })).toBe(true)
-    expect(tenantCan('member', { export: ['run'] })).toBe(false)
+    expect(canDo(builtInPermissions('owner'), { export: ['run'] })).toBe(true)
+    expect(canDo(builtInPermissions('admin'), { export: ['run'] })).toBe(true)
+    expect(canDo(builtInPermissions('member'), { export: ['run'] })).toBe(false)
   })
 })

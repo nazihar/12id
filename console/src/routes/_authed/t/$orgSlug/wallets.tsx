@@ -9,7 +9,7 @@ import { portalWalletsQuery } from '@/features/portal/portal.queries'
 import { type WalletSearch, walletSearch } from '@/features/tenant-data/list.schemas'
 import { WalletsTable } from '@/features/tenant-data/panels'
 import { parseListSearch, searchPatcher } from '@/lib/list-search'
-import { tenantCan } from '@/lib/permissions'
+import { canDo } from '@/lib/permissions'
 
 export const Route = createFileRoute('/_authed/t/$orgSlug/wallets')({
   validateSearch: parseListSearch(walletSearch),
@@ -28,7 +28,7 @@ function PortalWalletsPage() {
   return (
     <section className="space-y-4">
       <PageHeader title="Wallets" description="One wallet per app installation, created by your backend. The platform does not know who the user is; the external id is yours." />
-      <WalletsTable data={data} search={search} onSearch={onSearch} fetching={useListPending()} onExport={tenantCan(organization.role, { export: ['run'] }) ? (format) => exportPortalList({ data: { list: 'wallets', format, search } }) : undefined} />
+      <WalletsTable data={data} search={search} onSearch={onSearch} fetching={useListPending()} onExport={canDo(organization.permissions, { export: ['run'] }) ? (format) => exportPortalList({ data: { list: 'wallets', format, search } }) : undefined} />
     </section>
   )
 }

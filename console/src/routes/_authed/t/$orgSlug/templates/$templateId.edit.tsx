@@ -7,13 +7,13 @@ import { RouteError } from '@/components/route-error'
 import { updatePortalTemplate } from '@/features/portal/portal-data.functions'
 import { portalCatalogueQuery, portalKey, portalTemplateQuery } from '@/features/portal/portal.queries'
 import { TemplateBuilder } from '@/features/portal/template-builder'
-import { tenantCan } from '@/lib/permissions'
+import { canDo } from '@/lib/permissions'
 import type { TemplateDefinition } from '@/lib/template-schema'
 import { announceHeld } from '@/lib/held'
 
 export const Route = createFileRoute('/_authed/t/$orgSlug/templates/$templateId/edit')({
   beforeLoad: ({ context, params }) => {
-    if (!tenantCan(context.organization.role, { template: ['update'] })) throw redirect({ to: '/t/$orgSlug/templates', params })
+    if (!canDo(context.organization.permissions, { template: ['update'] })) throw redirect({ to: '/t/$orgSlug/templates', params })
   },
   loader: async ({ context, params }) => {
     const [template] = await Promise.all([context.queryClient.ensureQueryData(portalTemplateQuery(params.orgSlug, params.templateId)), context.queryClient.ensureQueryData(portalCatalogueQuery(params.orgSlug))])

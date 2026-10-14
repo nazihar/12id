@@ -103,6 +103,28 @@ export const organization = pgTable("organization", {
   platformTenantId: text("platform_tenant_id").notNull().unique(),
 });
 
+export const organizationRole = pgTable(
+  "organization_role",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    role: text("role").notNull(),
+    permission: text("permission").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").$onUpdate(
+      () => /* @__PURE__ */ new Date(),
+    ),
+    label: text("label"),
+    description: text("description"),
+  },
+  (table) => [
+    index("organizationRole_organizationId_idx").on(table.organizationId),
+    index("organizationRole_role_idx").on(table.role),
+  ],
+);
+
 export const member = pgTable(
   "member",
   {
@@ -115,6 +137,9 @@ export const member = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     role: text("role").default("member").notNull(),
     createdAt: timestamp("created_at").notNull(),
+    disabledAt: timestamp("disabled_at"),
+    disabledUntil: timestamp("disabled_until"),
+    disabledNote: text("disabled_note"),
   },
   (table) => [
     index("member_organizationId_idx").on(table.organizationId),
@@ -210,9 +235,20 @@ export const accountRelations = relations(account, ({ one }) => ({
 }));
 
 export const organizationRelations = relations(organization, ({ many }) => ({
+  organizationRoles: many(organizationRole),
   members: many(member),
   invitations: many(invitation),
 }));
+
+export const organizationRoleRelations = relations(
+  organizationRole,
+  ({ one }) => ({
+    organization: one(organization, {
+      fields: [organizationRole.organizationId],
+      references: [organization.id],
+    }),
+  }),
+);
 
 export const memberRelations = relations(member, ({ one }) => ({
   organization: one(organization, {

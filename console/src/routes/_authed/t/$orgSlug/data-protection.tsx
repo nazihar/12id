@@ -6,7 +6,7 @@ import { RouteError } from '@/components/route-error'
 import { setPortalAuditRetention, setPortalRetention } from '@/features/portal/portal-data.functions'
 import { portalAuditRetentionQuery, portalErasuresQuery, portalKey, portalRetentionQuery } from '@/features/portal/portal.queries'
 import { AuditRetentionCard, ErasureLog, RetentionCard } from '@/features/tenant-data/data-protection'
-import { tenantCan } from '@/lib/permissions'
+import { canDo } from '@/lib/permissions'
 import { PortalPendingChanges } from '@/features/approvals/pending-changes'
 
 const pageOf = (search: Record<string, unknown>) => {
@@ -35,7 +35,7 @@ function PortalDataProtectionPage() {
   const { data: retention } = useSuspenseQuery(portalRetentionQuery(orgSlug))
   const { data: auditRetention } = useSuspenseQuery(portalAuditRetentionQuery(orgSlug))
   const { data: erasures } = useSuspenseQuery(portalErasuresQuery(orgSlug, page))
-  const canEdit = tenantCan(organization.role, { retention: ['update'] })
+  const canEdit = canDo(organization.permissions, { retention: ['update'] })
   return (
     <div className="space-y-6">
       <PageHeader

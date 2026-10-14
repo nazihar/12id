@@ -4,10 +4,11 @@ import { BuildingIcon, ChevronRightIcon, ShieldUserIcon } from 'lucide-react'
 
 import { PageHeader } from '@/components/page-header'
 import { RouteError } from '@/components/route-error'
-import { StateBadge } from '@/components/state-badge'
+import { RoleBadge, StateBadge } from '@/components/state-badge'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { myOrganizationsQuery } from '@/features/portal/portal.queries'
+import { formatDateTime } from '@/lib/format'
 
 export const Route = createFileRoute('/_authed/account')({
   loader: ({ context }) => context.queryClient.ensureQueryData(myOrganizationsQuery()),
@@ -41,7 +42,25 @@ function AccountPage() {
         </Card>
       ) : (
         <div className="grid gap-3" data-testid="organizations">
-          {organizations.map((organization) => (
+          {organizations.map((organization) =>
+            organization.disabled ? (
+              // Disabled by its owner (implement/26): listed so the person knows why it does not open.
+              <Card key={organization.id} size="sm" data-testid="organization-disabled">
+                <CardContent className="flex items-center gap-3">
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted">
+                    <BuildingIcon className="size-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-medium">{organization.name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {organization.disabled.until ? `Disabled until ${formatDateTime(organization.disabled.until)}` : 'Disabled until its owner re-enables it'}
+                      {organization.disabled.note && ` · ${organization.disabled.note}`}
+                    </div>
+                  </div>
+                  <StateBadge state="disabled" />
+                </CardContent>
+              </Card>
+            ) : (
             <Link key={organization.id} to="/t/$orgSlug" params={{ orgSlug: organization.slug }} className="block rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
               <Card size="sm" className="transition-colors hover:bg-muted/50">
                 <CardContent className="flex items-center gap-3">
@@ -49,12 +68,13 @@ function AccountPage() {
                     <BuildingIcon className="size-4" />
                   </div>
                   <span className="min-w-0 flex-1 truncate font-medium">{organization.name}</span>
-                  <StateBadge state={organization.role} />
+                  <RoleBadge label={organization.roleLabel} />
                   <ChevronRightIcon className="size-4 text-muted-foreground" />
                 </CardContent>
               </Card>
             </Link>
-          ))}
+            ),
+          )}
         </div>
       )}
     </section>

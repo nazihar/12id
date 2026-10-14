@@ -14,6 +14,8 @@ import type { listAuditLog } from '@/features/ops/ops.functions'
 import { auditAction, auditResult } from '@/features/ops/audit-events'
 import type { ConnectionRow, CredentialRow, DeliveryRow, ProofRow, WalletRow } from '@/features/tenant-data/types'
 import type { CheckRow } from '@/features/verification/verification.queries'
+import type { listOrganizationMembers } from '@/server/members.server'
+import type { listStaffAccounts } from '@/server/staff-accounts.server'
 import { KIND_LABELS, reasonLabel } from '@/features/verification/verification.schemas'
 
 export const EXPORT_MAX_ROWS = 10_000
@@ -47,6 +49,8 @@ const time = <Row>(header: string, value: (row: Row) => string | null | undefine
 const faceCheck = (biometric: CredentialRow['biometric']) => biometric?.status ?? null
 
 type AuditRow = Awaited<ReturnType<typeof listAuditLog>>['items'][number]
+type StaffAccountRow = Awaited<ReturnType<typeof listStaffAccounts>>['items'][number]
+type MemberAccountRow = Awaited<ReturnType<typeof listOrganizationMembers>>['items'][number]
 
 export const TENANT_EXPORTS = {
   connections: {
@@ -166,6 +170,39 @@ export const OPS_EXPORTS = {
     ],
   } satisfies Definition<AuditRow>,
 }
+
+/** The accounts lists (implement/26): who has access, in what state and why. Sign-in addresses stay in the audit log. */
+export const ACCOUNT_EXPORTS = {
+  operators: {
+    name: 'operator-accounts',
+    columns: [
+      text('Name', (row) => row.name),
+      text('Email', (row) => row.email),
+      text('Role', (row) => row.role),
+      text('Status', (row) => row.state),
+      time('Disabled until', (row) => row.disabled?.until),
+      text('Disabled because', (row) => row.disabled?.note),
+      text('Two-factor', (row) => (row.twoFactorEnabled ? 'set up' : 'not set up')),
+      time('Last sign-in', (row) => row.lastSignInAt),
+      time('Created', (row) => row.createdAt),
+    ],
+  } satisfies Definition<StaffAccountRow>,
+  members: {
+    name: 'members',
+    columns: [
+      text('Name', (row) => row.name),
+      text('Email', (row) => row.email),
+      text('Role', (row) => row.roleLabel),
+      text('Status', (row) => row.state),
+      time('Disabled until', (row) => row.disabled?.until),
+      text('Disabled because', (row) => row.disabled?.note),
+      text('Two-factor', (row) => (row.twoFactorEnabled ? 'set up' : 'not set up')),
+      time('Last sign-in', (row) => row.lastSignInAt),
+      time('Member since', (row) => row.since),
+    ],
+  } satisfies Definition<MemberAccountRow>,
+}
+
 export type OpsExportList = keyof typeof OPS_EXPORTS
 export const OPS_EXPORT_LISTS = Object.keys(OPS_EXPORTS) as [OpsExportList, ...OpsExportList[]]
 

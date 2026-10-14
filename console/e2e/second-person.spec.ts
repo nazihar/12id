@@ -91,7 +91,7 @@ test('a change waits for a second person: asked by one, decided by another, appl
   await owner.getByRole('button', { name: 'Invite member' }).click()
   await owner.getByLabel('Email', { exact: true }).fill(adminEmail)
   await owner.getByRole('dialog').getByLabel('Role').fill('adm')
-  await owner.getByRole('option', { name: /^admin/ }).click()
+  await owner.getByRole('option', { name: /^Admin/ }).click()
   await owner.getByRole('button', { name: 'Send invitation' }).click()
   await expect(owner.getByText(`Invitation sent to ${adminEmail}.`)).toBeVisible()
 

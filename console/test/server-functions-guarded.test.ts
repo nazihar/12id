@@ -1,6 +1,6 @@
 /**
  * The data-boundary rule (plan C2): every server function is guarded by `operatorMiddleware`,
- * `operatorReadMiddleware` or `tenantMiddleware(...)`. `operatorReadMiddleware` also admits auditors,
+ * `operatorReadMiddleware`, `staffMiddleware(action)` (implement/26) or `tenantMiddleware(...)`. `operatorReadMiddleware` also admits auditors,
  * who change nothing (implement/22 C14), so only a GET function may carry it. Route guards are UX only, so an unguarded `createServerFn` is an open
  * endpoint. A function that must work without a session (invitation acceptance, for example) is
  * listed in PUBLIC_SERVER_FUNCTIONS with the reason it is safe.
@@ -47,7 +47,7 @@ describe('server functions', () => {
     expect(misplaced.map((file) => relative(root, file))).toEqual([])
   })
 
-  it('each carry operatorMiddleware, operatorReadMiddleware or tenantMiddleware', () => {
+  it('each carry operatorMiddleware, operatorReadMiddleware, staffMiddleware or tenantMiddleware', () => {
     const unguarded: string[] = []
     const writableByAuditors: string[] = []
     let declarations = 0
@@ -64,7 +64,7 @@ describe('server functions', () => {
           if (!/\.middleware\(\[\s*authMiddleware\b/.test(chain)) unguarded.push(key(file, name))
           continue
         }
-        if (!/\.middleware\(\[\s*(operatorMiddleware\b|operatorReadMiddleware\b|tenantMiddleware\()/.test(chain)) unguarded.push(key(file, name))
+        if (!/\.middleware\(\[\s*(operatorMiddleware\b|operatorReadMiddleware\b|staffMiddleware\(|tenantMiddleware\()/.test(chain)) unguarded.push(key(file, name))
       }
     }
     expect(unguarded).toEqual([])

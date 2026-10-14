@@ -452,7 +452,7 @@ reports the result. Touches `features/portal/members.functions.ts` and
   contractual demand, and then at country level, taken when a face-check session starts.
 - **A full PAM product (5):** the in-app controls exist; a self-hosting bank uses its own PAM for server
   access. Small additions fit set 2 (sign-in alerts, access review from C14's last sign-in).
-- **Custom role builder (2):** fixed roles plus the auditor cover the need.
+- ~~**Custom role builder (2):** fixed roles plus the auditor cover the need.~~ **Built for organisations in `v0.9.0` (owner, 2026-10-13; [`26-roles-and-user-admin.md`](26-roles-and-user-admin.md)):** roles made from the portal actions. The operator area keeps operator and auditor, behind actions, for now.
 - **Multi-level approval (4):** one approver first.
 - **Editable platform settings (16):** they hold secrets and need restarts.
 - **Scheduled PDF or compliance reports (15):** wait for a named report; Excel and CSV exports come first.

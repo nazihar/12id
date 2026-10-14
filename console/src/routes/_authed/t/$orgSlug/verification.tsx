@@ -12,7 +12,7 @@ import { VerificationBody } from '@/features/verification/verification-body'
 import { portalChecksQuery, portalVerificationQuery } from '@/features/verification/verification.queries'
 import { type CheckSearch, type VerificationSearch, verificationSearch } from '@/features/verification/verification.schemas'
 import { parseListSearch, searchPatcher } from '@/lib/list-search'
-import { tenantCan } from '@/lib/permissions'
+import { canDo } from '@/lib/permissions'
 
 /** The checks list reads everything in the search except the window and the tab. */
 const listOf = ({ tab: _tab, days: _days, ...list }: VerificationSearch): CheckSearch => list
@@ -58,7 +58,7 @@ function PortalVerificationPage() {
         loadBiometricLog={(kind, id) => getPortalBiometricLog({ data: { kind, id } })}
         onOpenCustomer={(connectionId) => void navigate({ to: '/t/$orgSlug/customers/$connectionId', params: { orgSlug, connectionId } })}
         biometricsLink={{ to: '/t/$orgSlug/biometrics', params }}
-        onExportChecks={tenantCan(organization.role, { export: ['run'] }) ? (format) => exportPortalList({ data: { list: 'checks', format, search: listOf(search) } }) : undefined}
+        onExportChecks={canDo(organization.permissions, { export: ['run'] }) ? (format) => exportPortalList({ data: { list: 'checks', format, search: listOf(search) } }) : undefined}
       />
     </div>
   )

@@ -13,7 +13,7 @@ import { CustomerBody, customerTitle } from '@/features/verification/customer-bo
 import { portalCustomerQuery, portalCustomerRecordsQuery } from '@/features/verification/verification.queries'
 import { type CustomerSearch, customerSearch } from '@/features/verification/verification.schemas'
 import { parseListSearch, searchPatcher } from '@/lib/list-search'
-import { tenantCan } from '@/lib/permissions'
+import { canDo } from '@/lib/permissions'
 
 // One customer (implement/22 C11): a connection with its credential exchanges, proof exchanges and face checks.
 export const Route = createFileRoute('/_authed/t/$orgSlug/customers/$connectionId')({
@@ -35,7 +35,7 @@ function PortalCustomerPage() {
   const onSearch = searchPatcher<CustomerSearch>(Route.useNavigate())
   const { data: activity } = useSuspenseQuery(portalCustomerQuery(orgSlug, connectionId))
   const { data: records } = useSuspenseQuery(portalCustomerRecordsQuery(orgSlug, connectionId, search))
-  const canErase = tenantCan(organization.role, { exchange: ['erase'] })
+  const canErase = canDo(organization.permissions, { exchange: ['erase'] })
   const eraser = useMemo<Eraser | undefined>(
     () => (canErase ? { erase: (kind, id, reason) => erasePortalRecord({ data: { organizationId: organization.id, kind, id, reason } }), reasonRequired: false, invalidateKey: portalKey(orgSlug) } : undefined),
     [canErase, organization.id, orgSlug]

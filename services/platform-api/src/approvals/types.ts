@@ -283,6 +283,22 @@ export const APPROVAL_TYPES = {
     },
   },
 
+  // implement/26: creating, changing or deleting a custom role changes what its holders may do.
+  'role.change': {
+    label: 'Create, change or delete a role',
+    executor: 'console',
+    apply: 'by_requester',
+    roles: CONFIG_AND_OPERATOR,
+    subject: (call) => `role:${String(body<{ role: string }>(call).role).toLowerCase()}`,
+    summary: (call) => {
+      const change = body<{ action: 'create' | 'update' | 'delete'; label?: string; role: string; actions?: string[] }>(call)
+      const name = change.label ?? change.role
+      if (change.action === 'delete') return `Delete the role ${name}`
+      const what = change.actions && change.actions.length > 0 ? change.actions.join(', ') : 'view only'
+      return `${change.action === 'create' ? 'Create' : 'Change'} the role ${name}: ${what}`
+    },
+  },
+
   // --- console actions: operator accounts (no tenant) ----------------------------------------------
   'operator.invite': {
     label: 'Add an operator account',
@@ -307,12 +323,12 @@ export const APPROVAL_TYPES = {
     },
   },
   'operator.unban': {
-    label: 'Unban an operator account',
+    label: 'Re-enable an operator account',
     executor: 'console',
     apply: 'by_requester',
     roles: ['operator'],
     subject: (call) => `operator:${body<{ userId: string }>(call).userId}`,
-    summary: (call) => `Unban ${body<{ account?: string }>(call).account ?? 'an account'}`,
+    summary: (call) => `Re-enable ${body<{ account?: string }>(call).account ?? 'an account'}`,
   },
 } as const satisfies Record<string, ApprovalType>
 
@@ -321,7 +337,7 @@ export const APPROVAL_TYPE_IDS = Object.keys(APPROVAL_TYPES) as [ApprovalTypeId,
 export const approvalType = (id: string): ApprovalType | undefined => (APPROVAL_TYPES as Record<string, ApprovalType>)[id]
 
 /** The types the console performs itself; `tenant` says whether one belongs to an organisation. */
-export const CONSOLE_TYPES = { 'member.invite': true, 'member.role': true, 'operator.invite': false, 'operator.role': false, 'operator.unban': false } as const satisfies Partial<Record<ApprovalTypeId, boolean>>
+export const CONSOLE_TYPES = { 'member.invite': true, 'member.role': true, 'role.change': true, 'operator.invite': false, 'operator.role': false, 'operator.unban': false } as const satisfies Partial<Record<ApprovalTypeId, boolean>>
 export type ConsoleTypeId = keyof typeof CONSOLE_TYPES
 export const TENANT_CONSOLE_TYPE_IDS = (Object.keys(CONSOLE_TYPES) as ConsoleTypeId[]).filter((id) => CONSOLE_TYPES[id]) as [ConsoleTypeId, ...ConsoleTypeId[]]
 export const OPERATOR_CONSOLE_TYPE_IDS = (Object.keys(CONSOLE_TYPES) as ConsoleTypeId[]).filter((id) => !CONSOLE_TYPES[id]) as [ConsoleTypeId, ...ConsoleTypeId[]]

@@ -374,6 +374,13 @@ describe('approval by a second person', { skip: database ? false : 'no test data
     const failed = await call('POST', `/v1/change-requests/${second.json().id}/applied`, as('owner', 'ada'), { ok: false, error: 'the member left the organization' })
     assert.deepEqual([failed.json().status, failed.json().applyError], ['failed', 'the member left the organization'])
 
+    // implement/26: a custom role is a console change of its own, one open request per role name.
+    const role = await call('POST', '/v1/change-requests', as('owner', 'ada'), { type: 'role.change', payload: { action: 'create', role: 'integrations', label: 'Integrations', actions: ['Manage integration', 'Export'] } })
+    assert.equal(role.statusCode, 201)
+    assert.equal(role.json().summary, 'Create the role Integrations: Manage integration, Export')
+    assert.equal((await call('POST', '/v1/change-requests', as('owner', 'ada'), { type: 'role.change', payload: { action: 'delete', role: 'Integrations' } })).statusCode, 409)
+    assert.equal((await call('POST', '/v1/change-requests', as('member', 'cy'), { type: 'role.change', payload: { action: 'delete', role: 'auditors' } })).statusCode, 403)
+
     // Where approval is off, the console makes the change itself.
     await db.update(tenants).set({ approvalsRequired: false }).where(eq(tenants.id, tenantId))
     const off = await call('POST', '/v1/change-requests', as('owner', 'ada'), { type: 'member.invite', payload })

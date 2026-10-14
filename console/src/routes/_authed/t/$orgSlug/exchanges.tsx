@@ -13,7 +13,7 @@ import type { Eraser } from '@/features/tenant-data/data-protection'
 import { type ExchangeSearch, exchangeSearch } from '@/features/tenant-data/list.schemas'
 import { ExchangeLists } from '@/features/tenant-data/panels'
 import { parseListSearch, searchPatcher } from '@/lib/list-search'
-import { tenantCan } from '@/lib/permissions'
+import { canDo } from '@/lib/permissions'
 
 export const Route = createFileRoute('/_authed/t/$orgSlug/exchanges')({
   validateSearch: parseListSearch(exchangeSearch),
@@ -31,7 +31,7 @@ function PortalExchangesPage() {
   const onSearch = searchPatcher<ExchangeSearch>(navigate)
   const openCustomer = useCallback((connectionId: string) => void navigate({ to: '/t/$orgSlug/customers/$connectionId', params: { orgSlug, connectionId } }), [navigate, orgSlug])
   const { data } = useSuspenseQuery(portalExchangesQuery(orgSlug, search))
-  const canErase = tenantCan(organization.role, { exchange: ['erase'] })
+  const canErase = canDo(organization.permissions, { exchange: ['erase'] })
   const eraser = useMemo<Eraser | undefined>(
     () => (canErase ? { erase: (kind, id, reason) => erasePortalRecord({ data: { organizationId: organization.id, kind, id, reason } }), reasonRequired: false, invalidateKey: portalKey(orgSlug) } : undefined),
     [canErase, organization.id, orgSlug]
@@ -41,11 +41,11 @@ function PortalExchangesPage() {
       <PageHeader
         title="Exchanges"
         description="Connections, credential exchanges and proof exchanges, newest first. Search by your external id, filter by state and creation date; a row leads to everything on its connection. Credential attribute values are not shown. Erase removes a finished exchange's personal data, or a person's whole connection."
-        actions={tenantCan(organization.role, { exchange: ['create'] }) && <ConnectionInvitationDialog organizationId={organization.id} orgSlug={orgSlug} />}
+        actions={canDo(organization.permissions, { exchange: ['create'] }) && <ConnectionInvitationDialog organizationId={organization.id} orgSlug={orgSlug} />}
       />
       <ExchangeLists data={data} search={search} onSearch={onSearch} fetching={useListPending()} loadBiometricLog={(kind, id) => getPortalBiometricLog({ data: { kind, id } })} eraser={eraser}
         onOpenCustomer={openCustomer}
-        onExport={tenantCan(organization.role, { export: ['run'] }) ? (list, format) => exportPortalList({ data: { list, format, search } }) : undefined}
+        onExport={canDo(organization.permissions, { export: ['run'] }) ? (list, format) => exportPortalList({ data: { list, format, search } }) : undefined}
       />
     </div>
   )

@@ -20,7 +20,7 @@ import { type TemplateSearch, templateSearch } from '@/features/tenant-data/list
 import type { TemplateRow } from '@/features/tenant-data/types'
 import { isFiltered, pagingFor, resetFor, parseListSearch, searchPatcher } from '@/lib/list-search'
 import { formatDateTime } from '@/lib/format'
-import { tenantCan } from '@/lib/permissions'
+import { canDo } from '@/lib/permissions'
 import { announceHeld } from '@/lib/held'
 import { PortalPendingChanges } from '@/features/approvals/pending-changes'
 
@@ -58,10 +58,10 @@ function PortalTemplatesPage() {
   const fetching = useListPending()
   const { data: templates } = useSuspenseQuery(portalTemplatesQuery(orgSlug, search))
   const queryClient = useQueryClient()
-  const canCreate = tenantCan(organization.role, { template: ['create'] })
-  const canUpdate = tenantCan(organization.role, { template: ['update'] })
-  const canDelete = tenantCan(organization.role, { template: ['delete'] })
-  const canBiometrics = tenantCan(organization.role, { biometrics: ['update'] })
+  const canCreate = canDo(organization.permissions, { template: ['create'] })
+  const canUpdate = canDo(organization.permissions, { template: ['update'] })
+  const canDelete = canDo(organization.permissions, { template: ['delete'] })
+  const canBiometrics = canDo(organization.permissions, { biometrics: ['update'] })
 
   const remove = useMutation({
     mutationFn: (template: TemplateRow) => deletePortalTemplate({ data: { organizationId: organization.id, templateId: template.id } }),

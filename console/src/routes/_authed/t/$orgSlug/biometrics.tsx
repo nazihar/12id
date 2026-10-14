@@ -5,7 +5,7 @@ import { PageHeader } from '@/components/page-header'
 import { RouteError } from '@/components/route-error'
 import { AdoptionCard, ProviderCard, SettingsCard } from '@/features/portal/biometrics-panels'
 import { portalBiometricAdoptionQuery, portalBiometricsQuery } from '@/features/portal/portal.queries'
-import { tenantCan } from '@/lib/permissions'
+import { canDo } from '@/lib/permissions'
 import { PortalPendingChanges } from '@/features/approvals/pending-changes'
 
 /** Phase 6: the organization's biometric gate (liveness + face match) and its vendor account. */
@@ -21,7 +21,7 @@ function PortalBiometricsPage() {
   const { organization } = Route.useRouteContext()
   const { data } = useSuspenseQuery(portalBiometricsQuery(orgSlug))
   const { data: adoption } = useSuspenseQuery(portalBiometricAdoptionQuery(orgSlug))
-  const canUpdate = tenantCan(organization.role, { biometrics: ['update'] })
+  const canUpdate = canDo(organization.permissions, { biometrics: ['update'] })
   const captureProvider = data.providers.find((p) => p.id === data.settings.provider?.id)?.captureProvider
 
   return (

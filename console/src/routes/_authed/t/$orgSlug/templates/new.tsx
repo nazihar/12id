@@ -7,13 +7,13 @@ import { RouteError } from '@/components/route-error'
 import { createPortalTemplate } from '@/features/portal/portal-data.functions'
 import { portalCatalogueQuery, portalKey } from '@/features/portal/portal.queries'
 import { TemplateBuilder } from '@/features/portal/template-builder'
-import { tenantCan } from '@/lib/permissions'
+import { canDo } from '@/lib/permissions'
 import type { TemplateDefinition } from '@/lib/template-schema'
 import { announceHeld } from '@/lib/held'
 
 export const Route = createFileRoute('/_authed/t/$orgSlug/templates/new')({
   beforeLoad: ({ context, params }) => {
-    if (!tenantCan(context.organization.role, { template: ['create'] })) throw redirect({ to: '/t/$orgSlug/templates', params })
+    if (!canDo(context.organization.permissions, { template: ['create'] })) throw redirect({ to: '/t/$orgSlug/templates', params })
   },
   loader: ({ context, params }) => context.queryClient.ensureQueryData(portalCatalogueQuery(params.orgSlug)),
   errorComponent: RouteError,

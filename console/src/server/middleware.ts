@@ -5,23 +5,26 @@
  * requires.
  *
  *   authMiddleware      Better Auth session + 2FA enabled (Better Auth makes 2FA opt-in per user)
- *   operatorReadMiddleware  platform role `operator` or `auditor`, session younger than 12 h, verified
- *                           TOTP secret. For reads only: an auditor changes nothing (implement/22 C14)
- *   operatorMiddleware      the same, `operator` only. Everything that changes something uses this
- *   tenantMiddleware    membership of the session's active organization (never an id from input),
- *                       optional permission check against the member's role
+ *   staffMiddleware(action) a platform role that holds the operator-area action (lib/permissions.ts,
+ *                           implement/26), session younger than 12 h, verified TOTP secret
+ *   operatorReadMiddleware  `view-tenants`: operators and auditors. For reads only (implement/22 C14)
+ *   operatorMiddleware      `operate`: operators. Everything that changes something uses this
+ *   tenantMiddleware    an enabled membership of the session's active organization (never an id from
+ *                       input), optional permission check against the member's roles, custom roles
+ *                       included (implement/26)
  */
 import { redirect } from '@tanstack/react-router'
 import { createMiddleware } from '@tanstack/react-start'
 import { getRequestHeaders, setResponseHeader, setResponseStatus } from '@tanstack/react-start/server'
 import { and, eq } from 'drizzle-orm'
 
-import { AUDITOR_ROLE, OPERATOR_ROLE, type StaffRole, type TenantRole, sessionExpired, staffRoleOf, tenantRoles } from '../lib/permissions'
-import { passwordExpired, sessionIdle } from '../lib/sign-in-rules'
+import { type PermissionRequest, type Permissions, type StaffAction, type StaffRole, type TenantRole, baseRoleFor, canDo, sessionExpired, staffCan, staffRoleOf } from '../lib/permissions'
+import { membershipDisabled, passwordExpired, sessionIdle } from '../lib/sign-in-rules'
 import { auth } from './auth.server'
 import { consoleDb } from './db.server'
 import { member, organization, twoFactor } from './db/auth-schema'
 import { serverEnv } from './env.server'
+import { effectivePermissions, memberRoleNames } from './permissions.server'
 import { endIdleSession } from './sign-in-rules.server'
 
 declare const principalBrand: unique symbol
@@ -33,6 +36,7 @@ export type Principal = {
   readonly actor: string
   /** The account's email; sent as `x-console-actor-label` so an audit row stays readable after the account is deleted. */
   readonly email: string
+  /** For tenant members, the built-in role nearest to their roles (`baseRoleFor`): platform-api knows no custom role. */
   readonly role: StaffRole | TenantRole
   /** Platform tenant id for tenant members; null for operators and auditors, who name the tenant per call. */
   readonly tenantId: string | null
@@ -64,8 +68,6 @@ function signInAgain(): never {
   throw redirect({ to: '/login' })
 }
 
-type TenantPermissions = Parameters<(typeof tenantRoles)['owner']['authorize']>[0]
-
 export const authMiddleware = createMiddleware({ type: 'function' }).server(async ({ next }) => {
   const session = await auth.api.getSession({ headers: getRequestHeaders() })
   if (!session) signInAgain()
@@ -86,24 +88,24 @@ export const authMiddleware = createMiddleware({ type: 'function' }).server(asyn
   return next({ context: { session } })
 })
 
-const staffMiddleware = (allowed: readonly StaffRole[]) =>
+export const staffMiddleware = (action: StaffAction) =>
   createMiddleware({ type: 'function' })
     .middleware([authMiddleware])
     .server(async ({ next, context }) => {
       const { user } = context.session
       const role = staffRoleOf(user.role)
       if (!role) refuse(403, 'operator role required')
-      if (!allowed.includes(role)) refuse(403, 'auditors are read-only')
+      if (!staffCan(role, action)) refuse(403, role === 'auditor' ? 'auditors are read-only' : 'your role does not allow this')
       const [totp] = await consoleDb().db.select({ verified: twoFactor.verified }).from(twoFactor).where(eq(twoFactor.userId, user.id))
       if (!totp?.verified) refuse(403, 'operators must use an authenticator app')
       return next({ context: { principal: principal({ actor: user.id, email: user.email, role, tenantId: null }) } })
     })
 
 /** Reads of the operator area: operators and auditors. Never on a function that changes something. */
-export const operatorReadMiddleware = staffMiddleware([OPERATOR_ROLE, AUDITOR_ROLE])
-export const operatorMiddleware = staffMiddleware([OPERATOR_ROLE])
+export const operatorReadMiddleware = staffMiddleware('view-tenants')
+export const operatorMiddleware = staffMiddleware('operate')
 
-export function tenantMiddleware(permissions?: TenantPermissions) {
+export function tenantMiddleware(permissions?: PermissionRequest) {
   return createMiddleware({ type: 'function' })
     .middleware([authMiddleware])
     .server(async ({ next, context }) => {
@@ -111,22 +113,23 @@ export function tenantMiddleware(permissions?: TenantPermissions) {
       const organizationId = session.activeOrganizationId
       if (!organizationId) refuse(403, 'choose an organization first')
       const [membership] = await consoleDb()
-        .db.select({ role: member.role, platformTenantId: organization.platformTenantId, slug: organization.slug })
+        .db.select({ role: member.role, disabledAt: member.disabledAt, disabledUntil: member.disabledUntil, platformTenantId: organization.platformTenantId, slug: organization.slug })
         .from(member)
         .innerJoin(organization, eq(organization.id, member.organizationId))
         .where(and(eq(member.userId, user.id), eq(member.organizationId, organizationId)))
       if (!membership) refuse(403, 'not a member of this organization')
+      if (membershipDisabled(membership)) refuse(403, 'your membership of this organization is disabled')
 
-      // Better Auth stores several organization roles as a comma-separated string.
-      const roles = membership.role.split(',').map((r) => r.trim()).filter((r): r is TenantRole => r in tenantRoles)
-      if (roles.length === 0) refuse(403, 'no console role in this organization')
-      if (permissions && !roles.some((r) => tenantRoles[r].authorize(permissions).success)) refuse(403, 'your role does not allow this')
-      const strongest = (['owner', 'admin', 'member'] as const).find((r) => roles.includes(r)) as TenantRole
+      // Better Auth stores several organization roles as a comma-separated string; custom roles count too.
+      const granted: Permissions = await effectivePermissions(organizationId, memberRoleNames(membership.role))
+      if (Object.keys(granted).length === 0) refuse(403, 'no console role in this organization')
+      if (permissions && !canDo(granted, permissions)) refuse(403, 'your role does not allow this')
 
       return next({
         context: {
-          principal: principal({ actor: user.id, email: user.email, role: strongest, tenantId: membership.platformTenantId }),
+          principal: principal({ actor: user.id, email: user.email, role: baseRoleFor(granted), tenantId: membership.platformTenantId }),
           organization: { id: organizationId, slug: membership.slug },
+          permissions: granted,
         },
       })
     })

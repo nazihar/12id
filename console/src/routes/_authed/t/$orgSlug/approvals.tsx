@@ -8,7 +8,7 @@ import { applyPortalChange, cancelPortalChange, decidePortalChange, setPortalApp
 import { portalApprovalsKey, portalApprovalsQuery, portalChangeRequestsQuery } from '@/features/approvals/approvals.queries'
 import { type ApprovalSearch, approvalSearch } from '@/features/approvals/approvals.schemas'
 import { parseListSearch, searchPatcher } from '@/lib/list-search'
-import { tenantCan } from '@/lib/permissions'
+import { canDo } from '@/lib/permissions'
 
 // Approval by a second person (implement/22-console-feedback.md C19), for an organization: the
 // switch, what waits and what was decided. Members read; owners and admins decide.
@@ -30,7 +30,7 @@ function PortalApprovalsPage() {
   const { data: overview } = useSuspenseQuery(portalApprovalsQuery(orgSlug))
   const { data } = useSuspenseQuery(portalChangeRequestsQuery(orgSlug, search))
   const organizationId = organization.id
-  const canDecide = tenantCan(organization.role, { approval: ['decide'] })
+  const canDecide = canDo(organization.permissions, { approval: ['decide'] })
   // A member can ask for nothing that is held, so has nothing of their own to cancel or apply.
   const canAsk = organization.role !== 'member'
 
@@ -44,7 +44,7 @@ function PortalApprovalsPage() {
       fetching={fetching}
       invalidateKey={portalApprovalsKey(orgSlug)}
       actions={{
-        setRequired: tenantCan(organization.role, { approval: ['configure'] }) ? (required) => setPortalApprovals({ data: { organizationId, required } }) : undefined,
+        setRequired: canDo(organization.permissions, { approval: ['configure'] }) ? (required) => setPortalApprovals({ data: { organizationId, required } }) : undefined,
         decide: canDecide ? (id, action, reason) => decidePortalChange({ data: { organizationId, id, action, reason } }) : undefined,
         cancel: canAsk ? (id) => cancelPortalChange({ data: { organizationId, id } }) : undefined,
         apply: canAsk ? (id) => applyPortalChange({ data: { organizationId, id } }) : undefined,

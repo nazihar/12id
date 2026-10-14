@@ -1,7 +1,7 @@
 import { keepPreviousData, queryOptions, useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { createColumnHelper } from '@tanstack/react-table'
-import { BanIcon, KeyRoundIcon, LockOpenIcon, LogOutIcon, Trash2Icon, UserCheckIcon } from 'lucide-react'
+import { KeyRoundIcon, LockOpenIcon, LogOutIcon, Trash2Icon, UserCheckIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { DataTable } from '@/components/data-table/data-table'
@@ -11,8 +11,14 @@ import { RouteError } from '@/components/route-error'
 import { RowAction, RowActions } from '@/components/row-action'
 import { StateBadge } from '@/components/state-badge'
 import { EditOperatorAction, InviteOperatorDialog } from '@/features/operators/invite-operator-dialog'
-import { banOperator, deleteOperator, listOperators, revokeOperatorSessions, sendOperatorPasswordLink, unbanOperator, unlockOperator } from '@/features/operators/operators.functions'
-import { type OperatorSearch, operatorSearch, operatorStatusOptions, staffRoleOptions } from '@/features/operators/operators.schemas'
+import { banOperator, deleteOperator, endStaffSession, getStaffAccessReport, listOperators, listStaffSessions, revokeOperatorSessions, sendOperatorPasswordLink, unbanOperator, unlockOperator } from '@/features/operators/operators.functions'
+import { AccessReport } from '@/features/accounts/access-report'
+import { DisableAction, DisabledDetail } from '@/features/accounts/disable-dialog'
+import { SignedInTable } from '@/features/accounts/signed-in-table'
+import { exportOperatorAccounts } from '@/features/export/export.functions'
+import { ExportMenu } from '@/components/data-table/export-menu'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { type DisableInput, type OperatorSearch, operatorSearch, operatorStatusOptions, staffRoleOptions } from '@/features/operators/operators.schemas'
 import { SelectFilter } from '@/components/data-table/list-toolbar'
 import { useListPending } from '@/components/data-table/use-list-pending'
 import { formatDateTime } from '@/lib/format'
@@ -24,11 +30,18 @@ type OperatorRow = Awaited<ReturnType<typeof listOperators>>['items'][number]
 
 const operatorsQuery = (search: OperatorSearch) =>
   queryOptions({ queryKey: ['ops', 'operators', search], queryFn: () => listOperators({ data: search }), placeholderData: keepPreviousData })
+// implement/26: the totals above the list, and who is signed in now.
+const accessReportQuery = () => queryOptions({ queryKey: ['ops', 'operators', 'report'], queryFn: () => getStaffAccessReport() })
+const staffSessionsQuery = () => queryOptions({ queryKey: ['ops', 'operators', 'sessions'], queryFn: () => listStaffSessions() })
 
 export const Route = createFileRoute('/_authed/ops/operators')({
   validateSearch: parseListSearch(operatorSearch),
-  loaderDeps: ({ search }) => search,
-  loader: ({ context, deps }) => context.queryClient.ensureQueryData(operatorsQuery(deps)),
+  loaderDeps: ({ search }): OperatorSearch => search,
+  loader: async ({ context, deps }) => {
+    const report = context.queryClient.ensureQueryData(accessReportQuery())
+    const list = deps.tab === 'signed-in' ? context.queryClient.ensureQueryData(staffSessionsQuery()) : context.queryClient.ensureQueryData(operatorsQuery(deps))
+    await Promise.all([report, list])
+  },
   errorComponent: RouteError,
   component: OperatorsPage,
 })
@@ -37,8 +50,8 @@ function OperatorsPage() {
   const { viewer } = Route.useRouteContext()
   const search = Route.useSearch()
   const onSearch = searchPatcher<OperatorSearch>(Route.useNavigate())
-  const fetching = useListPending()
-  const { data } = useSuspenseQuery(operatorsQuery(search))
+  const { data: report } = useSuspenseQuery(accessReportQuery())
+  const tab = search.tab ?? 'accounts'
   return (
     <section className="space-y-4">
       <PageHeader
@@ -47,8 +60,37 @@ function OperatorsPage() {
         actions={viewer.isOperator ? <InviteOperatorDialog /> : undefined}
       />
       <OpsPendingChanges types={['operator.']} />
-      <DataTable
-        columns={operatorColumns(viewer.userId, viewer.isOperator)}
+      <AccessReport report={report} />
+      <Tabs value={tab} onValueChange={(next) => onSearch({ tab: next === 'accounts' ? undefined : 'signed-in', q: undefined, role: undefined, status: undefined })}>
+        <TabsList>
+          <TabsTrigger value="accounts">Accounts</TabsTrigger>
+          <TabsTrigger value="signed-in">Signed in now</TabsTrigger>
+        </TabsList>
+      </Tabs>
+      {tab === 'signed-in' ? <StaffSessions currentUserId={viewer.userId} canEnd={viewer.isOperator} /> : <OperatorAccounts search={search} onSearch={onSearch} currentUserId={viewer.userId} canManage={viewer.isOperator} />}
+    </section>
+  )
+}
+
+function StaffSessions({ currentUserId, canEnd }: { currentUserId: string; canEnd: boolean }) {
+  const queryClient = useQueryClient()
+  const { data } = useSuspenseQuery(staffSessionsQuery())
+  const end = useMutation({
+    mutationFn: (sessionId: string) => endStaffSession({ data: { sessionId } }),
+    onSuccess: async () => {
+      toast.success('Session ended.')
+      await queryClient.invalidateQueries({ queryKey: ['ops', 'operators'] })
+    },
+  })
+  return <SignedInTable rows={data} currentUserId={currentUserId} onEnd={canEnd ? (row) => end.mutateAsync(row.sessionId) : undefined} />
+}
+
+function OperatorAccounts({ search, onSearch, currentUserId, canManage }: { search: OperatorSearch; onSearch: (patch: Partial<OperatorSearch>) => void; currentUserId: string; canManage: boolean }) {
+  const fetching = useListPending()
+  const { data } = useSuspenseQuery(operatorsQuery(search))
+  return (
+    <DataTable
+        columns={operatorColumns(currentUserId, canManage)}
         data={data.items}
         paging={pagingFor(data, onSearch)}
         onReset={resetFor(search, onSearch)}
@@ -59,11 +101,11 @@ function OperatorsPage() {
             <SelectFilter label="Status" options={operatorStatusOptions} value={search.status} onChange={(status) => onSearch({ status })} />
           </>
         }
+        actions={<ExportMenu onExport={(format) => exportOperatorAccounts({ data: { format, search } })} />}
         fetching={fetching}
         emptyMessage={isFiltered(search) ? 'No accounts match.' : 'No accounts.'}
         testId="operators-table"
       />
-    </section>
   )
 }
 
@@ -78,7 +120,17 @@ function operatorColumns(currentUserId: string, canManage: boolean) {
     column.accessor((row) => (row.twoFactorEnabled ? 'set up' : 'not set up'), { id: 'twoFactor', header: 'Two-factor' }),
     column.accessor('lastSignInAt', { header: 'Last sign-in', cell: ({ getValue }) => (getValue() ? formatDateTime(getValue() as string) : 'never') }),
     // implement/24: `locked` after wrong passwords, `inactive` when disabled for not signing in.
-    column.accessor('state', { id: 'status', header: 'Status', cell: ({ getValue }) => <StateBadge state={getValue()} /> }),
+    // implement/26: `disabled` by a person, until a day or until re-enabled, with their note.
+    column.accessor('state', {
+      id: 'status',
+      header: 'Status',
+      cell: ({ row }) => (
+        <>
+          <StateBadge state={row.original.state} />
+          <DisabledDetail disabled={row.original.disabled} />
+        </>
+      ),
+    }),
     column.accessor('createdAt', { header: 'Created', cell: ({ getValue }) => formatDateTime(getValue()) }),
     column.display({
       id: 'actions',
@@ -92,10 +144,10 @@ function operatorColumns(currentUserId: string, canManage: boolean) {
 function OperatorActions({ operator }: { operator: OperatorRow }) {
   const queryClient = useQueryClient()
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['ops', 'operators'] })
-  const ban = useMutation({
-    mutationFn: () => banOperator({ data: { userId: operator.id } }),
+  const disable = useMutation({
+    mutationFn: (input: DisableInput) => banOperator({ data: { userId: operator.id, ...input } }),
     onSuccess: async () => {
-      toast.success(`${operator.email} is banned and signed out.`)
+      toast.success(`${operator.email} is disabled and signed out.`)
       await refresh()
     },
   })
@@ -164,36 +216,26 @@ function OperatorActions({ operator }: { operator: OperatorRow }) {
           onConfirm: () => revoke.mutateAsync(),
         }}
       />
-      {operator.banned ? (
+      {operator.state === 'disabled' || operator.state === 'inactive' ? (
         <RowAction
-          label={operator.state === 'inactive' ? 'Re-enable' : 'Unban'}
+          label="Re-enable"
           icon={UserCheckIcon}
           confirm={{
-            title: operator.state === 'inactive' ? `Re-enable ${operator.email}?` : `Unban ${operator.email}?`,
-            description: operator.state === 'inactive' ? 'The account was disabled because it was not used. They can sign in again and see every tenant.' : 'They can sign in again and see every tenant.',
-            confirmLabel: operator.state === 'inactive' ? 'Re-enable' : 'Unban',
+            title: `Re-enable ${operator.email}?`,
+            description: operator.state === 'inactive' ? 'The account was disabled because it was not used. They can sign in again and see every tenant.' : 'They can sign in again now and see every tenant.',
+            confirmLabel: 'Re-enable',
             onConfirm: () => unban.mutateAsync(),
           }}
         />
       ) : (
-        <RowAction
-          label="Ban"
-          icon={BanIcon}
-          confirm={{
-            title: `Ban ${operator.email}?`,
-            description: 'The account is blocked and every session ends now. Unban later to restore access.',
-            confirmLabel: 'Ban account',
-            destructive: true,
-            onConfirm: () => ban.mutateAsync(),
-          }}
-        />
+        <DisableAction who={operator.email} what="Every session ends now, and the account cannot sign in until the day you pick or until someone re-enables it." onDisable={(input) => disable.mutateAsync(input)} />
       )}
       <RowAction
         label={`Delete ${operator.email}`}
         icon={Trash2Icon}
         confirm={{
           title: `Delete ${operator.email}?`,
-          description: 'The account, its sessions and its two-factor setup are removed for good. What it did stays in the audit log under this email. To block access but keep the account, ban it instead.',
+          description: 'The account, its sessions and its two-factor setup are removed for good. What it did stays in the audit log under this email. To block access but keep the account, disable it instead.',
           confirmLabel: 'Delete account',
           destructive: true,
           onConfirm: () => remove.mutateAsync(),

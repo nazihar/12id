@@ -21,7 +21,7 @@ import { DeliveriesPanel } from '@/features/tenant-data/panels'
 import type { WebhookEndpoint } from '@/features/tenant-data/types'
 import { formatDateTime } from '@/lib/format'
 import { parseListSearch, searchPatcher } from '@/lib/list-search'
-import { tenantCan } from '@/lib/permissions'
+import { canDo } from '@/lib/permissions'
 import { announceHeld } from '@/lib/held'
 import { PortalPendingChanges } from '@/features/approvals/pending-changes'
 
@@ -42,9 +42,9 @@ function PortalWebhooksPage() {
   const onSearch = searchPatcher<DeliverySearch>(Route.useNavigate())
   const fetching = useListPending()
   const { data: deliveries } = useSuspenseQuery(portalDeliveriesQuery(orgSlug, search))
-  const canUpdate = tenantCan(organization.role, { webhook: ['update'] })
-  const canRotate = tenantCan(organization.role, { webhook: ['rotate'] })
-  const canRetry = tenantCan(organization.role, { webhook: ['retry'] })
+  const canUpdate = canDo(organization.permissions, { webhook: ['update'] })
+  const canRotate = canDo(organization.permissions, { webhook: ['rotate'] })
+  const canRetry = canDo(organization.permissions, { webhook: ['retry'] })
   const organizationId = organization.id
 
   return (
@@ -62,7 +62,7 @@ function PortalWebhooksPage() {
         invalidateKey={portalKey(orgSlug, 'webhook-deliveries')}
         loadBody={(deliveryId) => getPortalDelivery({ data: { deliveryId } })}
         retryDelivery={canRetry ? (deliveryId) => retryPortalDelivery({ data: { organizationId, deliveryId } }) : undefined}
-        onExport={tenantCan(organization.role, { export: ['run'] }) ? (format) => exportPortalList({ data: { list: 'deliveries', format, search } }) : undefined}
+        onExport={canDo(organization.permissions, { export: ['run'] }) ? (format) => exportPortalList({ data: { list: 'deliveries', format, search } }) : undefined}
       />
     </div>
   )

@@ -160,7 +160,7 @@ test('owners run their tenant, members are limited by role and organization', as
   await owner.reload()
   await owner.getByRole('button', { name: `Change role of ${memberEmail}` }).click()
   await owner.getByRole('dialog').getByLabel('Role').fill('adm')
-  await owner.getByRole('option', { name: /^admin/ }).click()
+  await owner.getByRole('option', { name: /^Admin/ }).click()
   await owner.getByRole('dialog').getByRole('button', { name: 'Save role' }).click()
   await expect(owner.getByText('Role changed.')).toBeVisible()
   await member.goto(`${memberBase}/api-keys`)

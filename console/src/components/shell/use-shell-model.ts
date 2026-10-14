@@ -5,10 +5,10 @@
  */
 import { useQuery } from '@tanstack/react-query'
 import { useMatchRoute, useMatches, useRouteContext } from '@tanstack/react-router'
-import { ActivityIcon, BuildingIcon, CheckCheckIcon, ChartColumnIcon, FileBadgeIcon, GlobeIcon, KeyRoundIcon, LayoutDashboardIcon, type LucideIcon, ScanFaceIcon, ScrollTextIcon, ShieldCheckIcon, ShieldUserIcon, SmartphoneIcon, UsersIcon, WalletIcon, WebhookIcon } from 'lucide-react'
+import { ActivityIcon, BuildingIcon, CheckCheckIcon, ChartColumnIcon, FileBadgeIcon, GlobeIcon, KeyRoundIcon, LayoutDashboardIcon, type LucideIcon, ScanFaceIcon, ScrollTextIcon, ShieldCheckIcon, ShieldUserIcon, SmartphoneIcon, UserCogIcon, UsersIcon, WalletIcon, WebhookIcon } from 'lucide-react'
 
 import { opsOpenChangesQuery, portalOpenChangesQuery } from '@/features/approvals/approvals.queries'
-import type { TenantRole } from '@/lib/permissions'
+import { type Permissions, type TenantRole, canDo } from '@/lib/permissions'
 
 export interface NavItem {
   label: string
@@ -28,7 +28,7 @@ export interface NavGroup {
   items: NavItem[]
 }
 
-export type Workspace = { kind: 'ops'; name: string; to: string } | { kind: 'organization'; name: string; slug: string; role: TenantRole; to: string; params: Record<string, string> } | { kind: 'account'; name: string; to: string }
+export type Workspace = { kind: 'ops'; name: string; to: string } | { kind: 'organization'; name: string; slug: string; role: TenantRole; roleLabel: string; to: string; params: Record<string, string> } | { kind: 'account'; name: string; to: string }
 
 export interface Crumb {
   label: string
@@ -70,7 +70,7 @@ function tenantItems(tenantId: string): NavItem[] {
   ]
 }
 
-function portalItems(orgSlug: string): NavItem[] {
+function portalItems(orgSlug: string, canManagePeople: boolean): NavItem[] {
   const params = { orgSlug }
   return [
     { label: 'Overview', to: '/t/$orgSlug', params, icon: LayoutDashboardIcon, exact: true },
@@ -84,6 +84,7 @@ function portalItems(orgSlug: string): NavItem[] {
     { label: 'Data protection', to: '/t/$orgSlug/data-protection', params, icon: ShieldCheckIcon },
     { label: 'API keys', to: '/t/$orgSlug/api-keys', params, icon: KeyRoundIcon },
     { label: 'Members', to: '/t/$orgSlug/members', params, icon: UsersIcon },
+    ...(canManagePeople ? [{ label: 'Roles', to: '/t/$orgSlug/roles', params, icon: UserCogIcon }] : []),
     { label: 'Approvals', to: '/t/$orgSlug/approvals', params, icon: CheckCheckIcon },
   ]
 }
@@ -106,11 +107,12 @@ export function useShellModel(): ShellModel {
   const tenantOpen = useQuery({ ...opsOpenChangesQuery(opsTenantId), enabled: Boolean(opsMatch && opsTenantId) })
   const withCount = (items: NavItem[], count: number | undefined) => items.map((item) => (item.label === 'Approvals' ? { ...item, badge: count } : item))
   // A refused organization (beforeLoad threw) still matches, without an organization in its context.
-  const organization = (portal?.context as { organization?: { name: string; slug: string; role: TenantRole } } | undefined)?.organization
+  const organization = (portal?.context as { organization?: { name: string; slug: string; role: TenantRole; roleLabel: string; permissions: Permissions } } | undefined)?.organization
   if (portal && organization) {
-    const items = withCount(portalItems(organization.slug), portalOpen.data?.total)
+    // Roles (implement/26) is for those who manage people; everyone else sees what their role allows on Members.
+    const items = withCount(portalItems(organization.slug, canDo(organization.permissions, { ac: ['update'] })), portalOpen.data?.total)
     const params = { orgSlug: organization.slug }
-    const workspace: Workspace = { kind: 'organization', name: organization.name, slug: organization.slug, role: organization.role, to: '/t/$orgSlug', params }
+    const workspace: Workspace = { kind: 'organization', name: organization.name, slug: organization.slug, role: organization.role, roleLabel: organization.roleLabel, to: '/t/$orgSlug', params }
     const page = activeLabel(items)
     return {
       workspace,

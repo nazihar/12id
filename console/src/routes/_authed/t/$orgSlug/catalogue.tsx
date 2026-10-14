@@ -22,7 +22,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { type CatalogueSearch, catalogueSearch, catalogueStatusOptions } from '@/features/tenant-data/list.schemas'
 import type { CredentialDefinitionRow, SchemaRow } from '@/features/tenant-data/types'
 import { isFiltered, pagingFor, resetFor, parseListSearch, searchPatcher } from '@/lib/list-search'
-import { tenantCan } from '@/lib/permissions'
+import { canDo } from '@/lib/permissions'
 import { announceHeld } from '@/lib/held'
 import { PortalPendingChanges } from '@/features/approvals/pending-changes'
 
@@ -51,9 +51,9 @@ function PortalCataloguePage() {
   const fetching = useListPending()
   const { data } = useSuspenseQuery(portalCataloguePageQuery(orgSlug, search))
   const tab = search.tab ?? 'schemas'
-  const canPublish = tenantCan(organization.role, { catalogue: ['publish'] })
-  const canDeprecate = tenantCan(organization.role, { catalogue: ['deprecate'] })
-  const canBiometrics = tenantCan(organization.role, { biometrics: ['update'] })
+  const canPublish = canDo(organization.permissions, { catalogue: ['publish'] })
+  const canDeprecate = canDo(organization.permissions, { catalogue: ['deprecate'] })
+  const canBiometrics = canDo(organization.permissions, { biometrics: ['update'] })
   // Phase 6: a face-check policy per credential definition (owners and admins).
   const definitionColumnsWithPolicy = canBiometrics
     ? [

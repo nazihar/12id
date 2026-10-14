@@ -30,6 +30,7 @@ const TONES: Record<string, Tone> = {
   declined: 'bad',
   revoked: 'bad',
   banned: 'bad',
+  disabled: 'bad',
   locked: 'bad',
   inactive: 'bad',
   expired: 'bad',
@@ -40,6 +41,7 @@ const TONES: Record<string, Tone> = {
   admin: 'role',
   member: 'role',
   operator: 'role',
+  auditor: 'role',
 }
 
 const VARIANTS = { good: 'secondary', active: 'outline', bad: 'destructive', neutral: 'ghost', role: 'outline' } as const
@@ -47,4 +49,9 @@ const VARIANTS = { good: 'secondary', active: 'outline', bad: 'destructive', neu
 /** One look for tenant, exchange, delivery, schema, account and role states. Unknown states render neutral. */
 export function StateBadge({ state }: { state: string }) {
   return <Badge variant={VARIANTS[TONES[state] ?? 'neutral']}>{state}</Badge>
+}
+
+/** A role by the name people see, built-in or custom (implement/26). */
+export function RoleBadge({ label }: { label: string }) {
+  return <Badge variant="outline">{label}</Badge>
 }

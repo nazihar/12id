@@ -14,7 +14,7 @@ export function WorkspaceSwitcher({ workspace }: { workspace: Workspace }) {
   const { isMobile } = useSidebar()
   const { data: organizations = [] } = useQuery(myOrganizationsQuery())
   const Icon = workspace.kind === 'ops' ? ShieldUserIcon : BuildingIcon
-  const subtitle = workspace.kind === 'organization' ? workspace.role : workspace.kind === 'ops' ? 'all tenants' : 'signed in'
+  const subtitle = workspace.kind === 'organization' ? workspace.roleLabel : workspace.kind === 'ops' ? 'all tenants' : 'signed in'
 
   return (
     <SidebarMenu>
@@ -47,12 +47,12 @@ export function WorkspaceSwitcher({ workspace }: { workspace: Workspace }) {
             <DropdownMenuGroup>
               <DropdownMenuLabel>Organizations</DropdownMenuLabel>
               {organizations.length === 0 && <DropdownMenuItem disabled>No organizations yet</DropdownMenuItem>}
-              {organizations.map((organization) => (
+              {organizations.filter((organization) => !organization.disabled).map((organization) => (
                 <WorkspaceItem
                   key={organization.id}
                   icon={BuildingIcon}
                   name={organization.name}
-                  detail={organization.role}
+                  detail={organization.roleLabel}
                   current={workspace.kind === 'organization' && workspace.slug === organization.slug}
                   to="/t/$orgSlug"
                   params={{ orgSlug: organization.slug }}

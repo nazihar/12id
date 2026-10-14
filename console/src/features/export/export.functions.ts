@@ -17,17 +17,21 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
+import { operatorSearch } from '@/features/operators/operators.schemas'
 import { auditSearch } from '@/features/ops/ops.schemas'
+import { memberSearch } from '@/features/portal/members.schemas'
 import { deliveryQueryParams, exchangeQueryParams, walletQueryParams } from '@/features/tenant-data/list.params'
 import { deliverySearch, exchangeSearch, walletSearch } from '@/features/tenant-data/list.schemas'
 import { checkQueryParams, checkSearch } from '@/features/verification/verification.schemas'
 import type { Page } from '@/lib/list-search'
 import { principalActor, recordEvent } from '@/server/audit.server'
 import { readAuditLog } from '@/server/audit-log.server'
+import { listOrganizationMembers } from '@/server/members.server'
+import { listStaffAccounts } from '@/server/staff-accounts.server'
 import { type Principal, operatorReadMiddleware, tenantMiddleware } from '@/server/middleware'
 import { platformFor, unwrap } from '@/server/platform.server'
 
-import { EXPORT_FORMATS, EXPORT_MAX_ROWS, type ExportFormat, type ExportResult, type ExportTable, OPS_EXPORTS, OPS_EXPORT_LISTS, TENANT_EXPORTS, TENANT_EXPORT_LISTS, type TenantExportList, exportFilename, tableOf } from './export.lists'
+import { ACCOUNT_EXPORTS, EXPORT_FORMATS, EXPORT_MAX_ROWS, type ExportFormat, type ExportResult, type ExportTable, OPS_EXPORTS, OPS_EXPORT_LISTS, TENANT_EXPORTS, TENANT_EXPORT_LISTS, type TenantExportList, exportFilename, tableOf } from './export.lists'
 
 const PAGE_SIZE = 100
 const exportInput = z.object({ format: z.enum(EXPORT_FORMATS), search: z.record(z.string(), z.unknown()).default({}) })
@@ -111,4 +115,24 @@ export const exportOpsList = createServerFn({ method: 'GET' })
     const search = auditSearch.parse(data.search)
     const read = await everyRow((page) => readAuditLog(context.principal, { ...search, page, pageSize: PAGE_SIZE }))
     return finish(context.principal, search.tenantId ?? null, data.list, data.format, data.search, 'total' in read ? read : { table: tableOf(OPS_EXPORTS.audit, read.rows) })
+  })
+
+/** An operator or auditor exports the operator area's accounts (implement/26). */
+export const exportOperatorAccounts = createServerFn({ method: 'GET' })
+  .middleware([operatorReadMiddleware])
+  .validator(exportInput)
+  .handler(async ({ context, data }): Promise<ExportResult> => {
+    const search = operatorSearch.parse(data.search)
+    const read = await everyRow((page) => listStaffAccounts({ ...search, page, pageSize: PAGE_SIZE }))
+    return finish(context.principal, null, 'operators', data.format, data.search, 'total' in read ? read : { table: tableOf(ACCOUNT_EXPORTS.operators, read.rows) })
+  })
+
+/** A tenant member with the export permission exports the organization's members (implement/26). */
+export const exportPortalMembers = createServerFn({ method: 'GET' })
+  .middleware([tenantMiddleware({ export: ['run'] })])
+  .validator(exportInput)
+  .handler(async ({ context, data }): Promise<ExportResult> => {
+    const search = memberSearch.parse(data.search)
+    const read = await everyRow((page) => listOrganizationMembers(context.organization.id, { ...search, page, pageSize: PAGE_SIZE }))
+    return finish(context.principal, context.principal.tenantId, 'members', data.format, data.search, 'total' in read ? read : { table: tableOf(ACCOUNT_EXPORTS.members, read.rows) })
   })

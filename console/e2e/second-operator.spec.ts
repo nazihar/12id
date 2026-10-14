@@ -95,15 +95,17 @@ test('adding an operator account waits for a second operator, and is applied by 
   await expect(operators(page)).toContainText(added)
   expect(await linkFromMail(added, RESET_LINK)).toContain('/reset-password/')
 
-  // Banning never waits; unbanning does.
+  // Disabling never waits; re-enabling does (implement/26: a disable has a note and, here, no end).
   const row = operators(page).getByRole('row').filter({ hasText: added })
-  await row.getByRole('button', { name: 'Ban' }).click()
-  await confirm(page, 'Ban account')
-  await expect(page.getByText(`${added} is banned and signed out.`)).toBeVisible()
-  await row.getByRole('button', { name: 'Unban' }).click()
-  await confirm(page, 'Unban')
-  await expect(page.getByText(`Sent for approval: Unban ${added}.`)).toBeVisible()
-  await expect(row).toContainText('banned')
+  await row.getByRole('button', { name: 'Disable' }).click()
+  await page.getByRole('dialog').getByLabel('Why').fill('left the team')
+  await page.getByRole('dialog').getByRole('button', { name: 'Disable' }).click()
+  await expect(page.getByText(`${added} is disabled and signed out.`)).toBeVisible()
+  await row.getByRole('button', { name: 'Re-enable' }).click()
+  await confirm(page, 'Re-enable')
+  await expect(page.getByText(`Sent for approval: Re-enable ${added}.`)).toBeVisible()
+  await expect(row).toContainText('disabled')
+  await expect(row).toContainText('left the team')
 
   // The audit log: who asked, who approved, and the account that was added because of it.
   await page.goto('/ops/audit?kind=approval')

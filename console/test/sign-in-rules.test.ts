@@ -4,7 +4,7 @@ import { deriveKey } from 'altcha-lib/algorithms/pbkdf2'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 import { passwordProblems, passwordStrength } from '../src/lib/password-policy'
-import { accountInactive, accountLocked, accountState, afterWrongPassword, passwordExpired, sessionIdle, signInDelayMs } from '../src/lib/sign-in-rules'
+import { accountInactive, accountLocked, accountState, afterWrongPassword, membershipDisabled, passwordExpired, sessionIdle, signInDelayMs } from '../src/lib/sign-in-rules'
 
 const MINUTE = 60_000
 const DAY = 24 * 60 * MINUTE
@@ -71,7 +71,7 @@ describe('timers and the lock', () => {
 
   it('names one state per account for the lists', () => {
     expect(accountState({ banned: true, banReason: 'inactive: no sign-in for 90 days' })).toBe('inactive')
-    expect(accountState({ banned: true, banReason: 'left the company' })).toBe('banned')
+    expect(accountState({ banned: true, banReason: 'left the company' })).toBe('disabled')
     expect(accountState({ lockedUntil: new Date(now + MINUTE) }, now)).toBe('locked')
     expect(accountState({}, now)).toBe('active')
   })
@@ -111,4 +111,22 @@ describe('server checks', () => {
     const forged = btoa(JSON.stringify({ challenge: { ...challenge, parameters: { ...challenge.parameters, cost: 1 } }, solution }))
     expect(await captchaSolved(forged)).toBe(false)
   }, 30_000)
+})
+
+describe('disable with a period (implement/26)', () => {
+  const now = Date.parse('2026-10-13T12:00:00Z')
+  const HOUR = 60 * 60 * 1000
+
+  it('reads a disable that has run out as active, and one still running as disabled', () => {
+    expect(accountState({ banned: true, banReason: 'on leave', banExpires: new Date(now + HOUR) }, now)).toBe('disabled')
+    expect(accountState({ banned: true, banReason: 'on leave', banExpires: new Date(now - HOUR) }, now)).toBe('active')
+    expect(accountState({ banned: true, banReason: 'left', banExpires: null }, now)).toBe('disabled')
+  })
+
+  it('holds a membership disable until its date, or for good without one', () => {
+    expect(membershipDisabled({}, now)).toBe(false)
+    expect(membershipDisabled({ disabledAt: new Date(now - HOUR) }, now)).toBe(true)
+    expect(membershipDisabled({ disabledAt: new Date(now - HOUR), disabledUntil: new Date(now + HOUR) }, now)).toBe(true)
+    expect(membershipDisabled({ disabledAt: new Date(now - 2 * HOUR), disabledUntil: new Date(now - HOUR) }, now)).toBe(false)
+  })
 })

@@ -1,7 +1,7 @@
 /**
  * The account actions that can wait for a second person (implement/22-console-feedback.md C18):
- * inviting a member or changing a member's role, and adding an operator account, changing its role
- * or unbanning it. Removing, banning and signing out are never held: they only close access.
+ * inviting a member or changing a member's role, creating, changing or deleting a custom role
+ * (implement/26), and adding an operator account, changing its role or unbanning it. Removing, banning and signing out are never held: they only close access.
  *
  * These run through Better Auth with the signed-in person's own session, which re-checks that
  * person's permissions. That is why an approved request of this kind is applied by the person who
@@ -18,8 +18,9 @@ import { z } from 'zod'
 
 import { inviteOperatorInput } from '@/features/operators/operators.schemas'
 import { inviteMemberInput, tenantRole } from '@/features/portal/members.schemas'
+import { roleName } from '@/features/portal/roles.schemas'
 import type { AppliedResult } from '@/features/approvals/approvals.schemas'
-import { STAFF_ROLES, staffRoleOf } from '@/lib/permissions'
+import { PORTAL_ACTION_KEYS, STAFF_ROLES, permissionsForActions, staffRoleOf } from '@/lib/permissions'
 
 import { approvalsFor } from './approvals.server'
 import { principalActor, recordEvent } from './audit.server'
@@ -27,6 +28,7 @@ import { auth } from './auth.server'
 import { consoleDb } from './db.server'
 import { member, user } from './db/auth-schema'
 import type { Principal } from './middleware'
+import { customRole } from './roles.server'
 
 /** Which request this action applies, and who approved it: kept in the audit entry next to who did it. */
 export interface Approved {
@@ -38,10 +40,20 @@ const approvalDetail = (approved?: Approved) => (approved ? { approval: { reques
 
 const memberInvite = inviteMemberInput.extend({ organizationId: z.string().min(1).max(100) })
 const memberRole = z.object({ organizationId: z.string().min(1).max(100), memberId: z.string().min(1).max(100), role: tenantRole, account: z.string().nullable().optional() })
+/** A custom role (implement/26). `actions` are the action names for the person who decides; `keys` are what is applied. */
+const roleChange = z.object({
+  organizationId: z.string().min(1).max(100),
+  action: z.enum(['create', 'update', 'delete']),
+  role: roleName,
+  label: z.string().min(1).max(40).optional(),
+  description: z.string().max(200).optional(),
+  keys: z.array(z.enum(PORTAL_ACTION_KEYS)).optional(),
+  actions: z.array(z.string()).optional(),
+})
 const operatorRole = z.object({ userId: z.string().min(1).max(100), role: z.enum(STAFF_ROLES), account: z.string().optional() })
 const operatorUnban = z.object({ userId: z.string().min(1).max(100), account: z.string().nullable().optional() })
 
-export const ACCOUNT_CHANGE_TYPES = ['member.invite', 'member.role', 'operator.invite', 'operator.role', 'operator.unban'] as const
+export const ACCOUNT_CHANGE_TYPES = ['member.invite', 'member.role', 'role.change', 'operator.invite', 'operator.role', 'operator.unban'] as const
 export type AccountChangeType = (typeof ACCOUNT_CHANGE_TYPES)[number]
 export const isAccountChangeType = (type: string): type is AccountChangeType => (ACCOUNT_CHANGE_TYPES as readonly string[]).includes(type)
 
@@ -84,6 +96,25 @@ export async function performAccountChange(principal: Principal, type: AccountCh
       sameOrganization(data.organizationId)
       await auth.api.updateMemberRole({ headers, body: { memberId: data.memberId, role: data.role, organizationId: data.organizationId } })
       await recordEvent({ type: 'account.member_role_changed', actor, tenantId: principal.tenantId, detail: { account: await memberEmail(data.memberId), memberId: data.memberId, role: data.role, ...approval } })
+      return
+    }
+    case 'role.change': {
+      const data = roleChange.parse(payload)
+      sameOrganization(data.organizationId)
+      const keys = data.keys ?? []
+      if (data.action === 'create') {
+        await auth.api.createOrgRole({ headers, body: { organizationId: data.organizationId, role: data.role, permission: permissionsForActions(keys) as Record<string, string[]>, additionalFields: { label: data.label ?? data.role, description: data.description ?? '' } } })
+      } else {
+        const existing = await customRole(data.organizationId, data.role)
+        if (!existing) throw new Error('This organization has no such role any more.')
+        if (data.action === 'update') {
+          await auth.api.updateOrgRole({ headers, body: { organizationId: data.organizationId, roleName: data.role, data: { permission: permissionsForActions(keys) as Record<string, string[]>, label: data.label ?? existing.label, description: data.description ?? existing.description } } })
+        } else {
+          await auth.api.deleteOrgRole({ headers, body: { organizationId: data.organizationId, roleName: data.role } })
+        }
+      }
+      const type = data.action === 'create' ? 'account.role_created' : data.action === 'update' ? 'account.role_updated' : 'account.role_deleted'
+      await recordEvent({ type, actor, tenantId: principal.tenantId, detail: { role: data.role, label: data.label ?? null, actions: data.action === 'delete' ? null : keys, ...approval } })
       return
     }
     case 'operator.invite': {

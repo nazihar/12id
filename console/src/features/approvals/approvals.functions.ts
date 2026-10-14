@@ -15,11 +15,13 @@ import { z } from 'zod'
 
 import { assertSameOrganization, organizationInput } from '@/features/portal/organization-input'
 import { pageParams } from '@/lib/list-search'
-import { OPERATOR_ROLE, tenantRoles } from '@/lib/permissions'
+import { OPERATOR_ROLE, canDo } from '@/lib/permissions'
+import { membershipDisabled } from '@/lib/sign-in-rules'
 import { applyApproved } from '@/server/account-changes.server'
 import { CLOSED, WAITING, approvalsFor } from '@/server/approvals.server'
 import { consoleDb } from '@/server/db.server'
 import { member, organization, user } from '@/server/db/auth-schema'
+import { effectivePermissions, memberRoleNames } from '@/server/permissions.server'
 import { type Principal, operatorMiddleware, operatorReadMiddleware, tenantMiddleware } from '@/server/middleware'
 import { platformFor, unwrapHeld } from '@/server/platform.server'
 
@@ -28,15 +30,16 @@ import { type ApprovalSearch, approvalSearch, decisionInput, requestInput } from
 /** Approving needs someone other than the asker, so the requirement makes sense from two people up. */
 const MIN_APPROVERS = 2
 
-/** How many members of the organization hold a role that can decide a change (owner or admin). */
+/** How many members of the organization hold a role that can decide a change (owner, admin, or a custom role with "Approve changes"). */
 async function organizationApprovers(where: { organizationId: string } | { tenantId: string }): Promise<number> {
   const { db } = consoleDb()
   const rows =
     'organizationId' in where
-      ? await db.select({ role: member.role }).from(member).where(eq(member.organizationId, where.organizationId))
-      : await db.select({ role: member.role }).from(member).innerJoin(organization, eq(organization.id, member.organizationId)).where(eq(organization.platformTenantId, where.tenantId))
-  const decides = (role: string) => role.split(',').some((r) => tenantRoles[r.trim() as keyof typeof tenantRoles]?.authorize({ approval: ['decide'] }).success)
-  return rows.filter((row) => decides(row.role)).length
+      ? await db.select({ role: member.role, organizationId: member.organizationId, disabledAt: member.disabledAt, disabledUntil: member.disabledUntil }).from(member).where(eq(member.organizationId, where.organizationId))
+      : await db.select({ role: member.role, organizationId: member.organizationId, disabledAt: member.disabledAt, disabledUntil: member.disabledUntil }).from(member).innerJoin(organization, eq(organization.id, member.organizationId)).where(eq(organization.platformTenantId, where.tenantId))
+  // A disabled membership cannot decide anything (implement/26).
+  const decides = await Promise.all(rows.map(async (row) => !membershipDisabled(row) && canDo(await effectivePermissions(row.organizationId, memberRoleNames(row.role)), { approval: ['decide'] })))
+  return decides.filter(Boolean).length
 }
 
 /** Operators who can sign in: the people who can decide a change to an operator account. */

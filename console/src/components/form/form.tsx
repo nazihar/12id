@@ -11,15 +11,19 @@
  */
 import { createFormHook, createFormHookContexts, revalidateLogic } from '@tanstack/react-form'
 import { useHydrated } from '@tanstack/react-router'
-import { type ComponentProps, type ComponentType, type ReactNode, useId } from 'react'
+import { CalendarIcon } from 'lucide-react'
+import { type ComponentProps, type ComponentType, type ReactNode, useId, useState } from 'react'
+import type { Matcher } from 'react-day-picker'
 
 import { Spinner } from '@/components/spinner'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { Calendar } from '@/components/ui/calendar'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Combobox, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, ComboboxList } from '@/components/ui/combobox'
 import { Field, FieldContent, FieldDescription, FieldError, FieldLabel, FieldSet, FieldTitle } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Progress } from '@/components/ui/progress'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
@@ -264,15 +268,16 @@ export interface ChoiceOption<T extends string = string> {
   disabled?: boolean
 }
 
-/** A set of checkboxes bound to a string array. */
+/** A set of checkboxes bound to a string array. `stacked`: one per line, each with its description under it. */
 export function CheckboxGroupField<T extends string>({
   label,
   description,
   className,
   options,
   mono,
+  stacked,
   emptyMessage = 'Nothing to choose from yet.',
-}: FieldChromeProps & { options: ReadonlyArray<ChoiceOption<T>>; mono?: boolean; emptyMessage?: ReactNode }) {
+}: FieldChromeProps & { options: ReadonlyArray<ChoiceOption<T>>; mono?: boolean; stacked?: boolean; emptyMessage?: ReactNode }) {
   const field = useFieldContext<T[]>()
   const id = useId()
   const hydrated = useHydrated()
@@ -284,11 +289,11 @@ export function CheckboxGroupField<T extends string>({
       {options.length === 0 ? (
         <p className="text-sm text-muted-foreground">{emptyMessage}</p>
       ) : (
-        <div className="flex flex-wrap gap-x-4 gap-y-2">
+        <div className={stacked ? 'grid gap-3' : 'flex flex-wrap gap-x-4 gap-y-2'}>
           {options.map((option) => {
             const optionId = `${id}-${option.value}`
             return (
-              <Field key={option.value} orientation="horizontal" className="w-auto">
+              <Field key={option.value} orientation="horizontal" className={stacked ? 'items-start' : 'w-auto'}>
                 <Checkbox
                   id={optionId}
                   checked={selected.includes(option.value)}
@@ -296,9 +301,16 @@ export function CheckboxGroupField<T extends string>({
                   onCheckedChange={(checked) => field.handleChange(checked ? [...selected, option.value] : selected.filter((value) => value !== option.value))}
                   aria-invalid={errors.length > 0 || undefined}
                 />
-                <FieldLabel htmlFor={optionId} className={cn('font-normal', mono && 'font-mono text-xs')} title={option.description}>
-                  {option.label}
-                </FieldLabel>
+                {stacked ? (
+                  <div className="grid gap-0.5">
+                    <FieldLabel htmlFor={optionId}>{option.label}</FieldLabel>
+                    {option.description && <FieldDescription>{option.description}</FieldDescription>}
+                  </div>
+                ) : (
+                  <FieldLabel htmlFor={optionId} className={cn('font-normal', mono && 'font-mono text-xs')} title={option.description}>
+                    {option.label}
+                  </FieldLabel>
+                )}
               </Field>
             )
           })}
@@ -307,6 +319,62 @@ export function CheckboxGroupField<T extends string>({
       {description && <FieldDescription id={`${id}-description`}>{description}</FieldDescription>}
       <FieldError errors={errors} />
     </FieldSet>
+  )
+}
+
+const dayOf = (value: string) => {
+  const [year, month, day] = value.split('-').map(Number)
+  return new Date(year, month - 1, day)
+}
+const dayString = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+
+/** A day picked from a calendar (shadcn date picker), held as `YYYY-MM-DD` (`''` for none). `clearLabel` offers to empty it. */
+export function DateField({ label, description, className, disabled, placeholder = 'Pick a day', clearLabel, disabledDays }: FieldChromeProps & { disabled?: boolean; placeholder?: string; clearLabel?: string; disabledDays?: Matcher | Matcher[] }) {
+  const field = useFieldContext<string>()
+  const [open, setOpen] = useState(false)
+  const value = field.state.value
+  return (
+    <FieldShell label={label} description={description} className={className}>
+      {({ id, invalid, describedBy, hydrated }) => (
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger
+            disabled={disabled || !hydrated}
+            render={
+              <Button id={id} variant="outline" className={cn('w-full justify-start font-normal', !value && 'text-muted-foreground')} aria-invalid={invalid || undefined} aria-describedby={describedBy}>
+                <CalendarIcon />
+                {value ? dayOf(value).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' }) : placeholder}
+              </Button>
+            }
+          />
+          <PopoverContent align="start" className="w-auto p-0">
+            <Calendar
+              mode="single"
+              selected={value ? dayOf(value) : undefined}
+              defaultMonth={value ? dayOf(value) : undefined}
+              disabled={disabledDays}
+              onSelect={(day) => {
+                field.handleChange(day ? dayString(day) : '')
+                setOpen(false)
+              }}
+            />
+            {clearLabel && value && (
+              <div className="border-t p-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    field.handleChange('')
+                    setOpen(false)
+                  }}
+                >
+                  {clearLabel}
+                </Button>
+              </div>
+            )}
+          </PopoverContent>
+        </Popover>
+      )}
+    </FieldShell>
   )
 }
 
@@ -466,7 +534,7 @@ export function FormError({ error }: { error?: Error | string | null }) {
 export const { useAppForm, withForm } = createFormHook({
   fieldContext,
   formContext,
-  fieldComponents: { TextField, PasswordField, NewPasswordField, TextareaField, NumberField, CheckboxField, SwitchField, CheckboxGroupField, ComboboxField },
+  fieldComponents: { TextField, PasswordField, NewPasswordField, TextareaField, NumberField, CheckboxField, SwitchField, CheckboxGroupField, ComboboxField, DateField },
   formComponents: { SubmitButton, FormError },
 })
 

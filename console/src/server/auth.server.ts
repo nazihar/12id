@@ -29,6 +29,9 @@ import { serverEnv } from './env.server'
 
 const env = serverEnv()
 
+/** Custom roles one organization may have (implement/26). */
+export const MAX_CUSTOM_ROLES = 20
+
 export const auth = betterAuth({
   appName: '12id Console',
   baseURL: env.BETTER_AUTH_URL,
@@ -109,10 +112,27 @@ export const auth = betterAuth({
       disableOrganizationDeletion: true,
       cancelPendingInvitationsOnReInvite: true,
       requireEmailVerificationOnInvitation: true,
+      // Custom roles per organization (implement/26): stored in `organization_role`, made from the
+      // portal actions in lib/permissions.ts. The built-in names are reserved by Better Auth.
+      dynamicAccessControl: { enabled: true, maximumRolesPerOrganization: MAX_CUSTOM_ROLES },
       schema: {
         organization: {
           additionalFields: {
             platformTenantId: { type: 'string', required: true, unique: true, input: true },
+          },
+        },
+        // A membership an owner disabled (implement/26): for this organization only, until a date or until re-enabled.
+        member: {
+          additionalFields: {
+            disabledAt: { type: 'date', required: false, input: false },
+            disabledUntil: { type: 'date', required: false, input: false },
+            disabledNote: { type: 'string', required: false, input: false },
+          },
+        },
+        organizationRole: {
+          additionalFields: {
+            label: { type: 'string', required: true, input: true },
+            description: { type: 'string', required: false, input: true },
           },
         },
       },

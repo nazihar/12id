@@ -83,13 +83,24 @@ password?** or an operator sends a new one from the row's **Send password link**
   without mail. Operator accounts cannot own an organization, and operators never join one.
 - **People.** Owners invite from **Members** (`/t/<slug>/members`): the invitee gets `/invite/<id>`
   (48 h), creates an account there or signs in, and must set up 2FA (authenticator app or emailed
-  codes). Roles: `owner` everything; `admin` API keys, webhook, catalogue, templates; `member`
+  codes). Roles: `owner` everything; `admin` everything except people and roles; `member`
   read-only. Role changes and removals apply on the member's next request.
+- **Custom roles** (implement/26). Owners make their own from **Roles** (`/t/<slug>/roles`): a name, a
+  description and the actions it allows (Manage people, Manage integration, Manage setup, Erase
+  personal data, Export, Approve changes; everyone sees every page). Clone a built-in role to start
+  from it. At most 20 per organisation; a role somebody holds, or a pending invitation names, cannot
+  be deleted. Where approvals are on, creating, changing and deleting a role waits for a second person.
+  platform-api only ever sees the nearest built-in role (owner, admin or member) as a ceiling.
+- **Disable a member** (implement/26). Members → **Disable**: in this organisation only, until a day
+  (it opens again at the start of that day, UTC) or until someone re-enables it, with a note saying
+  why. The person keeps their account and any other organisation. **Re-enable here** lifts it at once.
+  The **Signed in now** tab shows who has a live session; owners cannot end one (it would sign the
+  person out of their other organisations too), they disable the membership instead.
 - **A test owner without mail** (staging only): `console-tools` `npx auth create-admin … --role user`,
   then make that email the owner in the console. `console/e2e/staging-portal.spec.ts` uses one.
 - **Automation operator** (staging only): `onetwoidadmin+e2e-operator@gmail.com`, role operator, created
   the same way on 2026-09-17 for `npm run e2e:staging`; its password and TOTP secret live in the
-  workstation's gitignored `console/.staging/`. Ban it from **Operators** if that workstation is lost.
+  workstation's gitignored `console/.staging/`. Disable it from **Operators** if that workstation is lost.
 - **Lost authenticator (members).** Same SQL as for operators below; members may also have chosen
   emailed codes, which recover through the mailbox.
 
@@ -117,7 +128,7 @@ password?** or an operator sends a new one from the row's **Send password link**
     the row (**Send password link**).
   - **Unused accounts:** no sign-in for 90 days (`CONSOLE_INACTIVITY_DAYS`) disables the account
     (ban reason `inactive: …`) and mails a notice, checked hourly. Operators re-enable from
-    Operators (**Re-enable**; held where `OPERATOR_APPROVALS=on`, like an unban), owners from Members.
+    Operators (**Re-enable**; held where `OPERATOR_APPROVALS=on`), owners from Members.
     If every operator is disabled, create one with console-tools (First operator, above). In the
     database: `update "user" set banned = false, ban_reason = null, last_sign_in_at = now() where email = '…';`
     (and `failed_sign_ins = 0, locked_until = null` for a lock).
@@ -128,10 +139,17 @@ password?** or an operator sends a new one from the row's **Send password link**
   sees every page an operator sees and can change nothing: no button is offered, the console's server
   functions refuse it, and platform-api answers 403 to anything but a read. Personal data stays masked
   for an auditor, with no reveal. Both use an authenticator app and have 12 h sessions. Add either from
-  Operators → Add operator; change the role from the row's Edit action.
+  Operators → Add operator; change the role from the row's Edit action. The checks behind them are
+  actions (implement/26: `view-tenants`, `operate`, `manage-staff`, `reveal`); an auditor holds only
+  the first. Above the list, an **access report** counts accounts by state and role; the **Signed in
+  now** tab lists live staff sessions, and an operator can **End session** for one of them.
+- **Disable an account** (implement/26; was "Ban"). Operators → **Disable**: until a day (it lifts by
+  itself at the next sign-in after the start of that day, UTC) or until someone re-enables it, always
+  with a note, which the list shows. It ends the account's sessions at once and is never held.
+  **Re-enable** is held where `OPERATOR_APPROVALS=on`.
 - **Deleting an account.** Operators → Delete removes the account, its sessions and its 2FA setup for
   good. What it did stays in the audit log under its e-mail address. To block access and keep the
-  account, ban it instead. Nobody can edit, ban or delete their own account, so an operator always
+  account, disable it instead. Nobody can edit, disable or delete their own account, so an operator always
   remains; if the last one is lost anyway, create one with console-tools (First operator, above).
 - **The audit log is append-only** (platform-api migration `0012`). A trigger refuses `UPDATE`,
   `DELETE` and `TRUNCATE` on `console_audit` and `erasures`. It also holds sign-ins, failed sign-ins,
@@ -148,9 +166,9 @@ password?** or an operator sends a new one from the row's **Send password link**
 - **Approval by a second person** (implement/22 C17–C19). An organisation's owner or admin switches it
   on from Approvals in the portal (it needs two people with one of those roles); from then on a fixed
   list of changes waits until someone other than the person who asked approves it. The list is on
-  the page; what only closes access (revoke, remove, ban) never waits. A request expires after 7
+  the page; what only closes access (revoke, remove, disable) never waits. A request expires after 7
   days. Switching it off is itself a change that waits. For operator accounts (add, change role,
-  unban) the switch is `OPERATOR_APPROVALS=on` in the environment file, then `deploy.sh platform`; have
+  re-enable) the switch is `OPERATOR_APPROVALS=on` in the environment file, then `deploy.sh platform`; have
   two operators first, because nobody approves their own request. If a deployment is left with one
   operator while it is on, set it to `off` and deploy: that is a server change, made by whoever runs
   the server. The break-glass admin token is not held and decides no request.

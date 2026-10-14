@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { PlusIcon, UserCogIcon } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -9,12 +9,15 @@ import { RowAction } from '@/components/row-action'
 import { Button } from '@/components/ui/button'
 import { DialogClose, DialogFooter } from '@/components/ui/dialog'
 import { changeMemberRole, inviteMember } from '@/features/portal/members.functions'
-import { type InviteMemberInput, type MemberRoleInput, ROLE_HELP, TENANT_ROLES, inviteMemberInput, memberRoleInput } from '@/features/portal/members.schemas'
-import { portalKey } from '@/features/portal/portal.queries'
-import type { TenantRole } from '@/lib/permissions'
+import { type InviteMemberInput, type MemberRoleInput, inviteMemberInput, memberRoleInput } from '@/features/portal/members.schemas'
+import { portalKey, portalRolesQuery } from '@/features/portal/portal.queries'
 import { announceHeld } from '@/lib/held'
 
-const ROLE_OPTIONS: ChoiceOption<TenantRole>[] = TENANT_ROLES.map((role) => ({ value: role, label: role, description: ROLE_HELP[role] }))
+/** The organization's roles to choose from: the built-in ones, then its custom ones (implement/26). */
+function useRoleOptions(orgSlug: string): ChoiceOption[] {
+  const { data = [] } = useQuery(portalRolesQuery(orgSlug))
+  return data.map((role) => ({ value: role.role, label: role.label, description: role.description }))
+}
 
 export function InviteMemberDialog({ organizationId, orgSlug }: { organizationId: string; orgSlug: string }) {
   return (
@@ -35,6 +38,7 @@ export function InviteMemberDialog({ organizationId, orgSlug }: { organizationId
 
 function InviteMemberForm({ organizationId, orgSlug, onDone }: { organizationId: string; orgSlug: string; onDone: () => void }) {
   const queryClient = useQueryClient()
+  const roleOptions = useRoleOptions(orgSlug)
   const invite = useMutation({
     mutationFn: (input: InviteMemberInput) => inviteMember({ data: { organizationId, ...input } }),
     onSuccess: async (result) => {
@@ -53,7 +57,7 @@ function InviteMemberForm({ organizationId, orgSlug, onDone }: { organizationId:
     <Form form={form}>
       <form.FormError error={invite.error} />
       <form.AppField name="email">{(field) => <field.TextField label="Email" type="email" autoComplete="off" autoFocus />}</form.AppField>
-      <form.AppField name="role">{(field) => <field.ComboboxField label="Role" options={ROLE_OPTIONS} />}</form.AppField>
+      <form.AppField name="role">{(field) => <field.ComboboxField label="Role" options={roleOptions} />}</form.AppField>
       <DialogFooter>
         <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
         <form.SubmitButton pendingLabel="Sending…">Send invitation</form.SubmitButton>
@@ -63,7 +67,7 @@ function InviteMemberForm({ organizationId, orgSlug, onDone }: { organizationId:
 }
 
 /** Row action: choose a new role in a dialog, then save. Replaces the select that saved on every change. */
-export function ChangeRoleAction({ organizationId, orgSlug, member }: { organizationId: string; orgSlug: string; member: { id: string; email: string; role: TenantRole } }) {
+export function ChangeRoleAction({ organizationId, orgSlug, member }: { organizationId: string; orgSlug: string; member: { id: string; email: string; role: string } }) {
   const [open, setOpen] = useState(false)
   return (
     <>
@@ -75,8 +79,9 @@ export function ChangeRoleAction({ organizationId, orgSlug, member }: { organiza
   )
 }
 
-function ChangeRoleForm({ organizationId, orgSlug, member, onDone }: { organizationId: string; orgSlug: string; member: { id: string; email: string; role: TenantRole }; onDone: () => void }) {
+function ChangeRoleForm({ organizationId, orgSlug, member, onDone }: { organizationId: string; orgSlug: string; member: { id: string; email: string; role: string }; onDone: () => void }) {
   const queryClient = useQueryClient()
+  const roleOptions = useRoleOptions(orgSlug)
   const change = useMutation({
     mutationFn: (input: MemberRoleInput) => changeMemberRole({ data: { organizationId, memberId: member.id, role: input.role } }),
     onSuccess: async (result) => {
@@ -94,7 +99,7 @@ function ChangeRoleForm({ organizationId, orgSlug, member, onDone }: { organizat
   return (
     <Form form={form}>
       <form.FormError error={change.error} />
-      <form.AppField name="role">{(field) => <field.ComboboxField label="Role" options={ROLE_OPTIONS} />}</form.AppField>
+      <form.AppField name="role">{(field) => <field.ComboboxField label="Role" options={roleOptions} />}</form.AppField>
       <DialogFooter>
         <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
         <form.SubmitButton pendingLabel="Saving…">Save role</form.SubmitButton>
