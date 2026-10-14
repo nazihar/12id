@@ -409,7 +409,7 @@ Mixing or nesting any/all; comparing two parameters or arithmetic; tiers with di
 
 ## Liveness options (2026-10-14)
 
-**Status:** on staging since 2026-10-14 as `v0.10.0-rc.1` (commit `ca621d2`); `liveness-options-check.sh` passed 10/10 against real AWS and every regression check passed. The phone check and the release are still to do. The add-on `aws-rekognition@2` ships with SDK 0.3.0 (unreleased). Results: [`16-phase-6-biometric-findings.md`](16-phase-6-biometric-findings.md) "Liveness options".
+**Status:** released 2026-10-14 as platform `v0.10.0` (commit `b94315e`; staging on `0.10.0-rc.2`) and Android SDK 0.2.2 (add-on `aws-rekognition@2`, tag `sdk-android-v0.2.2`). Checked against real AWS on staging (10/10) and on the phone (12/12, including a refused photo attack without light flashes). Not shown: a back-camera pass with a second person holding the phone. Results: [`16-phase-6-biometric-findings.md`](16-phase-6-biometric-findings.md) "Liveness options".
 
 ### Why
 A tenant can add AWS Rekognition as its provider (region and role ARN) but cannot change how the face check behaves. Tenants ask for the options AWS itself offers, for example no light flashes, or no start screen. We offer AWS's own options only, nothing custom.

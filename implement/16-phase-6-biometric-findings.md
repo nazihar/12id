@@ -315,5 +315,75 @@ Afterwards the smoke tenant was set back to the mock provider with `biometric-se
 - `smoke:platform-credo`
 - `smoke:biometric-credo` 30/30
 
+### On the phone (2026-10-14, real AWS)
+**Setup:**
+- Phone: Xiaomi 2109119DI, Android 14.
+- App: the sample app (debug) with add-on `aws-rekognition@2` from `build/m2`.
+- Tenant: the smoke tenant on `aws-rekognition`, with `FaceMovementChallenge` and `startScreen: skip`.
+- Person: the owner. The reference image was a selfie taken for the run and deleted from this PC afterwards.
+
+**`smoke:sdk-biometric-android` with `PROVIDER=aws ATTACK=1` passed 12/12:**
+
+| Check | Result |
+|---|---|
+| Owner's face, issuance | passed |
+| A photo of the owner on the PC monitor, held up to the phone | **refused**: liveness 0.0001, match 99.99, `liveness_below_threshold`, 2 attempts left |
+| Owner's face, proof | passed; liveness 99.54, match 99.9999 |
+
+- The owner saw no start screen and no colour flashes; the camera opened straight away.
+- So the challenge without light still stops a photo on a screen. AWS still rates the light challenge as stronger, and the console's help text says so.
+
+**A first run is not counted:**
+- Its "photo" step passed with liveness 99.9. The owner had not switched to the monitor, and the phone, facing them, captured their real face.
+- Its last step timed out ("Face did not match oval within time limit").
+- An earlier attempt stopped at setup: the saved `CRED_DEF_ID` (`…:775:default`) predates `expiresOn`, so the platform refused the offer. Leave `CRED_DEF_ID` out from now on.
+
+**Back camera (`camera: back`):**
+- During the check, Android listed camera ID 0 as the sample app's active client. ID 0 is the camera with the flash LED, i.e. the rear one. So the option reaches the phone.
+- The owner held the back camera towards themselves, unable to see the oval. AWS matched the face (99.94) but gave liveness 0.0018 and refused.
+- The option is meant for a second person (bank staff) holding the phone. **A pass with the back camera, with someone else holding the phone, has not been shown.**
+
+The smoke tenant was set back to the mock provider afterwards, and the tunnel was closed.
+
+### SDK 0.2.2 (2026-10-14)
+The owner chose to ship the add-on now rather than wait for SDK 0.3.0 (Phase 9 W5).
+
+**How it was built:**
+- Branch `release/sdk-0.2.2` from `sdk-android-v0.2.1`, plus only `biometrics-aws` from `ca621d2`. Since 0.2.1 the add-on had no other change.
+- Commit `7ee07e2`, tag `sdk-android-v0.2.2`.
+- The branch was merged into `master`, which keeps `sdkVersion=0.3.0`, so the tag sits on `master` as `release-sdk-android.yml` requires.
+- Locally, in the release worktree: `LivenessRequestTest` 3/3, `:sdk:apiCheck` and the sample app build all passed.
+
+**Platform wording:** help texts, the integration snippets and the runbook now name 0.2.2. That is commit `b94315e`, tag `v0.10.0-rc.2`.
+
+### `v0.10.0-rc.2` on staging and the release (2026-10-14)
+**Deploy:** seven stacks, 288 s. 29 containers up, none unhealthy; 22/22 targets.
+
+**Rollback:** `release.env.prev-0.10.0-rc.1`. The previous bundle files are in `/opt/12id/infra.prev-20261014-v0100/`.
+
+**Checks, all passed:**
+- `liveness-options-check.sh` 10/10, real AWS
+- the catalogue serves the 0.2.2 help texts
+- `console-feedback-check` 36/36
+- `approvals-check` 19/19
+- `conditional-gate-check` 7/7
+- `e2e:staging` 4/4
+- `smoke:platform-credo`
+- `smoke:biometric-credo` 30/30
+
+The smoke tenant is back on the mock provider.
+
+**Released as platform `v0.10.0`:** the tag is on `b94315e` and carries the rc.2 images. Staging keeps running `0.10.0-rc.2`.
+
+**Production deploys `release-0.10.0.env` and the `0.10.0` bundle:**
+- no migration and no new secret;
+- the only bundle change is `runbooks/biometric-service.md`.
+
+**Release order for tenants:**
+1. The platform first. Its defaults keep every existing configuration unchanged.
+2. Turning off the light flashes works at once with released apps.
+3. Skipping the start screen and the back camera need apps built with SDK 0.2.2.
+
 ### Still to do
-- The phone check with add-on `aws-rekognition@2`: no light flashes, start screen skipped, back camera; and an app with the released add-on (v1) under the challenge without light.
+- Not checked on a phone: an app with the released add-on v1 (0.2.1) under the challenge without light. It should work, since the v1 add-on accepts both challenges and AWS picks the one set on the session.
+- A back-camera pass, with a second person holding the phone.
