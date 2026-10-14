@@ -409,7 +409,7 @@ Mixing or nesting any/all; comparing two parameters or arithmetic; tiers with di
 
 ## Liveness options (2026-10-14)
 
-**Status:** built 2026-10-14 (biometric-service, console, add-on `aws-rekognition@2` in SDK 0.3.0 on master; unit and database tests pass), not released or on staging yet. Results will go in [`16-phase-6-biometric-findings.md`](16-phase-6-biometric-findings.md) "Liveness options".
+**Status:** on staging since 2026-10-14 as `v0.10.0-rc.1` (commit `ca621d2`); `liveness-options-check.sh` passed 10/10 against real AWS and every regression check passed. The phone check and the release are still to do. The add-on `aws-rekognition@2` ships with SDK 0.3.0 (unreleased). Results: [`16-phase-6-biometric-findings.md`](16-phase-6-biometric-findings.md) "Liveness options".
 
 ### Why
 A tenant can add AWS Rekognition as its provider (region and role ARN) but cannot change how the face check behaves. Tenants ask for the options AWS itself offers, for example no light flashes, or no start screen. We offer AWS's own options only, nothing custom.

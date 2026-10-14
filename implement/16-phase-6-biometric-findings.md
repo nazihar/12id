@@ -272,3 +272,48 @@ Not in `0.3.0`, on `master` only: the wording of the 422 for a single missing pa
 
 ### Still to do
 - Not checked: the console's Exchanges page for these two proofs on staging (the same view passed in the local Playwright spec); a failed check on a conditional proof from the phone.
+
+## Liveness options (2026-10-14)
+
+Plan: [`15-phase-6-biometric.md`](15-phase-6-biometric.md) "Liveness options". Commit `ca621d2`, tag `v0.10.0-rc.1`; CI built all nine images.
+
+### Local
+| Check | Result |
+|---|---|
+| biometric-service (unit + database) | 42/42 |
+| platform-api biometric + approvals | 27/27 |
+| console typecheck + Vitest | 108/108 |
+| `biometrics-aws` `LivenessRequestTest` (new) | 3/3 |
+| sample app debug build with the add-on from `build/m2` (0.3.0, `aws-rekognition@2`) | built |
+
+### On staging (2026-10-14, `v0.10.0-rc.1`)
+**Deploy:** seven stacks, 295 s, no migration. 29 containers up, none unhealthy; 22/22 Prometheus targets. The bundle changed only `runbooks/biometric-service.md`.
+
+**Rollback:**
+- `infra/compose/release.env.prev-0.9.0-rc.1`
+- `/opt/12id/infra.prev-20261014-v0100/`
+
+**New check `infra/smoke/liveness-options-check.sh`:** run on the VM like `biometric-setup.sh`, on the smoke tenant, with **real AWS** (`ap-south-1`, role `12id-biometric-spike-tenant`). It passed **10/10**:
+1. The catalogue describes region, roleArn, challenge, startScreen and camera, with titles, defaults and option labels.
+2. A configuration with only region and role ARN reads as the AWS defaults (light challenge, start screen shown, front camera).
+3. Connection test with the light challenge: `ok`.
+4. Changing only the challenge kept `ok` and the same `lastTestedAt`.
+5. Connection test with `FaceMovementChallenge`: `ok`. AWS accepts `ChallengePreferences` from our role.
+6. Back camera with the light challenge: `400 invalid_provider_config`, "camera: the back camera needs the challenge without light flashes".
+7. The refused configuration changed nothing.
+8. Back camera and no start screen, with the challenge without light: saved, still `ok`.
+9. A new region resets the provider to `untested`.
+10. Back on the defaults and tested.
+
+Afterwards the smoke tenant was set back to the mock provider with `biometric-setup.sh`.
+
+**Regression on staging, all passed:**
+- `console-feedback-check` 36/36
+- `approvals-check` 19/19 (the provider's waiting slot included)
+- `conditional-gate-check` 7/7
+- `e2e:staging` 4/4
+- `smoke:platform-credo`
+- `smoke:biometric-credo` 30/30
+
+### Still to do
+- The phone check with add-on `aws-rekognition@2`: no light flashes, start screen skipped, back camera; and an app with the released add-on (v1) under the challenge without light.
