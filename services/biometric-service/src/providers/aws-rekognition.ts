@@ -45,12 +45,12 @@ const configSchema = z
     }),
     startScreen: z.enum(['show', 'skip']).default('show').meta({
       title: 'Start screen',
-      description: 'The AWS instructions screen before the camera opens. Apps need the biometrics add-on from SDK 0.3.0; older ones always show it.',
+      description: 'The AWS instructions screen before the camera opens. Apps need the biometrics add-on 0.2.2 or later; older ones always show it.',
       optionLabels: { show: 'Show', skip: 'Skip, open the camera directly' },
     }),
     camera: z.enum(['front', 'back']).default('front').meta({
       title: 'Camera',
-      description: "The back camera is for staff capturing a customer's face and needs the challenge without light flashes. Apps need the biometrics add-on from SDK 0.3.0; older ones use the front camera.",
+      description: "The back camera is for staff capturing a customer's face and needs the challenge without light flashes. Apps need the biometrics add-on 0.2.2 or later; older ones use the front camera.",
       optionLabels: { front: 'Front', back: 'Back' },
     }),
   })

@@ -78,8 +78,8 @@ The device receives 15-minute credentials from the same role, narrowed by a sess
 | Option | Values (default first) | Applied |
 |---|---|---|
 | Liveness challenge | `FaceMovementAndLightChallenge`, `FaceMovementChallenge` (no light flashes) | `ChallengePreferences` on every `CreateFaceLivenessSession`, the connection test included |
-| Start screen | `show`, `skip` | On the phone, add-on `aws-rekognition@2` (SDK 0.3.0+) |
-| Camera | `front`, `back` (only with `FaceMovementChallenge`) | On the phone, add-on `aws-rekognition@2` (SDK 0.3.0+) |
+| Start screen | `show`, `skip` | On the phone, add-on `aws-rekognition@2` (0.2.2+) |
+| Camera | `front`, `back` (only with `FaceMovementChallenge`) | On the phone, add-on `aws-rekognition@2` (0.2.2+) |
 
 - Configurations saved before the options existed read as the defaults.
 - Changing only options keeps the provider's tested status. A new region or role ARN needs a new connection test.

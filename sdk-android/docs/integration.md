@@ -34,7 +34,7 @@ dependencyResolutionManagement {
 
 // app/build.gradle.kts
 dependencies {
-    implementation("com.12id:holder-sdk-android:0.2.1")
+    implementation("com.12id:holder-sdk-android:0.2.2")
 }
 android {
     splits { abi { isEnable = true; reset(); include("arm64-v8a", "armeabi-v7a", "x86_64"); isUniversalApk = false } }  // or an App Bundle
@@ -268,8 +268,8 @@ requests need it; the camera screen comes from a **capture add-on** for the orga
 
 ```groovy
 dependencies {
-    implementation "com.12id:holder-sdk-android:0.2.1"
-    implementation "com.12id:holder-sdk-android-biometrics-aws:0.2.1"   // AWS Rekognition Face Liveness
+    implementation "com.12id:holder-sdk-android:0.2.2"
+    implementation "com.12id:holder-sdk-android-biometrics-aws:0.2.2"   // AWS Rekognition Face Liveness
 }
 
 android {
@@ -294,7 +294,7 @@ OneTwoId.registerCapture(AwsFaceLivenessCapture())
 
 The organisation picks the AWS Face Liveness options in its console; the app passes no options.
 - **Challenge with or without light flashes:** the platform sets this when it creates the session, so it works with every add-on version.
-- **Skipping the start screen, using the back camera:** need the add-on from SDK 0.3.0 or later (it reports itself as `aws-rekognition@2`). Older add-ons ignore them and show the start screen with the front camera.
+- **Skipping the start screen, using the back camera:** need the add-on 0.2.2 or later (it reports itself as `aws-rekognition@2`). Older add-ons ignore them and show the start screen with the front camera.
 
 **3. Check before accepting.** `CredentialOffer.biometric` and `ProofRequest.biometric` are set when a
 check is required:
