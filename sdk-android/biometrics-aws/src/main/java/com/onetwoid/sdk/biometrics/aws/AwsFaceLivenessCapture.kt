@@ -24,7 +24,8 @@ import java.util.concurrent.ConcurrentHashMap
  */
 public class AwsFaceLivenessCapture : BiometricCapture {
     override val provider: String = "aws-rekognition"
-    override val version: Int = 1
+    /** 2: honours the tenant's start screen and camera options. */
+    override val version: Int = 2
 
     override suspend fun capture(activity: ComponentActivity, session: CaptureSession): CaptureOutput {
         val request = LivenessRequest.parse(session.clientConfigJson)
@@ -56,6 +57,9 @@ internal class LivenessRequest(
     val secretAccessKey: String,
     val sessionToken: String,
     val expirationEpochSeconds: Long,
+    /** The tenant's AWS options; absent from older platforms, which means the AWS defaults. */
+    val skipStartScreen: Boolean = false,
+    val backCamera: Boolean = false,
 ) {
     companion object {
         fun parse(json: String): LivenessRequest = try {
@@ -68,6 +72,8 @@ internal class LivenessRequest(
                 secretAccessKey = credentials.getString("secretAccessKey"),
                 sessionToken = credentials.getString("sessionToken"),
                 expirationEpochSeconds = credentials.optString("expiration").let { runCatching { java.time.Instant.parse(it).epochSecond }.getOrDefault(0L) },
+                skipStartScreen = root.optString("startScreen") == "skip",
+                backCamera = root.optString("camera") == "back",
             )
         } catch (e: Exception) {
             throw OneTwoIdException.Internal("unexpected aws-rekognition session configuration", e)

@@ -13,7 +13,10 @@ import com.amplifyframework.auth.AWSCredentialsProvider
 import com.amplifyframework.auth.AWSTemporaryCredentials
 import com.amplifyframework.auth.AuthException
 import com.amplifyframework.core.Consumer
+import com.amplifyframework.ui.liveness.ui.Camera
+import com.amplifyframework.ui.liveness.ui.ChallengeOptions
 import com.amplifyframework.ui.liveness.ui.FaceLivenessDetector
+import com.amplifyframework.ui.liveness.ui.LivenessChallenge
 import com.onetwoid.sdk.OneTwoIdException
 import aws.smithy.kotlin.runtime.time.Instant as SmithyInstant
 
@@ -60,12 +63,17 @@ internal class LivenessActivity : ComponentActivity() {
                     sessionId = request.sessionId,
                     region = request.region,
                     credentialsProvider = credentials,
-                    disableStartView = false,
+                    disableStartView = request.skipStartScreen,
                     onComplete = { complete() },
                     onError = { error ->
                         val cancelled = error.message.contains("cancel", ignoreCase = true)
                         fail(if (cancelled) OneTwoIdException.BiometricCancelled() else OneTwoIdException.Internal("face liveness failed: ${error.message}", error.throwable))
                     },
+                    // Both challenges stay supported: AWS picks the one the session was created with.
+                    // The back camera only applies to the challenge without light (AWS's rule).
+                    challengeOptions = ChallengeOptions(
+                        faceMovement = LivenessChallenge.FaceMovement(if (request.backCamera) Camera.Back else Camera.Front),
+                    ),
                 )
             }
         }
