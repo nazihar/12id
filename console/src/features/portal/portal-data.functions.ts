@@ -262,16 +262,25 @@ function serializableSettings(settings: RawSettings) {
   }
 }
 
-/** The provider's JSON Schema reduced to the string fields the form renders (enum → select). */
+type SchemaProperty = { enum?: unknown[]; pattern?: string; title?: string; description?: string; examples?: unknown[]; default?: unknown; optionLabels?: Record<string, string> }
+
+/**
+ * The provider's JSON Schema reduced to the string fields the form renders (enum → select). Labels,
+ * help text, defaults and option names come from the provider, so the console holds no vendor text.
+ */
 function providerForm(entry: { id: string; displayName: string; configSchema: Record<string, unknown>; captureModule: { provider: string; minVersion: number } }) {
-  const properties = (entry.configSchema.properties ?? {}) as Record<string, { enum?: unknown[]; pattern?: string; description?: string }>
+  const properties = (entry.configSchema.properties ?? {}) as Record<string, SchemaProperty>
   return {
     id: entry.id,
     displayName: entry.displayName,
     captureProvider: entry.captureModule.provider,
     fields: Object.entries(properties).map(([key, property]) => ({
       key,
-      options: Array.isArray(property.enum) ? property.enum.map(String) : null,
+      title: property.title ?? key,
+      description: property.description ?? null,
+      placeholder: typeof property.examples?.[0] === 'string' ? property.examples[0] : null,
+      default: property.default === undefined ? null : String(property.default),
+      options: Array.isArray(property.enum) ? property.enum.map((value) => ({ value: String(value), label: property.optionLabels?.[String(value)] ?? String(value) })) : null,
       pattern: property.pattern ?? null,
     })),
   }

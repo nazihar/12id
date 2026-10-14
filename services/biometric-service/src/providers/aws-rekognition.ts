@@ -7,6 +7,9 @@
  *
  * No OutputConfig on CreateFaceLivenessSession, so AWS writes nothing to S3; the reference image
  * comes back in GetFaceLivenessSessionResults and is never stored by us.
+ *
+ * Liveness options are AWS's own, nothing custom (15-phase-6-biometric.md "Liveness options"): the
+ * challenge goes into the session; the start screen and camera travel to the device add-on.
  */
 import { randomUUID } from 'node:crypto'
 
@@ -29,10 +32,40 @@ export const FACE_LIVENESS_REGIONS = [
 
 const configSchema = z
   .object({
-    region: z.enum(FACE_LIVENESS_REGIONS),
-    roleArn: z.string().regex(/^arn:aws:iam::\d{12}:role\/[\w+=,.@\/-]{1,512}$/, 'must be an IAM role ARN'),
+    region: z.enum(FACE_LIVENESS_REGIONS).meta({ title: 'AWS region', description: 'A region where Rekognition Face Liveness is available.' }),
+    roleArn: z
+      .string()
+      .regex(/^arn:aws:iam::\d{12}:role\/[\w+=,.@\/-]{1,512}$/, 'must be an IAM role ARN')
+      .meta({ title: 'IAM role ARN', description: 'The role you created for 12id (see the setup steps).', examples: ['arn:aws:iam::123456789012:role/12id-face-liveness'] }),
+    // Defaults keep configurations saved before these options existed valid and unchanged.
+    challenge: z.enum(['FaceMovementAndLightChallenge', 'FaceMovementChallenge']).default('FaceMovementAndLightChallenge').meta({
+      title: 'Liveness challenge',
+      description: 'Without light flashes is easier for light-sensitive people; AWS rates the light challenge as stronger. Works with apps already released.',
+      optionLabels: { FaceMovementAndLightChallenge: 'Face movement and light flashes', FaceMovementChallenge: 'Face movement only, no light flashes' },
+    }),
+    startScreen: z.enum(['show', 'skip']).default('show').meta({
+      title: 'Start screen',
+      description: 'The AWS instructions screen before the camera opens. Apps need the biometrics add-on from SDK 0.3.0; older ones always show it.',
+      optionLabels: { show: 'Show', skip: 'Skip, open the camera directly' },
+    }),
+    camera: z.enum(['front', 'back']).default('front').meta({
+      title: 'Camera',
+      description: "The back camera is for staff capturing a customer's face and needs the challenge without light flashes. Apps need the biometrics add-on from SDK 0.3.0; older ones use the front camera.",
+      optionLabels: { front: 'Front', back: 'Back' },
+    }),
   })
   .strict()
+  .refine((c) => c.camera === 'front' || c.challenge === 'FaceMovementChallenge', {
+    path: ['camera'],
+    message: 'the back camera needs the challenge without light flashes',
+  })
+
+type AwsConfig = z.infer<typeof configSchema>
+
+/** Used for every CreateFaceLivenessSession, the connection test included, so a wrong setting fails the test. */
+function sessionSettings(config: AwsConfig) {
+  return { AuditImagesLimit: 0, ChallengePreferences: [{ Type: config.challenge }] }
+}
 
 const DEVICE_SESSION_POLICY = JSON.stringify({
   Version: '2012-10-17',
@@ -118,21 +151,21 @@ export function createAwsRekognitionProvider(options: AwsProviderOptions): Biome
     displayName: 'AWS Rekognition Face Liveness',
     configSchema,
     captureModule: { provider: 'aws-rekognition', minVersion: 1 },
-    publicConfig: (config) => {
-      const { region, roleArn } = configSchema.parse(config)
-      return { region, roleArn }
-    },
+    connectionKeys: ['region', 'roleArn'],
+    // Nothing here is secret: the role only trusts 12id together with the tenant's external id.
+    publicConfig: (config) => configSchema.parse(config),
 
     async testConnection(ctx) {
       cache.clear()
-      await call(ctx, new CreateFaceLivenessSessionCommand({ ClientRequestToken: randomUUID(), Settings: { AuditImagesLimit: 0 } }))
+      const config = configSchema.parse(ctx.config)
+      await call(ctx, new CreateFaceLivenessSessionCommand({ ClientRequestToken: randomUUID(), Settings: sessionSettings(config) }))
     },
 
     async createSession(ctx) {
-      const { region } = configSchema.parse(ctx.config)
+      const config = configSchema.parse(ctx.config)
       const created = await call<{ SessionId?: string }>(ctx, new CreateFaceLivenessSessionCommand({
         ClientRequestToken: randomUUID(),
-        Settings: { AuditImagesLimit: 0 },
+        Settings: sessionSettings(config),
       }))
       if (!created.SessionId) throw new ProviderError('vendor_error', 'CreateFaceLivenessSession returned no SessionId')
       const device = await assume(ctx, DEVICE_SESSION_POLICY, DEVICE_CREDENTIAL_SECONDS)
@@ -140,7 +173,10 @@ export function createAwsRekognitionProvider(options: AwsProviderOptions): Biome
         vendorSessionId: created.SessionId,
         clientConfig: {
           sessionId: created.SessionId,
-          region,
+          region: config.region,
+          // Read by add-on version 2; older add-ons ignore them. The challenge comes from the session.
+          startScreen: config.startScreen,
+          camera: config.camera,
           credentials: {
             accessKeyId: device.AccessKeyId,
             secretAccessKey: device.SecretAccessKey,

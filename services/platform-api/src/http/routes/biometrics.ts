@@ -211,7 +211,7 @@ export const biometricRoutes = (deps: { db: Database; agent: AgentClient; biomet
       schema: {
         tags,
         summary: 'Configure the biometric provider',
-        description: 'Write-only: the configuration is stored encrypted in biometric-service and only its non-secret part is ever returned. A new configuration must pass its connection test before gating resumes.',
+        description: 'Write-only: the configuration is stored encrypted in biometric-service and only its non-secret part is ever returned. A new configuration must pass its connection test before gating resumes, unless it changes only options and keeps the connection (for AWS: same region and role ARN).',
         body: z.object({ providerId: z.string().min(1).max(100), config: z.record(z.string(), z.unknown()) }),
         response: { 200: settingsView, ...held, 400: errorBody },
       },

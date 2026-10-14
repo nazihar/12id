@@ -2628,7 +2628,7 @@ export interface paths {
         get?: never;
         /**
          * Configure the biometric provider
-         * @description Write-only: the configuration is stored encrypted in biometric-service and only its non-secret part is ever returned. A new configuration must pass its connection test before gating resumes.
+         * @description Write-only: the configuration is stored encrypted in biometric-service and only its non-secret part is ever returned. A new configuration must pass its connection test before gating resumes, unless it changes only options and keeps the connection (for AWS: same region and role ARN).
          */
         put: {
             parameters: {

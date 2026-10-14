@@ -404,3 +404,79 @@ POST /v1/proofs/request
 
 ### Out of scope
 Mixing or nesting any/all; comparing two parameters or arithmetic; tiers with different strictness; conditions on credential definitions; non-numeric parameters; showing the amount in the wallet's approval dialog.
+
+---
+
+## Liveness options (2026-10-14)
+
+**Status:** built 2026-10-14 (biometric-service, console, add-on `aws-rekognition@2` in SDK 0.3.0 on master; unit and database tests pass), not released or on staging yet. Results will go in [`16-phase-6-biometric-findings.md`](16-phase-6-biometric-findings.md) "Liveness options".
+
+### Why
+A tenant can add AWS Rekognition as its provider (region and role ARN) but cannot change how the face check behaves. Tenants ask for the options AWS itself offers, for example no light flashes, or no start screen. We offer AWS's own options only, nothing custom.
+
+### What AWS offers
+Checked against `@aws-sdk/client-rekognition` 3.1136.0 and Amplify UI Liveness Android 1.11.0, the versions we pin.
+
+| Option | Where AWS applies it | Offered |
+|---|---|---|
+| **Challenge**: `FaceMovementAndLightChallenge` (default) or `FaceMovementChallenge` (no light flashes) | Server: `CreateFaceLivenessSession` `Settings.ChallengePreferences` | Yes |
+| **Start screen**: show (default) or skip | Phone: `FaceLivenessDetector(disableStartView)` | Yes |
+| **Camera**: front (default) or back. AWS allows back only with `FaceMovementChallenge`; it is for staff capturing a customer's face | Phone: `ChallengeOptions(faceMovement = FaceMovement(Camera.Back))` | Yes |
+| `OutputConfig` (S3), `AuditImagesLimit` | Server | No. We store no face images by design |
+| Challenge `Versions` min/max, video codec (VP8 / VP9 / H264) | Server / phone | No. Low-level settings with no use for tenants; can be added if asked |
+
+### Owner decisions
+| Item | Decision | Reason |
+|---|---|---|
+| Which options | **AWS's own only** (the three above) | No custom capture behaviour to build or support |
+| Scope | **Tenant-wide**, part of the provider configuration | One place to set them; stored encrypted with the rest, shown in `publicConfig` since none is secret |
+| Approval | **Same as any provider change**: a second person approves (v0.6.0) | Turning off the light challenge lowers assurance |
+| Connection test | **Not needed when only options change.** A new region or role ARN still resets the provider to untested | Changing an option must not stop face checks |
+| Other providers | **Unaffected.** Each provider declares its own options in its own schema | We stay open to other vendors |
+
+### Design
+- **biometric-service, AWS provider:**
+  - `configSchema` gains `challenge`, `startScreen` and `camera`. Each has a default, so configurations saved earlier still parse.
+  - A refine rule rejects the back camera with the light challenge.
+  - `createSession` and `testConnection` send `ChallengePreferences: [{ Type: challenge }]`, so a wrong setting fails the connection test.
+  - `clientConfig` carries `startScreen` and `camera`. The challenge is not sent: AWS picks it from the session, and the phone supports both.
+- **biometric-service, shared:**
+  - The provider port gets an optional `connectionKeys` (AWS: `region`, `roleArn`).
+  - `putTenantProvider` and `activatePendingProvider` keep the current status when the provider and these keys are unchanged.
+  - A provider without `connectionKeys` resets to untested on any change, as before.
+- **Console:**
+  - The provider form takes each field's title, description, default and option labels from the provider's JSON Schema (zod `.meta`), so the console holds no vendor labels.
+  - Existing tenants see their saved values, or the defaults.
+- **Android add-on `biometrics-aws`:**
+  - Reads `startScreen` and `camera` from `clientConfig` and passes them to `FaceLivenessDetector`.
+  - Capture version goes from 1 to 2 so the App add-ons card shows who has it. `minVersion` stays 1.
+
+**Apps already shipped:**
+- Turning off the light challenge works without an app update, because the old add-on accepts both challenge types.
+- Skipping the start screen and using the back camera need add-on v2. Older apps ignore these two options and keep the defaults. The console help text says so.
+
+### What changes
+- **biometric-service:**
+  - `providers/aws-rekognition.ts`, `providers/types.ts`, `biometric.ts`
+  - tests
+- **console:**
+  - `features/portal/portal-data.functions.ts` (`providerForm`)
+  - `features/portal/biometrics-panels.tsx`
+- **sdk-android:**
+  - `biometrics-aws` `AwsFaceLivenessCapture.kt`, `LivenessActivity.kt`
+  - a parse test
+- **Docs:**
+  - `sdk-android/docs/integration.md`
+  - `services/platform-api/docs/api.md`
+  - `infra/runbooks/biometric-service.md`
+- **Not changed:**
+  - platform-api routes, OpenAPI shapes and the database (`config` and `publicConfig` are already open records)
+  - the mock provider
+  - agent-service
+
+### Out of scope
+- Storing audit or reference images (S3).
+- Pinning challenge versions.
+- Choosing the video codec.
+- Theming the AWS screen.
+- Options per credential definition or per proof template.

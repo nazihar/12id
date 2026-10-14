@@ -99,7 +99,7 @@ The wallet does not poll on a timer. A message you send because the app asked fo
 
 Optional per tenant: before a credential is issued or a proof result is released, the holder passes a face **liveness** check and a **face match** against a reference image you provide. You configure your own vendor account (AWS Rekognition Face Liveness) in the console, switch the gate on, and choose where it applies:
 
-- **Default** for the organisation (console → Biometrics).
+- **Default** for the organisation (console → Biometrics). The provider dialog also holds AWS's own Face Liveness options, which apply to every check of the organisation: the challenge (with or without light flashes), the start screen (show or skip) and the camera (front, or back with the challenge without light flashes). Changing only these keeps face checks running; a new region or role ARN needs a new connection test.
 - **Per credential definition** (console): `inherit`, `off` or `required`, with `minMatchScore`, `minLivenessScore` and `maxAttempts`. Scores are 0–100. Read it with `GET /v1/credential-definitions/{id}/biometric-policy`.
 - **Per proof template** (console): the same three, or `conditional` (below). Read it with `GET /v1/proof-templates/{id}/biometric-policy`.
 

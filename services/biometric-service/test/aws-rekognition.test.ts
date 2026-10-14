@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
+import { z } from 'zod'
+
 import { createAwsRekognitionProvider } from '../src/providers/aws-rekognition.ts'
 import { ProviderError } from '../src/providers/types.ts'
 
@@ -40,6 +42,44 @@ describe('aws-rekognition provider', () => {
     assert.equal(provider.configSchema.safeParse({ ...config, region: 'mars-1' }).success, false)
     assert.equal(provider.configSchema.safeParse({ ...config, roleArn: 'arn:aws:iam::1:user/x' }).success, false)
     assert.equal(provider.configSchema.safeParse({ ...config, secretAccessKey: 'x' }).success, false)
+  })
+
+  it('fills AWS liveness option defaults for configurations saved before them', () => {
+    const { provider } = stubbed(() => ({}))
+    assert.deepEqual(provider.configSchema.parse(config), { ...config, challenge: 'FaceMovementAndLightChallenge', startScreen: 'show', camera: 'front' })
+    assert.deepEqual(provider.publicConfig(config), { ...config, challenge: 'FaceMovementAndLightChallenge', startScreen: 'show', camera: 'front' })
+    assert.deepEqual(provider.connectionKeys, ['region', 'roleArn'])
+    assert.equal(provider.configSchema.safeParse({ ...config, challenge: 'Blink' }).success, false)
+    assert.equal(provider.configSchema.safeParse({ ...config, startScreen: 'hide' }).success, false)
+  })
+
+  it('allows the back camera only with the challenge without light', () => {
+    const { provider } = stubbed(() => ({}))
+    const back = provider.configSchema.safeParse({ ...config, camera: 'back' })
+    assert.equal(back.success, false)
+    assert.deepEqual(back.error!.issues[0]!.path, ['camera'])
+    assert.equal(provider.configSchema.safeParse({ ...config, camera: 'back', challenge: 'FaceMovementChallenge' }).success, true)
+  })
+
+  it('describes its fields for the console form', () => {
+    const { provider } = stubbed(() => ({}))
+    const schema = z.toJSONSchema(provider.configSchema) as { properties: Record<string, any> }
+    assert.equal(schema.properties.region.title, 'AWS region')
+    assert.equal(schema.properties.roleArn.examples[0], 'arn:aws:iam::123456789012:role/12id-face-liveness')
+    assert.equal(schema.properties.challenge.default, 'FaceMovementAndLightChallenge')
+    assert.deepEqual(Object.keys(schema.properties.camera.optionLabels), schema.properties.camera.enum)
+  })
+
+  it('sends the challenge to AWS and the start screen and camera to the device', async () => {
+    const options = { ...config, challenge: 'FaceMovementChallenge', startScreen: 'skip', camera: 'back' }
+    const { provider, sent } = stubbed((name) => (name === 'CreateFaceLivenessSessionCommand' ? { SessionId: 'sess-1' } : {}))
+    const created = await provider.createSession({ ...ctx, config: options }, { checkId: 'c', attempt: 1 })
+    await provider.testConnection({ ...ctx, config: options })
+    const creates = sent.filter((s) => s.name === 'CreateFaceLivenessSessionCommand')
+    assert.equal(creates.length, 2)
+    for (const create of creates) assert.deepEqual(create.input.Settings.ChallengePreferences, [{ Type: 'FaceMovementChallenge' }])
+    const clientConfig = created.clientConfig as any
+    assert.deepEqual([clientConfig.startScreen, clientConfig.camera, clientConfig.challenge], ['skip', 'back', undefined])
   })
 
   it('creates a session without S3 output and vends device credentials limited to streaming', async () => {

@@ -115,6 +115,22 @@ export function createBiometricService({ db, keyRing, providers, logger }: Biome
     }
   }
 
+  /**
+   * The test result a replacement configuration starts with: the active one's when the provider stays
+   * and its connectionKeys are unchanged (only options changed), otherwise untested.
+   */
+  async function startingStatus(tenantId: string, current: typeof providerConfigs.$inferSelect | undefined, next: { providerId: string; configCiphertext: Buffer }) {
+    const untested = { status: 'untested' as const, lastTestedAt: null, lastError: null }
+    const keys = providers.get(next.providerId)?.connectionKeys
+    if (!current || current.providerId !== next.providerId || !keys) return untested
+    const { dataKey } = await tenantKey(tenantId)
+    const decrypt = (ciphertext: Buffer) => JSON.parse(open(dataKey, ciphertext, aad.providerConfig(tenantId)).toString('utf8')) as Record<string, unknown>
+    const before = decrypt(current.configCiphertext)
+    const after = decrypt(next.configCiphertext)
+    const same = keys.every((key) => JSON.stringify(before[key]) === JSON.stringify(after[key]))
+    return same ? { status: current.status, lastTestedAt: current.lastTestedAt, lastError: current.lastError } : untested
+  }
+
   async function wipeReference(checkId: string) {
     await db.update(checks).set({ referenceCiphertext: null }).where(eq(checks.id, checkId))
   }
@@ -145,7 +161,8 @@ export function createBiometricService({ db, keyRing, providers, logger }: Biome
 
     async putTenantProvider(tenantId: string, providerId: string, rawConfig: Record<string, unknown>) {
       const sealed = await sealedConfig(tenantId, providerId, rawConfig)
-      const values = { ...sealed, status: 'untested' as const, lastTestedAt: null, lastError: null, updatedAt: new Date() }
+      const [current] = await db.select().from(providerConfigs).where(eq(providerConfigs.tenantId, tenantId))
+      const values = { ...sealed, ...(await startingStatus(tenantId, current, sealed)), updatedAt: new Date() }
       await db.insert(providerConfigs).values({ tenantId, ...values }).onConflictDoUpdate({ target: providerConfigs.tenantId, set: values })
       return this.getTenantProvider(tenantId)
     },
@@ -161,12 +178,14 @@ export function createBiometricService({ db, keyRing, providers, logger }: Biome
       return { providerId: sealed.providerId, publicConfig: sealed.publicConfig }
     },
 
-    /** The waiting configuration becomes the active one (untested, like any new configuration). */
+    /** The waiting configuration becomes the active one (untested, unless only options changed). */
     async activatePendingProvider(tenantId: string) {
       await db.transaction(async (tx) => {
         const [pending] = await tx.delete(providerConfigsPending).where(eq(providerConfigsPending.tenantId, tenantId)).returning()
         if (!pending) throw new ServiceError(404, 'no_pending_provider', 'no provider configuration is waiting for this tenant')
-        const values = { providerId: pending.providerId, configCiphertext: pending.configCiphertext, publicConfig: pending.publicConfig, status: 'untested' as const, lastTestedAt: null, lastError: null, updatedAt: new Date() }
+        const [current] = await tx.select().from(providerConfigs).where(eq(providerConfigs.tenantId, tenantId)).for('update')
+        const status = await startingStatus(tenantId, current, pending)
+        const values = { providerId: pending.providerId, configCiphertext: pending.configCiphertext, publicConfig: pending.publicConfig, ...status, updatedAt: new Date() }
         await tx.insert(providerConfigs).values({ tenantId, ...values }).onConflictDoUpdate({ target: providerConfigs.tenantId, set: values })
       })
       return this.getTenantProvider(tenantId)

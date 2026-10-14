@@ -28,7 +28,16 @@ export interface ProviderForm {
   id: string
   displayName: string
   captureProvider: string
-  fields: Array<{ key: string; options: string[] | null; pattern: string | null }>
+  /** From the provider's own schema: the console has no per-vendor labels. */
+  fields: Array<{
+    key: string
+    title: string
+    description: string | null
+    placeholder: string | null
+    default: string | null
+    options: Array<{ value: string; label: string }> | null
+    pattern: string | null
+  }>
 }
 
 export interface Settings {
@@ -38,9 +47,17 @@ export interface Settings {
   provider: { id: string; publicConfig: Record<string, string>; status: 'ok' | 'failed' | 'untested'; lastTestedAt: string | null; lastError: string | null } | null
 }
 
-const FIELD_LABELS: Record<string, { label: string; placeholder?: string; description?: string }> = {
-  region: { label: 'AWS region', description: 'A region where Rekognition Face Liveness is available.' },
-  roleArn: { label: 'IAM role ARN', placeholder: 'arn:aws:iam::123456789012:role/12id-face-liveness', description: 'The role you created for 12id (see the setup steps).' },
+/**
+ * The configuration as the card shows it: the provider's fields in order, each with its label and
+ * the saved value or, for an option saved before it existed, its default.
+ */
+function shownConfig(provider: NonNullable<Settings['provider']>, form: ProviderForm | undefined) {
+  if (!form) return Object.entries(provider.publicConfig).map(([key, value]) => ({ key, title: key, value }))
+  return form.fields.flatMap((field) => {
+    const value = provider.publicConfig[field.key] ?? field.default
+    if (value == null) return []
+    return [{ key: field.key, title: field.title, value: field.options?.find((o) => o.value === value)?.label ?? value }]
+  })
 }
 
 /** The role's permissions, as the tenant should paste them (AWS console → IAM → role → inline policy). */
@@ -71,7 +88,8 @@ export function ProviderCard({ settings, providers, organizationId, orgSlug, can
     },
   })
   const provider = settings.provider
-  const displayName = providers.find((p) => p.id === provider?.id)?.displayName ?? provider?.id
+  const form = providers.find((p) => p.id === provider?.id)
+  const displayName = form?.displayName ?? provider?.id
 
   return (
     <Card size="sm">
@@ -122,9 +140,9 @@ export function ProviderCard({ settings, providers, organizationId, orgSlug, can
       <CardContent className="space-y-4 text-sm">
         {provider && (
           <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1">
-            {Object.entries(provider.publicConfig).map(([key, value]) => (
+            {shownConfig(provider, form).map(({ key, title, value }) => (
               <div key={key} className="contents">
-                <dt className="text-muted-foreground">{FIELD_LABELS[key]?.label ?? key}</dt>
+                <dt className="text-muted-foreground">{title}</dt>
                 <dd className="font-mono text-xs break-all">{value}</dd>
               </div>
             ))}
@@ -164,7 +182,7 @@ function ProviderDialog({ providers, settings, organizationId, orgSlug }: { prov
         </Button>
       }
       title="Biometric provider"
-      description="Saved encrypted and never shown again; a new configuration must pass the connection test before face checks resume."
+      description="Saved encrypted; secret values are never shown again. A new connection (such as another account or region) must pass the connection test before face checks resume; changing only options keeps them running."
     >
       {({ close }) => <ProviderFormBody providers={providers} settings={settings} organizationId={organizationId} orgSlug={orgSlug} onDone={close} />}
     </FormDialog>
@@ -182,14 +200,16 @@ function ProviderFormBody({ providers, settings, organizationId, orgSlug, onDone
     },
     onSuccess: async (saved) => {
       if (announceHeld(saved, queryClient)) return
-      toast.success('Provider saved. Run the connection test next.')
+      toast.success(saved.provider?.status === 'ok' ? 'Provider saved. Face checks use the new options.' : 'Provider saved. Run the connection test next.')
       await queryClient.invalidateQueries({ queryKey: portalKey(orgSlug, 'biometrics') })
     },
   })
   const form = useAppForm({
     defaultValues: {
       providerId: initial?.id ?? '',
-      config: Object.fromEntries((initial?.fields ?? []).map((field) => [field.key, settings.provider?.id === initial?.id ? (settings.provider?.publicConfig[field.key] ?? '') : ''])) as Record<string, string>,
+      config: Object.fromEntries(
+        (initial?.fields ?? []).map((field) => [field.key, (settings.provider?.id === initial?.id ? settings.provider?.publicConfig[field.key] : undefined) ?? field.default ?? ''])
+      ) as Record<string, string>,
     },
     validationLogic: formValidation,
     validators: { onDynamic: biometricProviderInput },
@@ -209,9 +229,9 @@ function ProviderFormBody({ providers, settings, organizationId, orgSlug, onDone
             <form.AppField key={`${providerId}.${spec.key}`} name={`config.${spec.key}`}>
               {(field) =>
                 spec.options ? (
-                  <field.ComboboxField label={FIELD_LABELS[spec.key]?.label ?? spec.key} description={FIELD_LABELS[spec.key]?.description} options={spec.options.map((o) => ({ value: o, label: o }))} />
+                  <field.ComboboxField label={spec.title} description={spec.description ?? undefined} options={spec.options} />
                 ) : (
-                  <field.TextField label={FIELD_LABELS[spec.key]?.label ?? spec.key} description={FIELD_LABELS[spec.key]?.description} placeholder={FIELD_LABELS[spec.key]?.placeholder} />
+                  <field.TextField label={spec.title} description={spec.description ?? undefined} placeholder={spec.placeholder ?? undefined} />
                 )
               }
             </form.AppField>

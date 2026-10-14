@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { after, beforeEach, describe, it } from 'node:test'
 
 import { eq } from 'drizzle-orm'
+import { z } from 'zod'
 
 import { ServiceError, decide, decodeReferenceImage } from '../src/biometric.ts'
 import type { Database } from '../src/db/client.ts'
@@ -262,6 +263,38 @@ describe('biometric service (database)', async () => {
     await service.cancelCheck(checkId)
     const [row] = await db!.select().from(schema.checks).where(eq(schema.checks.id, checkId))
     assert.deepEqual([row!.status, row!.referenceCiphertext], ['cancelled', null])
+  })
+
+  it('keeps the tested status when only options change, directly or after approval', async (t) => {
+    if (skip()) return t.skip()
+    const optioned: BiometricProvider = {
+      ...mockProvider,
+      id: 'optioned',
+      configSchema: z.object({ account: z.string(), option: z.string().default('a') }).strict(),
+      connectionKeys: ['account'],
+      publicConfig: (config) => config,
+    }
+    const service = testService(db!, [mockProvider, optioned])
+    const tenantId = 'tenant-a'
+    await service.putTenantProvider(tenantId, 'optioned', { account: '1' })
+    await service.testTenantProvider(tenantId)
+    const tested = (await service.getTenantProvider(tenantId)).provider!
+    assert.equal(tested.status, 'ok')
+
+    const changed = await service.putTenantProvider(tenantId, 'optioned', { account: '1', option: 'b' })
+    assert.deepEqual([changed.provider!.status, changed.provider!.lastTestedAt, changed.provider!.publicConfig.option], ['ok', tested.lastTestedAt, 'b'])
+    await service.putPendingProvider(tenantId, 'optioned', { account: '1', option: 'c' })
+    assert.equal((await service.activatePendingProvider(tenantId)).provider!.status, 'ok')
+    assert.ok((await service.createCheck(defaultCheck(tenantId))).checkId, 'face checks keep running')
+
+    // A new connection, approved or not, needs a new test.
+    await service.putPendingProvider(tenantId, 'optioned', { account: '2', option: 'c' })
+    assert.equal((await service.activatePendingProvider(tenantId)).provider!.status, 'untested')
+    await service.testTenantProvider(tenantId)
+    assert.equal((await service.putTenantProvider(tenantId, 'optioned', { account: '3' })).provider!.status, 'untested')
+    // Providers that do not name their connection keys: every change needs a test, as before.
+    await mockTenant(service)
+    assert.equal((await service.putTenantProvider(tenantId, 'mock', {})).provider!.status, 'untested')
   })
 
   it('refuses a session when the tenant switched provider after the check was created', async (t) => {

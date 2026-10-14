@@ -73,6 +73,18 @@ curl -s https://api.<domain>/readyz   # checks.biometric = true
 
 The device receives 15-minute credentials from the same role, narrowed by a session policy to `StartFaceLivenessSession`. No S3 output is configured, so AWS stores no images.
 
+**Liveness options** (same dialog, AWS's own; [15-phase-6-biometric.md](../../implement/15-phase-6-biometric.md) "Liveness options"):
+
+| Option | Values (default first) | Applied |
+|---|---|---|
+| Liveness challenge | `FaceMovementAndLightChallenge`, `FaceMovementChallenge` (no light flashes) | `ChallengePreferences` on every `CreateFaceLivenessSession`, the connection test included |
+| Start screen | `show`, `skip` | On the phone, add-on `aws-rekognition@2` (SDK 0.3.0+) |
+| Camera | `front`, `back` (only with `FaceMovementChallenge`) | On the phone, add-on `aws-rekognition@2` (SDK 0.3.0+) |
+
+- Configurations saved before the options existed read as the defaults.
+- Changing only options keeps the provider's tested status. A new region or role ARN needs a new connection test.
+- Option changes go through the same second-person approval as any provider change.
+
 ## Master key rotation
 
 `infra/scripts/rotate-biometric-key.sh` (Phase 9 W4): it stops biometric-service, re-wraps every `tenant_keys.wrapped_key` from the current key to a generated next key in one transaction (`src/rotate-master-key.ts`), then swaps the key in sops and starts the service. Only the data keys change; ciphertexts do not. Steps and checks: [key-rotation.md](key-rotation.md#biometric-master-key).

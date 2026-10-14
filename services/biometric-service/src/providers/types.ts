@@ -37,6 +37,11 @@ export interface BiometricProvider {
   configSchema: z.ZodType<Record<string, unknown>>
   /** Which device add-on runs the capture. */
   captureModule: { provider: string; minVersion: number }
+  /**
+   * The configuration keys the connection depends on (e.g. account, region). A change that keeps them
+   * keeps the tested status; without this list, every change needs a new connection test.
+   */
+  connectionKeys?: string[]
   /** The fields that may be shown back to the console. */
   publicConfig(config: Record<string, unknown>): Record<string, unknown>
   testConnection(ctx: ProviderContext): Promise<void>
