@@ -941,7 +941,7 @@ One app, two roles: **platform operator** (all tenants) and **tenant member** (o
   - Change password and "Send password link" for operators and owners.
   - Values per deployment (`CONSOLE_*`); 9 new audit event types.
 
-- [~] **Roles by action and user administration (MTB theme G, simplified by the owner; plan [`26-roles-and-user-admin.md`](26-roles-and-user-admin.md), evidence [`27-roles-and-user-admin-findings.md`](27-roles-and-user-admin-findings.md)): built and passing locally 2026-10-13, to ship as platform `v0.9.0`.**
+- [x] **Roles by action and user administration (MTB theme G, simplified by the owner; plan [`26-roles-and-user-admin.md`](26-roles-and-user-admin.md), evidence [`27-roles-and-user-admin-findings.md`](27-roles-and-user-admin-findings.md)): released as platform `v0.9.0` 2026-10-14 (commit `3d23daf`, staging on `0.9.0-rc.1`; every staging check and smoke passed).**
   - Every console check asks for an action, not a role name. The portal has seven actions, and the built-in roles (owner, admin, member) are unchanged and locked. The operator area has four actions behind its operator and auditor roles.
   - Organisations make **custom roles** from those actions (Better Auth dynamic access control, console migration `0003`). platform-api is told the nearest built-in role, so its own checks are the ceiling; it gains only the `role.change` approval type and audit event types.
   - Access report, a state filter and "Signed in now" on Operators and Members. Disable until a day or until re-enabled, with a note: for an operator, the account; for an owner, the membership of that organisation only. Export of both lists.

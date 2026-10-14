@@ -1,6 +1,6 @@
 # Roles by action, custom organisation roles, user administration: plan
 
-**Status:** built 2026-10-13 and passing locally. It ships as platform `v0.9.0`. Evidence: [`27-roles-and-user-admin-findings.md`](27-roles-and-user-admin-findings.md).
+**Status:** released as platform `v0.9.0` on 2026-10-14 (commit `3d23daf`; staging on `0.9.0-rc.1`, every staging check and both smokes passed). Evidence: [`27-roles-and-user-admin-findings.md`](27-roles-and-user-admin-findings.md).
 
 ## Context
 - **2026-10-13: the owner chose MTB theme G (roles and user administration) as the next work**, after `v0.8.0`. The theme is in `mtb/Gap_Analysis_Sections_2-6.md` §4, rows 2.15–2.17, 5.1–5.7 and 6.78–6.127.

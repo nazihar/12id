@@ -1,6 +1,6 @@
 # Roles by action, custom organisation roles, user administration: findings
 
-Plan: [`26-roles-and-user-admin.md`](26-roles-and-user-admin.md). Built 2026-10-13 to 2026-10-14. It ships as platform `v0.9.0`; **not yet committed or deployed** (staging below is still to do).
+Plan: [`26-roles-and-user-admin.md`](26-roles-and-user-admin.md). Built 2026-10-13 to 2026-10-14. **Released as platform `v0.9.0` on 2026-10-14** (commit `3d23daf`; staging runs `0.9.0-rc.1`).
 
 ## Found on the way
 1. **The Better Auth CLI drops what it did not generate.** `npx auth generate` rewrote `auth-schema.ts` without the hand-written `password_history` table (implement/24) and without `failed_sign_ins … NOT NULL`. Both were put back by hand before `drizzle-kit generate`. Every future `db:generate` needs the same check, or drizzle would plan to drop the table.
@@ -47,8 +47,22 @@ Plan: [`26-roles-and-user-admin.md`](26-roles-and-user-admin.md). Built 2026-10-
   - operators see the access report, their own live session, and the disabled filter.
 - **`second-operator.spec.ts`** with `OPERATOR_APPROVALS=on` (`E2E_OPERATOR_APPROVALS=on`, a platform-api started with the setting): **passed** with `auth.spec.ts`, 3/3. It covers adding an operator held for a second one, then **Disable** with a note (not held) and **Re-enable** held ("Sent for approval: Re-enable …"); the row shows `disabled` and the note. It was skipped in the `v0.8.0` run, so this is its first run with approvals on since `v0.6.0`. One earlier attempt failed before the changed part, with requests left over from a run the machine interrupted; it passed once those were cancelled.
 
-## Staging
-Still to do:
-- tag `v0.9.0-rc.1` and deploy the bundle (console migration `0003` runs by itself, and there is no new secret);
-- run `e2e:staging`, `console-feedback-check`, `approvals-check` and both Credo smokes (the owner opens the tunnel);
-- by hand: one custom role used end to end and one dated disable that lifts.
+## On staging (2026-10-14, `0.9.0-rc.1`)
+The owner said "do the rest by yourself". Commit `3d23daf`; tag `v0.9.0-rc.1` built the nine images by CI.
+
+| Check | Result |
+|---|---|
+| Deploy | the bundle's one changed file (`runbooks/console.md`) installed, the old one in `/opt/12id/infra.prev-20261014-v090`; `release.env` replaced (previous: `release.env.prev-0.8.0-rc.1`); seven stacks up in 291 s, no failed step |
+| Console migration `0003` | applied by console-migrate: `organization_role` present (empty), the `member` columns present (8 memberships, none disabled) |
+| The running console | `12id-console:0.9.0-rc.1`; `docker inspect` clean for every platform container (the one match is the demo reference backend's own `WEBHOOK_SECRET`, outside the bundle) |
+| `e2e:staging` | **4/4** |
+| `console-feedback-check` / `approvals-check` | **36/36** / **19/19** |
+| `smoke:platform-credo` / `smoke:biometric-credo` | **PASSED** / **PASSED 30/30** (Claude opened the `-R 3200` tunnel itself this time, and closed it after) |
+| By hand, a one-off Playwright script (not committed) | **passed**: the acme-platform owner created a custom role (Manage integration and Export), edited it (Export off), saw the access report on Members, and deleted the role. An operator disabled a throwaway operator (made with console-tools) until a day with a note; the row showed `disabled` and the note, and the database had `banned` with `ban_expires`. With `ban_expires` set back a minute, the list read it as active, the account signed in again (to 2FA setup), and Better Auth had cleared `banned`. "Signed in now" listed the operator; the audit had "Role created", "Role deleted" and "Operator disabled". The throwaway was deleted through the console; no account or custom role is left behind |
+
+**Released as `v0.9.0`** on the same commit; CI added `0.9.0` to the rc's nine digests. Production (W5 step 4) deploys `release-0.9.0.env` and the 0.9.0 bundle. There is no new secret, and the console migration runs by itself.
+
+**MTB gap analysis updated the same day** (`mtb/Gap_Analysis_Sections_2-6.md`, outside this repository):
+- 14 rows rewritten: 2.13, 2.15–2.17, 5.2–5.6, 5.3a, 5.3c, 5.3d, 6.78, 6.106. Theme G and the 2.37 remark were updated. Row 5.5 had been stale since `v0.8.0`.
+- The scoreboard was recounted from the rows, by a script that first reproduced the earlier numbers.
+- Comply rows: 86 Have, 95 Partly, 47 Missing (were 81, 95, 52). Complete is 60% by rows and 69% by MTB's weights (were 57% and 66%). Section 5 went from 41% to 68%.
