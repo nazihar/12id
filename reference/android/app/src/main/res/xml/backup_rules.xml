@@ -1,7 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Android 11 and older. The wallet must never leave the device: its key lives in the Keystore, so
-     restored wallet files would be unreadable (the SDK reports WalletKeyLost). -->
+     restored wallet files would be unreadable (the SDK reports WalletKeyLost). The app's own files go with it:
+     a restored session and installation id would point at a wallet that is not there, and a reinstall
+     must ask for the skin again. -->
 <full-backup-content>
     <exclude domain="file" path="wallet" />
     <exclude domain="sharedpref" path="aries-framework-kotlin.xml" />
+    <exclude domain="sharedpref" path="reference.xml" />
+    <exclude domain="sharedpref" path="skin.xml" />
+    <exclude domain="sharedpref" path="mtb-neo.xml" />
+    <exclude domain="file" path="avatar.jpg" />
 </full-backup-content>

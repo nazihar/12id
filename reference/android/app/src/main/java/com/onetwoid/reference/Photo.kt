@@ -57,6 +57,17 @@ object Photo {
         }
     }
 
+    /** A copy of the photo on this phone, for skins that show the customer's picture (MtbNeo.kt). The backend keeps the one that counts. */
+    fun keep(context: Context, jpeg: ByteArray) = avatar(context).writeBytes(jpeg)
+
+    fun kept(context: Context): File? = avatar(context).takeIf { it.exists() }
+
+    fun forget(context: Context) {
+        avatar(context).delete()
+    }
+
+    private fun avatar(context: Context) = File(context.filesDir, "avatar.jpg")
+
     /** The phone's camera app, asked to open on the front camera where it honours the hint. */
     class Capture : ActivityResultContracts.TakePicture() {
         override fun createIntent(context: Context, input: Uri): Intent = super.createIntent(context, input)

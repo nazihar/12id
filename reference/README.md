@@ -61,6 +61,7 @@ No code is sent by SMS and nothing is typed: the phone proves it holds the card 
 - **A refused request keeps its key.** 12iD remembers the answer to an `Idempotency-Key` for 24 hours, refusals (4xx) included, and the same key with a different body is refused too. Derive the key from what you send, so a corrected request gets a new one (`offerCredential` in `webhooks.ts`).
 - **Check your settings against the catalogue at start.** An offer must carry exactly the schema's attributes; a mismatch is otherwise only visible as a card that never arrives (`tenant-check.ts`).
 - **Keep the wallet token you were given.** `POST /v1/wallets` shows it once, so call it once per installation and keep the wallet id and token. When the SDK says the token was rejected, `POST /v1/wallets/{id}/token` issues a new one for the same wallet; only a revoked wallet is replaced by a new one (`walletToken()` in `server.ts`).
+- **Keep the app's session out of backups, like the wallet.** The wallet cannot be restored (its key is in the phone's Keystore), so anything that names it must not be restored either: here the session token and the installation id (`res/xml/backup_rules.xml`, `data_extraction_rules.xml`). Otherwise a reinstalled app comes back signed in, with an empty wallet.
 - **Trust `verified`, nothing else.** An action is approved only by a `proof.state_changed` event with `state: done` and `verified: true`.
 - **Every wait ends.** A message may never arrive; the app gives up after a time and lets the user try again.
 
@@ -153,8 +154,17 @@ cd android
 ./gradlew :app:assembleDebug -PbackendUrl=https://<your backend> -PplatformApiUrl=https://api.12id.com
 ```
 
-- The SDK version is one line in `android/gradle.properties`.
+- The SDK version is one line in `android/gradle.properties` (now 0.2.2).
 - How the app looks (name, colours, labels, the action's wording) is one entry in `Skin.kt`.
+
+### Skins
+
+At the first launch the app asks which skin to use and keeps the answer: from then on it always opens with that skin, and "Reset this app" keeps it. To choose again, clear the app's data or reinstall it. This way a client who is shown the demo never sees the other skins.
+
+- **12iD reference** (`Skins.default`): the plain screens in `MainActivity.kt`.
+- **MTB Neo** (`Skins.mtbNeo`): a copy of MTB's own app (`MtbNeo.kt`). The log-in screen takes the User ID as the name and the password as the access code. The first log-in issues the card (with the face check where the organisation uses it). **MTB Transfer** is approved with the card, and the log-out icon ends the session but keeps the card on the phone. The account number shown is the member ID. Controls outside the two flows say "Not part of this demo".
+
+A new client is usually one more `Skin` entry with `SkinStyle.Standard`. A client's own look is a new `SkinStyle` and one file of screens. Both looks use the same `MainViewModel`, `Wallet.kt` and `Backend.kt`.
 
 ## Checks
 

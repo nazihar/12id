@@ -87,12 +87,39 @@ A client demo needed a stand-in backend on the dev PC behind an SSH tunnel, hand
 - **Found by that run:** the backend's log line for `biometric.check_completed` printed `undefined`. The event is `{ recordType, recordId, threadId, attempt: { decision, livenessScore, matchScore, … } | null, biometric: { status, attemptsRemaining, … } }`, not a flat object as `docs/api.md` suggests ("with the scores and the decision"). The log line is fixed; **open (docs):** `api.md` should show this event's shape.
 - **Not checked:** a failed face check (another person), the locked case after three failures, and the photo step on other phones (the system camera opened on the app's hint, which camera apps may ignore). Both checks reported the same liveness score to six decimals in two separate sessions; not investigated.
 
+## Skins and MTB Neo (2026-10-15, app version 3)
+
+**Owner's request:** the current look stays as the default skin; a second skin copies MTB's own app, MTB Neo, from two screenshots (`mtb/mtb neo/1.webp` log-in, `2.webp` home), with the same flows: the card is issued at log-in, a transfer is approved with it; at the first install the app asks for the skin once and keeps it, so a client never sees the other skins.
+
+- **Up-to-date check first:** the backend needed nothing (no public API change since v0.7.0; the VM's `src/*.ts` have the same hashes as `HEAD`). The app moved from SDK 0.2.1 to **0.2.2** (the AWS add-on follows the tenant's liveness options).
+- **Owner's decisions:** the MTB logo is `mtb/mtb neo/neo.webp`; the rest is rebuilt (colour wave drawn in Compose, Material icons, the free font Outfit, the "MTB Neo™" wordmark as text); the card's flower is a simple stand-in. The masked parts are filled with the signed-in user's details: the User ID as the name, the member ID as the account number (`1301 0000 xxxx xxxx`), the face-check photo as the avatar.
+- **App:**
+  - `Skin.style` selects the screens: `Standard` (`MainActivity.kt`, unchanged) or `MtbNeo` (`MtbNeo.kt`, new). Both drive the same `MainViewModel`, `Wallet.kt` and `Backend.kt`.
+  - The choice is in its own preferences file (`skin`), which "Reset this app" leaves alone.
+  - The log-out icon ends the session and keeps the installation (`Backend.signOut`), so the next log-in is the same user and nothing is issued again.
+  - Sizes and colours were measured from the screenshots (pixel sampling; text scaled by width because Outfit is wider than MTB's font). On the phone the log-in screen lines up with `1.webp` within a few pixels.
+- **Found on the phone: Android restored the app's own preferences from cloud backup after a reinstall.** The wallet is excluded from backup, but `reference.xml` (session token, installation id) was not. A reinstalled app therefore came back signed in as the old user with an empty wallet, and waited for a card that was offered on the old wallet's connection (v2 has the same defect). The backup and device-transfer rules now also exclude `reference.xml`, `skin.xml`, `mtb-neo.xml` and `avatar.jpg`, so a reinstall starts clean and asks for the skin again.
+- **Run on the phone (Xiaomi, Android 14, release build signed with the reference key, tenant MTB, real AWS):**
+
+  | Step | Result |
+  |---|---|
+  | Fresh install | the chooser; MTB Neo chosen; the log-in screen |
+  | First log-in | photo step, then the card offer with the face check: **liveness 99.63, match 99.9999, passed**; card issued |
+  | Home | the user's name, photo and account number; the wave blurred as in the screenshot |
+  | MTB Transfer 1000 | no camera (template rule `amount ≥ 5000`); approved; MTB received only the Customer ID |
+  | MTB Transfer 5000 | face check: **liveness 99.54, match 99.9999, passed**; approved |
+  | Log out, log in | Home at once; the backend logged no new offer |
+  | Cold restart | MTB Neo again, no chooser; the Profile tab shows the card (valid until 15 Oct 2027) |
+
+  The owner took the photo and did both face checks; the rest was driven over adb. The default skin was checked on an emulator (chooser → 12iD reference → the old sign-in screen, kept after a restart). Not run on the phone: "Reset this app" (it would delete the demo card).
+- **Released:** `reference-app-v3`.
+
 ## Not done yet
 
 - **Done 2026-10-10 (owner):** the access code is set on the VM, and the keystore's two Actions secrets are in `nazihar/12id`. The owner's code is four digits, which a stranger with the app could guess within the edge's rate limit in about half an hour; acceptable for staging, to be replaced before the link is handed out widely.
 - **Owner, in the operator console:** create the console organisation and an owner account for tenant `Acme Bank`. Without it only operators see the tenant, and operators see personal data masked.
 - **Done 2026-10-10:** the first phone run (above). **Still owed:** a relaunch on the next day (still one wallet in the console), and the tenant swap drill.
-- **Extensions, each on its own:** the face check (a selfie at sign-in as the photo on file, a second template with the check required, the AWS add-on); a second skin and a chooser; a flow that starts outside the app (web login by QR, a counter check).
+- **Extensions, each on its own:** the face check (done, version 2); a second skin and a chooser (done, version 3); a flow that starts outside the app (web login by QR, a counter check).
 - **Not covered:** a verifier that is a different organisation from the issuer (proof templates resolve only the tenant's own catalogue, `services/platform-api/src/templates.ts`); iOS; push.
 
 ## On staging (2026-10-10)

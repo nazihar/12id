@@ -4,9 +4,17 @@
     <cloud-backup>
         <exclude domain="file" path="wallet" />
         <exclude domain="sharedpref" path="aries-framework-kotlin.xml" />
+        <exclude domain="sharedpref" path="reference.xml" />
+        <exclude domain="sharedpref" path="skin.xml" />
+        <exclude domain="sharedpref" path="mtb-neo.xml" />
+        <exclude domain="file" path="avatar.jpg" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="file" path="wallet" />
         <exclude domain="sharedpref" path="aries-framework-kotlin.xml" />
+        <exclude domain="sharedpref" path="reference.xml" />
+        <exclude domain="sharedpref" path="skin.xml" />
+        <exclude domain="sharedpref" path="mtb-neo.xml" />
+        <exclude domain="file" path="avatar.jpg" />
     </device-transfer>
 </data-extraction-rules>

@@ -53,7 +53,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val app = application as ReferenceApp
     private val backend = app.backend
     private val wallet = app.wallet
-    private val skin = Skins.current
+    private val skin get() = Skins.chosen(app) ?: Skins.default
 
     private val _ui = MutableStateFlow(Ui())
     val ui: StateFlow<Ui> = _ui.asStateFlow()
@@ -96,6 +96,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun submitPhoto(jpeg: ByteArray) = task("Could not save your photo") {
         show(Screen.Working("Saving your photo…"))
         backend.uploadPhoto(jpeg)
+        Photo.keep(app, jpeg)
         setUp()
     }
 
@@ -190,6 +191,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         waiting?.cancel()
         runCatching { wallet.reset() }.onFailure { Log.w(TAG, "wallet reset", it) }
         backend.forget()
+        Photo.forget(app)
+        actionId = null
+        _ui.value = Ui()
+    }
+
+    /** Signs out and keeps the wallet: signing in again on this phone needs no new card. */
+    fun signOut() {
+        waiting?.cancel()
+        backend.signOut()
         actionId = null
         _ui.value = Ui()
     }

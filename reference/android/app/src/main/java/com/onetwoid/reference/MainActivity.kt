@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Arrangement
@@ -61,12 +62,45 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val skin = Skins.current
+        val skin = Skins.chosen(this)
+        if (skin?.style == SkinStyle.MtbNeo) enableEdgeToEdge()
         setContent {
-            MaterialTheme(colorScheme = lightColorScheme(primary = skin.primary, onPrimary = skin.onPrimary)) {
-                Surface(Modifier.fillMaxSize().safeDrawingPadding()) { App(viewModel, skin) }
+            when (skin?.style) {
+                // First launch: the skin is chosen once and kept (Skins.chosen).
+                null -> MaterialTheme { Surface(Modifier.fillMaxSize().safeDrawingPadding()) { SkinChooser { Skins.choose(this, it); recreate() } } }
+                SkinStyle.Standard -> MaterialTheme(colorScheme = lightColorScheme(primary = skin.primary, onPrimary = skin.onPrimary)) {
+                    Surface(Modifier.fillMaxSize().safeDrawingPadding()) { App(viewModel, skin) }
+                }
+                SkinStyle.MtbNeo -> MtbNeoApp(viewModel, skin)
             }
         }
+    }
+}
+
+/** Asked once, at the first launch. To choose again, clear the app's data or reinstall it. */
+@Composable
+private fun SkinChooser(onChoose: (Skin) -> Unit) {
+    var picked by remember { mutableStateOf<Skin?>(null) }
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Text("Choose the demo", style = MaterialTheme.typography.headlineSmall)
+        Text("The app keeps this choice and always opens with it. To choose again, clear the app's data or reinstall it.")
+        Skins.all.forEach { skin ->
+            Card(onClick = { picked = skin }, colors = CardDefaults.cardColors(containerColor = skin.primary, contentColor = skin.onPrimary), modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(20.dp)) {
+                    Text(skin.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                    Text(skin.organisation, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+    }
+    picked?.let { skin ->
+        AlertDialog(
+            onDismissRequest = { picked = null },
+            title = { Text("Use ${skin.name}?") },
+            text = { Text("From now on this app always opens as ${skin.name}.") },
+            confirmButton = { Button(onClick = { onChoose(skin) }) { Text("Use ${skin.name}") } },
+            dismissButton = { TextButton(onClick = { picked = null }) { Text("Back") } },
+        )
     }
 }
 
@@ -129,21 +163,28 @@ private fun SignIn(skin: Skin, busy: Boolean, onSignIn: (String, String) -> Unit
  */
 @Composable
 private fun PhotoStep(skin: Skin, busy: Boolean, onPhoto: (ByteArray) -> Unit) {
-    val context = LocalContext.current
     var problem by remember { mutableStateOf<String?>(null) }
-    val camera = rememberLauncherForActivityResult(Photo.Capture()) { taken ->
-        val photo = if (taken) Photo.taken(context) else null
-        if (photo != null) onPhoto(photo) else problem = "No photo was taken."
-    }
-    // The face-check add-on declares the camera permission, so Android wants it granted before any camera use.
-    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) camera.launch(Photo.target(context)) else problem = "The camera is needed to take your photo."
-    }
+    val takePhoto = rememberPhotoTaker(onPhoto) { problem = it }
     Text("Your photo", style = MaterialTheme.typography.headlineSmall)
     Text("${skin.organisation} keeps a photo of each customer. Before important steps it checks that the person holding this phone is you, by comparing your face with that photo.")
     Text("Take a clear photo of your face, looking at the camera.")
     problem?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-    Button(enabled = !busy, onClick = { problem = null; permission.launch(Manifest.permission.CAMERA) }, modifier = Modifier.fillMaxWidth()) { Text("Take my photo") }
+    Button(enabled = !busy, onClick = { problem = null; takePhoto() }, modifier = Modifier.fillMaxWidth()) { Text("Take my photo") }
+}
+
+/** Opens the camera app for the photo on file; [onProblem] when no photo came back. */
+@Composable
+internal fun rememberPhotoTaker(onPhoto: (ByteArray) -> Unit, onProblem: (String) -> Unit): () -> Unit {
+    val context = LocalContext.current
+    val camera = rememberLauncherForActivityResult(Photo.Capture()) { taken ->
+        val photo = if (taken) Photo.taken(context) else null
+        if (photo != null) onPhoto(photo) else onProblem("No photo was taken.")
+    }
+    // The face-check add-on declares the camera permission, so Android wants it granted before any camera use.
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) camera.launch(Photo.target(context)) else onProblem("The camera is needed to take your photo.")
+    }
+    return { permission.launch(Manifest.permission.CAMERA) }
 }
 
 @Composable
@@ -270,11 +311,8 @@ private fun FaceCheckNote(skin: Skin, attemptsRemaining: Int?) {
 @Composable
 private fun ApprovalDialog(skin: Skin, details: Map<String, String>, request: ProofRequest, ui: Ui, onApprove: () -> Unit, onDecline: () -> Unit) {
     val faceCheck = request.biometric?.status == BiometricStatus.Pending
-    val shared = request.attributeGroups.flatMap { it.attributeNames }.map { skin.attributeLabels[it] ?: it }
-    val proven = request.predicates.map { predicate ->
-        if (predicate.attributeName == "expiresOn") "your card is still valid"
-        else "${skin.attributeLabels[predicate.attributeName] ?: predicate.attributeName} ${predicate.operator} ${predicate.value}"
-    }
+    val shared = request.shared(skin)
+    val proven = request.proven(skin)
     AlertDialog(
         onDismissRequest = {},
         title = { Text(skin.action.confirm) },
@@ -292,5 +330,14 @@ private fun ApprovalDialog(skin: Skin, details: Map<String, String>, request: Pr
     )
 }
 
-private fun formatDate(epochSeconds: Long): String =
+/** The attributes the organisation will see, with the skin's labels. */
+internal fun ProofRequest.shared(skin: Skin): List<String> = attributeGroups.flatMap { it.attributeNames }.map { skin.attributeLabels[it] ?: it }
+
+/** What is proven without being shown. */
+internal fun ProofRequest.proven(skin: Skin): List<String> = predicates.map { predicate ->
+    if (predicate.attributeName == "expiresOn") "your card is still valid"
+    else "${skin.attributeLabels[predicate.attributeName] ?: predicate.attributeName} ${predicate.operator} ${predicate.value}"
+}
+
+internal fun formatDate(epochSeconds: Long): String =
     SimpleDateFormat("d MMM yyyy", Locale.getDefault()).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date(epochSeconds * 1000))

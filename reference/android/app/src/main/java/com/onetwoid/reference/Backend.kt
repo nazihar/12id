@@ -67,6 +67,11 @@ class Backend(context: Context, private val baseUrl: String) {
         ActionResult(json.getString("id"), json.getString("state"), disclosed)
     }
 
+    /** Ends the session only. The installation stays, so the next sign-in is the same user, whose wallet already holds the card. */
+    fun signOut() {
+        prefs.edit().remove("sessionToken").apply()
+    }
+
     /** Forgets this installation: the next sign-in is a new user with a new wallet. */
     fun forget() {
         prefs.edit().clear().apply()
