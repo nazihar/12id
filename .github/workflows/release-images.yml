@@ -52,8 +52,10 @@ jobs:
         run: bash infra/scripts/release.sh tag "${TAG#v}" "sha-$(git rev-parse --short=7 HEAD)"
       - name: Release bundle
         run: |
-          # What a host needs to deploy (production-bringup.md); never infra/env/<env>/ (overlays, secrets).
-          tar czf "12id-bundle-${TAG#v}.tar.gz" infra/compose infra/env/template.env infra/scripts infra/systemd infra/runbooks
+          # What a host needs to deploy (infra/self-host.md); never infra/env/<env>/ (overlays, secrets).
+          # infra/compose carries release.env's inputs too: third-party.images and secrets.list (implement/28 Q1).
+          tar czf "12id-bundle-${TAG#v}.tar.gz" infra/compose infra/env/template.env infra/scripts infra/systemd \
+            infra/runbooks infra/self-host.md
           cp infra/compose/release.env "release-${TAG#v}.env"
       - name: GitHub release
         env:

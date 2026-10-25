@@ -19,6 +19,9 @@ repo="$(git -C "$(dirname "$0")" rev-parse --show-toplevel 2>/dev/null || (cd "$
 REGISTRY="${REGISTRY:-ghcr.io/nazihar}"
 RELEASE_FILE="${RELEASE_FILE:-$repo/infra/compose/release.env}"
 BUILD_FILE="$repo/infra/build/compose.build.yml"
+# The third-party images (implement/28 Q1.1): appended to release.env as they are, so that one file names
+# everything a deploy runs and the offline kit rewrites registry prefixes in one place.
+THIRD_PARTY="$repo/infra/compose/third-party.images"
 IMAGES=(services console console-tools mediator mediator-migrate caddy vdr-proxy ledger-tools ledger-ceremony)
 
 digest_var() { printf '%s_DIGEST' "$(printf '%s' "$1" | tr 'a-z-' 'A-Z_')"; }
@@ -32,6 +35,8 @@ write_release() { # version revision; digests in the associative array `digests`
     for name in "${IMAGES[@]}"; do
       echo "$(digest_var "$name")=${digests[$name]}"
     done
+    echo "# Third-party images (infra/compose/third-party.images)."
+    grep -E '^[A-Z][A-Z0-9_]*_IMAGE=[^[:space:]]+@sha256:[0-9a-f]{64}$' "$THIRD_PARTY"
   } > "$RELEASE_FILE"
   echo "wrote $RELEASE_FILE"
 }

@@ -34,7 +34,7 @@ import { AskarModule, AskarStoreDuplicateError } from '@credo-ts/askar'
 import { Agent, DidsModule, LogLevel, TypedArrayEncoder } from '@credo-ts/core'
 import { IndyVdrIndyDidResolver, IndyVdrModule, IndyVdrPoolService } from '@credo-ts/indy-vdr'
 import { agentDependencies } from '@credo-ts/node'
-import { CustomRequest, GetNymRequest, NymRequest } from '@hyperledger/indy-vdr-nodejs'
+import { CustomRequest, GetNymRequest, GetTransactionAuthorAgreementRequest, NymRequest } from '@hyperledger/indy-vdr-nodejs'
 
 import { env, readSeedFromStdin, signerFromSeed, type IndySigner } from './indy-keys.ts'
 import { PlainLogger } from './logger.ts'
@@ -138,6 +138,20 @@ async function writeNymAsTrustee(options: { dest: string; verkey: string; alias:
   }
 }
 
+/**
+ * Our writes carry no transaction author agreement acceptance: our own network has none (18-phase-9
+ * decisions), and an existing network that has one is not supported (implement/28). Say so before writing,
+ * instead of a refused NYM later. An empty text means a retired agreement.
+ */
+async function refuseTaa() {
+  const pool = agent.dependencyManager.resolve(IndyVdrPoolService).getPoolForNamespace(namespace)
+  const response = await pool.submitRequest(new GetTransactionAuthorAgreementRequest({}))
+  const taa = (response.result as { data?: { text?: string; version?: string } | null }).data
+  if (taa?.text) {
+    throw new Error(`this ledger has a transaction author agreement (version ${taa.version}); writing under one is not supported`)
+  }
+}
+
 async function waitForNym(nym: string, timeoutMs = 60_000): Promise<NymData> {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
@@ -164,6 +178,7 @@ async function run() {
       throw new Error(`the seed on stdin is not a trustee of this ledger (${trustee.nym}: role ${onLedger?.role ?? 'none'})`)
     }
     console.log(`signing as trustee ${trustee.nym}`)
+    await refuseTaa()
   }
 
   const prefix = `did:indy:${namespace}:`

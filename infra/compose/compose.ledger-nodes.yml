@@ -8,6 +8,8 @@
 # Networking (replaces staging's hairpin and DOCKER-USER rules, 6-phase-1-findings W1):
 #   - node_ip: each validator has a fixed address on the private 12id-ledger network, and that address
 #     is what the genesis advertises for validator-to-validator traffic. Node ports are never published.
+#     The network is LEDGER_SUBNET_PREFIX.0/24 (default 192.168.97, implement/28 Q1.3), validators .11–.14:
+#     pick a range the host's own networks do not use, before the ceremony writes it into the genesis.
 #   - client_ip: the VM's public IP (PUBLIC_IP) in the genesis; the client ports 9702/9704/9706/9708
 #     are published on all interfaces on purpose, because phones read the ledger there.
 # The addresses and ports below are written into the genesis by the ceremony (compose.ledger.yml);
@@ -20,8 +22,8 @@
 name: ledger-nodes
 
 x-node: &node
-  # The upstream project publishes only moving `-main` tags, so the digest is the version (1.13.2, Debian 12).
-  image: ghcr.io/hyperledger-indy/indy-node-container/indy_node:1.13.2-debian12-main@sha256:d1f7d24fda5cfd1e20eed657a3deefe051280336c86a261070b9219a61c42ebe
+  # The official indy_node image, from release.env (third-party.images, implement/28 Q1.1), pinned by digest.
+  image: ${INDY_NODE_IMAGE:?release.env}
   restart: unless-stopped
   # tini as PID 1, so the healthcheck below can end a hung node and the restart policy brings it back.
   init: true
@@ -72,7 +74,7 @@ services:
       NETWORK_NAME: ${LEDGER_NETWORK_NAME:?env file}
       NODE_COUNT: '4'
       # The fixed addresses below, on 12id-ledger.
-      NODE_IPS: 192.168.97.11,192.168.97.12,192.168.97.13,192.168.97.14
+      NODE_IPS: ${LEDGER_SUBNET_PREFIX:-192.168.97}.11,${LEDGER_SUBNET_PREFIX:-192.168.97}.12,${LEDGER_SUBNET_PREFIX:-192.168.97}.13,${LEDGER_SUBNET_PREFIX:-192.168.97}.14
       # What phones and agents connect to: the public IP, unless the env file lists one per validator.
       CLIENT_IPS: ${LEDGER_CLIENT_IPS:-${PUBLIC_IP:?env file}}
       PORT_BASE: '9701'
@@ -101,7 +103,7 @@ services:
       - node1-log:/var/log/indy
     networks:
       ledger:
-        ipv4_address: 192.168.97.11
+        ipv4_address: ${LEDGER_SUBNET_PREFIX:-192.168.97}.11
 
   node2:
     <<: *node
@@ -117,7 +119,7 @@ services:
       - node2-log:/var/log/indy
     networks:
       ledger:
-        ipv4_address: 192.168.97.12
+        ipv4_address: ${LEDGER_SUBNET_PREFIX:-192.168.97}.12
 
   node3:
     <<: *node
@@ -133,7 +135,7 @@ services:
       - node3-log:/var/log/indy
     networks:
       ledger:
-        ipv4_address: 192.168.97.13
+        ipv4_address: ${LEDGER_SUBNET_PREFIX:-192.168.97}.13
 
   node4:
     <<: *node
@@ -149,14 +151,14 @@ services:
       - node4-log:/var/log/indy
     networks:
       ledger:
-        ipv4_address: 192.168.97.14
+        ipv4_address: ${LEDGER_SUBNET_PREFIX:-192.168.97}.14
 
 networks:
   ledger:
     name: 12id-ledger
     ipam:
       config:
-        - subnet: 192.168.97.0/24
+        - subnet: ${LEDGER_SUBNET_PREFIX:-192.168.97}.0/24
 
 # Named, so backups and drills find them. The data volumes hold the ledger and the node keys: they are
 # backed up (backup-postgres.sh) and are part of the DR drill.

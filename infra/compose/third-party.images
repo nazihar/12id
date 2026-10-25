@@ -1,0 +1,22 @@
+# Third-party images of the release bundle (implement/28 Q1.1), one NAME_IMAGE=repo:tag@sha256:… per line.
+# infra/scripts/release.sh appends these lines to the release.env it writes, so release.env names every
+# image a deploy runs: ours and these. The compose files and backup-postgres.sh read them from there.
+# The offline kit (offline-kit.sh) copies each one and rewrites only the registry prefix; the digests stay.
+#
+# Pinned by digest (Phase 9 M17): the digests staging ran on 2026-09-29. The digest is the version; the tag
+# is only for people. Change a line here, never an image line in a compose file.
+POSTGRES_IMAGE=postgres:15-alpine@sha256:fe0737ba566a2c5b2a28f34433c0a423261900ec17b9bf7ad115e1aae7e57f1b
+VALKEY_IMAGE=valkey/valkey:8-alpine@sha256:d2e18f3410b6f616de1417f570fa55261af2898b9c5b2cfb6781ce2373ea43d1
+# The upstream project publishes only moving `-main` tags (1.13.2, Debian 12).
+INDY_NODE_IMAGE=ghcr.io/hyperledger-indy/indy-node-container/indy_node:1.13.2-debian12-main@sha256:d1f7d24fda5cfd1e20eed657a3deefe051280336c86a261070b9219a61c42ebe
+# The mediator stack's debugging webhook sink (profile debug).
+NODE_IMAGE=node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32
+# backup-postgres.sh reads the validators' volumes with it.
+ALPINE_IMAGE=alpine:3.22@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8
+PROMETHEUS_IMAGE=prom/prometheus:v3.14.0@sha256:5ce7540c3c00ef4ab0c9d2c995c6a5b9c421f44b4a115d97a2c7af3b1c21cbb0
+ALERTMANAGER_IMAGE=prom/alertmanager:v0.34.0@sha256:690c7b525f4367aa91f73e2f91c632206d32e97c6384bdbf2fb7a861b420340d
+GRAFANA_IMAGE=grafana/grafana-oss:13.0.2@sha256:5dad0df181cb644a14e13617b913b261a54f7d4fd4510721dba420929f35bea2
+NODE_EXPORTER_IMAGE=prom/node-exporter:v1.12.1@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0
+CADVISOR_IMAGE=ghcr.io/google/cadvisor:v0.60.5@sha256:763aecf1c32c2be8a1a75f9abfc2fc461005c9dbbaa39cb356b354aac1296dbe
+BLACKBOX_IMAGE=prom/blackbox-exporter:v0.28.0@sha256:e753ff9f3fc458d02cca5eddab5a77e1c175eee484a8925ac7d524f04366c2fc
+POSTGRES_EXPORTER_IMAGE=prometheuscommunity/postgres-exporter:v0.20.1@sha256:ac5ec343104fae0e2d84a27bb8d69b38430a11910c5382cad85d478d2bab713e

@@ -13,7 +13,7 @@
 # Phase 9 W2: secrets are files under /run/secrets, read natively (Grafana __FILE, the exporters'
 # DATA_SOURCE_PASS_FILE, Alertmanager's smtp_auth_password_file). The environment's hostnames reach
 # Prometheus and Alertmanager through `configs` below, which compose writes from infra/env/<env>.env.
-# Third-party images are pinned by digest (the ones staging ran on 2026-09-29).
+# Third-party images come from release.env (third-party.images, implement/28 Q1.1), pinned by digest.
 #
 # Everything listens on 127.0.0.1: Docker-published ports bypass ufw. Reach Prometheus (:9090),
 # Alertmanager (:9093) and, in production, Grafana (:3300) over an SSH tunnel; staging also serves
@@ -26,8 +26,13 @@ x-secret-reader: &secret-reader
   labels:
     io.12id.secrets-rev: ${SECRETS_REV:?run through deploy.sh}
 
+# A private CA behind the edge (EDGE_CA_FILE, implement/28 Q1.2): blackbox probes the environment's own
+# hostnames and Alertmanager may mail through an SMTP server with the same CA. Both are Go programs, which
+# add every certificate in SSL_CERT_DIR to the system's; unset, the directory holds an empty /dev/null.
+x-edge-ca: &edge-ca ${EDGE_CA_FILE:-/dev/null}:/etc/12id-ca/ca.pem:ro
+
 x-exporter: &exporter
-  image: prometheuscommunity/postgres-exporter:v0.20.1@sha256:ac5ec343104fae0e2d84a27bb8d69b38430a11910c5382cad85d478d2bab713e
+  image: ${POSTGRES_EXPORTER_IMAGE:?release.env}
   <<: *secret-reader
   restart: unless-stopped
   mem_limit: 64m
@@ -40,7 +45,7 @@ x-exporter-env: &exporter-env
 
 services:
   prometheus:
-    image: prom/prometheus:v3.14.0@sha256:5ce7540c3c00ef4ab0c9d2c995c6a5b9c421f44b4a115d97a2c7af3b1c21cbb0
+    image: ${PROMETHEUS_IMAGE:?release.env}
     network_mode: host
     restart: unless-stopped
     mem_limit: 512m
@@ -64,7 +69,7 @@ services:
       - prometheus-data:/prometheus
 
   alertmanager:
-    image: prom/alertmanager:v0.34.0@sha256:690c7b525f4367aa91f73e2f91c632206d32e97c6384bdbf2fb7a861b420340d
+    image: ${ALERTMANAGER_IMAGE:?release.env}
     <<: *secret-reader
     network_mode: host
     restart: unless-stopped
@@ -79,11 +84,14 @@ services:
         target: /etc/alertmanager/alertmanager.yml
     # Alertmanager reads the secret files itself (smtp_auth_password_file, credentials_file); no entrypoint trick.
     secrets: [GMAIL_APP_PASSWORD, ALERT_WEBHOOK_SECRET]
+    environment:
+      SSL_CERT_DIR: /etc/12id-ca
     volumes:
       - alertmanager-data:/alertmanager
+      - *edge-ca
 
   grafana:
-    image: grafana/grafana-oss:13.0.2@sha256:5dad0df181cb644a14e13617b913b261a54f7d4fd4510721dba420929f35bea2
+    image: ${GRAFANA_IMAGE:?release.env}
     <<: *secret-reader
     network_mode: host
     restart: unless-stopped
@@ -104,7 +112,7 @@ services:
       - grafana-data:/var/lib/grafana
 
   node-exporter:
-    image: prom/node-exporter:v1.12.1@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0
+    image: ${NODE_EXPORTER_IMAGE:?release.env}
     network_mode: host
     pid: host
     restart: unless-stopped
@@ -120,7 +128,7 @@ services:
       - ${METRICS_DIR:?run through deploy.sh}:/textfile:ro
 
   cadvisor:
-    image: ghcr.io/google/cadvisor:v0.60.5@sha256:763aecf1c32c2be8a1a75f9abfc2fc461005c9dbbaa39cb356b354aac1296dbe
+    image: ${CADVISOR_IMAGE:?release.env}
     network_mode: host
     restart: unless-stopped
     # 256m was too small: it sat at the cap, scrapes timed out (up ~7% of 12 h) and it burned CPU (2026-09-21).
@@ -138,13 +146,16 @@ services:
       - /dev/disk/:/dev/disk:ro
 
   blackbox:
-    image: prom/blackbox-exporter:v0.28.0@sha256:e753ff9f3fc458d02cca5eddab5a77e1c175eee484a8925ac7d524f04366c2fc
+    image: ${BLACKBOX_IMAGE:?release.env}
     network_mode: host
     restart: unless-stopped
     mem_limit: 64m
     command: ['--config.file=/etc/blackbox/blackbox.yml', '--web.listen-address=127.0.0.1:9115']
+    environment:
+      SSL_CERT_DIR: /etc/12id-ca
     volumes:
       - ./monitoring/blackbox.yml:/etc/blackbox/blackbox.yml:ro
+      - *edge-ca
 
   # Mediator pickup-queue metrics from the message_pickup database.
   postgres-exporter:
@@ -233,13 +244,11 @@ configs:
           # Phase 4 console liveness.
           - https://${CONSOLE_HOST:?env file}/api/health
 
+  # The validators' client ports as the genesis advertises them. Our own network: the four ports on PUBLIC_IP.
+  # An existing network: LEDGER_CLIENT_TARGETS, comma-separated host:port (init.sh writes it from the genesis).
   indy-client-targets:
     content: |
-      - targets:
-          - ${PUBLIC_IP:?env file}:9702
-          - ${PUBLIC_IP}:9704
-          - ${PUBLIC_IP}:9706
-          - ${PUBLIC_IP}:9708
+      - targets: [${LEDGER_CLIENT_TARGETS:-${PUBLIC_IP:?env file}:9702, ${PUBLIC_IP}:9704, ${PUBLIC_IP}:9706, ${PUBLIC_IP}:9708}]
 
   alertmanager:
     content: |

@@ -1295,6 +1295,8 @@ The console (`console/`) uses Better Auth with the organization (tenant membersh
 
 ### 12.15 SaaS and self-hosting — decided: both, console self-host-ready first (new, Phase 4)
 
+*Self-host packaging started 2026-10-25 ([`28-on-prem-delivery.md`](28-on-prem-delivery.md), MTB theme Q): `infra/scripts/init.sh` (first-time setup in one guided run, own ledger or an existing one), a signed offline kit (`offline-kit.sh`), per-customer pull tokens, `EDGE_TLS=acme|files` with a private CA trusted inside the containers, and `infra/self-host.md`. Evidence: [`29-on-prem-delivery-findings.md`](29-on-prem-delivery-findings.md).*
+
 The product is offered as SaaS and will also be self-hostable by an organization. That is why the console has two roles (operators across tenants for us or a self-hoster's admins; tenant members for SaaS customers). Phase 4 keeps the console free of dependencies a self-hoster cannot have (no Google allowlist, no fixed IPs, everything configured by environment, mail through any SMTP). Packaging the whole stack (ledger, patched mediator, endorser, genesis signing, upgrades) for self-hosters is a later phase.
 
 ### 12.16 Android SDK naming and distribution — decided: `com.12id` / `com.onetwoid`, GitHub Pages Maven repository at `maven.12id.com` (new, Phase 5; distribution settled 2026-09-30)

@@ -100,12 +100,16 @@ groups:
           summary: 'Indy client port {{ $labels.instance }} is not answering'
 
       - alert: LedgerBelowConsensusReachability
-        expr: sum(probe_success{job="blackbox-indy-client"}) < 3
+        # n - f of n validators (n = 3f + 1): 3 of 4 on our own network, any n on an existing one (implement/28).
+        expr: >-
+          sum(probe_success{job="blackbox-indy-client"})
+            < count(probe_success{job="blackbox-indy-client"})
+              - floor((count(probe_success{job="blackbox-indy-client"}) - 1) / 3)
         for: 2m
         labels:
           severity: critical
         annotations:
-          summary: 'Fewer than 3 of 4 validator client ports answer'
+          summary: 'Fewer validator client ports answer than consensus needs'
           description: >-
             Port reachability only. Consensus has failed with all four ports open (findings W1);
             LedgerWriteProbeFailing is the alert that detects that.

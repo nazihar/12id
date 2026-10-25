@@ -1,0 +1,49 @@
+# Checks for the release bundle (implement/28 Q1): secrets.list against the compose files, the scripts'
+# syntax, and that every stack's compose file renders with an environment file and release.env.
+# Pushes to master and PRs that touch infra/.
+name: ci-infra
+
+on:
+  push:
+    branches: [master]
+    paths: ['infra/compose/**', 'infra/scripts/**', 'infra/env/**', '.github/workflows/ci-infra.yml']
+  pull_request:
+    paths: ['infra/compose/**', 'infra/scripts/**', 'infra/env/**', '.github/workflows/ci-infra.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: secrets.list matches the compose files
+        run: bash infra/scripts/check-secrets-list.sh
+      - name: Script syntax
+        run: |
+          for f in infra/scripts/*.sh; do bash -n "$f"; done
+          # shellcheck is on the runner image; errors only (style findings do not block).
+          shellcheck -S error infra/scripts/*.sh
+      - name: Every stack renders
+        env:
+          RUN_SECRETS: /opt/12id/run-secrets
+          SECRETS_GID: '12000'
+          SECRETS_REV: ci
+          ENV_DIR: /opt/12id/infra/env/staging
+          GENESIS_DIR: /opt/12id/genesis
+          METRICS_DIR: /opt/12id/metrics
+          # compose.ledger-nodes.yml is production-only; staging.env has no network name.
+          LEDGER_NETWORK_NAME: ci
+        run: |
+          for f in infra/compose/compose.*.yml; do
+            docker compose --project-directory infra/compose -f "$f" \
+              --env-file infra/env/staging.env --env-file infra/compose/release.env config --quiet
+            echo "ok $f"
+          done

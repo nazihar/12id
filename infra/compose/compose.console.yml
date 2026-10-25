@@ -63,8 +63,14 @@ services:
     mem_limit: 512m
     stop_grace_period: 20s
     # Without SMTP_URL the console itself refuses to start ("SMTP_URL: required in production").
-    environment: *console-env
+    environment:
+      <<: *console-env
+      # A private CA (EDGE_CA_FILE, implement/28 Q1.2): an SMTP server inside the organisation often
+      # carries its own CA. Unset, /dev/null is mounted and Node is not told about it.
+      NODE_EXTRA_CA_CERTS: ${EDGE_CA_FILE:+/etc/12id-ca/ca.pem}
     secrets: *console-secrets
+    volumes:
+      - ${EDGE_CA_FILE:-/dev/null}:/etc/12id-ca/ca.pem:ro
     ports:
       - '127.0.0.1:3600:3600'
     networks: [agent]

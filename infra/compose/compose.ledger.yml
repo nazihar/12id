@@ -21,7 +21,12 @@ name: ledger
 
 x-image: &image ${REGISTRY:?release.env}/12id-ledger-tools:${VERSION:?release.env}@${LEDGER_TOOLS_DIGEST:?release.env}
 
+# A private CA behind the edge (EDGE_CA_FILE, implement/28 Q1.2): the genesis is fetched through the edge.
+# Unset, /dev/null is mounted and Node is not told about it.
+x-edge-ca: &edge-ca ${EDGE_CA_FILE:-/dev/null}:/etc/12id-ca/ca.pem:ro
+
 x-genesis-env: &genesis-env
+  NODE_EXTRA_CA_CERTS: ${EDGE_CA_FILE:+/etc/12id-ca/ca.pem}
   # The same signed, published genesis the SDK uses, not a validator's own copy.
   GENESIS_URL: https://${GENESIS_HOST:?env file}/${GENESIS_VERSION:?env file}/pool_transactions_genesis
   GENESIS_SHA256: ${GENESIS_SHA256:?env file}
@@ -51,6 +56,7 @@ services:
       LEDGER_PROBE_SEED_FILE: /run/secrets/LEDGER_PROBE_SEED
       LOG_LEVEL: info
     secrets: [ENDORSER_ASKAR_STORE_KEY, ENDORSER_DB_PASSWORD, LEDGER_PROBE_SEED]
+    volumes: [*edge-ca]
     networks: [endorser]
 
   # Consensus probe (src/write-probe.ts): one attribute write on the probe's own DID, read back.
@@ -66,6 +72,7 @@ services:
     secrets: [LEDGER_PROBE_SEED]
     volumes:
       - ${METRICS_DIR:?run through deploy.sh}:/metrics
+      - *edge-ca
 
 secrets:
   ENDORSER_ASKAR_STORE_KEY:

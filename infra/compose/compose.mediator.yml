@@ -112,8 +112,8 @@ x-mediator-secrets: &mediator-secrets
 
 services:
   postgres:
-    # Base images pinned by digest (Phase 9 M17): the digest staging ran on 2026-09-29.
-    image: postgres:15-alpine@sha256:fe0737ba566a2c5b2a28f34433c0a423261900ec17b9bf7ad115e1aae7e57f1b
+    # Third-party images come from release.env (third-party.images, implement/28 Q1.1), pinned by digest.
+    image: ${POSTGRES_IMAGE:?release.env}
     restart: unless-stopped
     mem_limit: 1g
     environment:
@@ -133,7 +133,7 @@ services:
       retries: 20
 
   valkey:
-    image: valkey/valkey:8-alpine@sha256:d2e18f3410b6f616de1417f570fa55261af2898b9c5b2cfb6781ce2373ea43d1
+    image: ${VALKEY_IMAGE:?release.env}
     restart: unless-stopped
     mem_limit: 256m
     # Only Credo's cache lives here: multi-instance delivery is `none`, so no Redis streams carry
@@ -215,7 +215,7 @@ services:
   # mediator on its first start. The directory is mounted, not the file: a single-file bind mount
   # keeps a stale inode after a tree sync (4-init trap 50).
   mediator-indexes:
-    image: postgres:15-alpine@sha256:fe0737ba566a2c5b2a28f34433c0a423261900ec17b9bf7ad115e1aae7e57f1b
+    image: ${POSTGRES_IMAGE:?release.env}
     restart: 'no'
     environment:
       PGHOST: postgres
@@ -255,7 +255,7 @@ services:
   # then point MEDIATOR_WEBHOOK_URL at http://webhook-sink:8080/mediator, and stop it afterwards.
   webhook-sink:
     profiles: [debug]
-    image: node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32
+    image: ${NODE_IMAGE:?release.env}
     restart: 'no'
     mem_limit: 64m
     command:

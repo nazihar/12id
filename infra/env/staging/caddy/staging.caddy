@@ -5,6 +5,7 @@
 # von-network ledger browser (W2).
 ledger.12id.naziharitsolution.com {
 	import hardening
+	import tls_{$EDGE_TLS}
 
 	# /register writes NYMs with any role, ENDORSER included, and has no authentication.
 	# Bootstrap scripts call it on the VM at 127.0.0.1:9000, never through this host.
@@ -18,6 +19,7 @@ ledger.12id.naziharitsolution.com {
 # tunnel to 127.0.0.1:9090 and :9093.
 grafana.12id.naziharitsolution.com {
 	import hardening
+	import tls_{$EDGE_TLS}
 
 	reverse_proxy 127.0.0.1:3300
 }
@@ -28,6 +30,7 @@ grafana.12id.naziharitsolution.com {
 # The app and the platform's webhooks both arrive here.
 demo.12id.naziharitsolution.com {
 	import hardening
+	import tls_{$EDGE_TLS}
 
 	import per_ip_limit demo_per_ip 300 1m
 	request_body {
@@ -41,6 +44,7 @@ demo.12id.naziharitsolution.com {
 # smoke run is in progress (502 otherwise). The mediator and phones must both reach it.
 smoke-issuer.12id.naziharitsolution.com {
 	import hardening
+	import tls_{$EDGE_TLS}
 
 	reverse_proxy 127.0.0.1:3200
 }

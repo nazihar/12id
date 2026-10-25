@@ -29,7 +29,12 @@ x-secret-reader: &secret-reader
   labels:
     io.12id.secrets-rev: ${SECRETS_REV:?run through deploy.sh}
 
+# A private CA (EDGE_CA_FILE, implement/28 Q1.2): customer webhook endpoints inside the same organisation
+# often carry its own CA. Unset, /dev/null is mounted and Node is not told about it.
+x-edge-ca: &edge-ca ${EDGE_CA_FILE:-/dev/null}:/etc/12id-ca/ca.pem:ro
+
 x-platform-env: &platform-env
+  NODE_EXTRA_CA_CERTS: ${EDGE_CA_FILE:+/etc/12id-ca/ca.pem}
   LOG_LEVEL: ${PLATFORM_LOG_LEVEL:-info}
   HOST: 0.0.0.0
   PORT: "3500"
@@ -96,6 +101,7 @@ services:
     command: ['platform-api/src/provision.ts']
     environment: *platform-env
     secrets: *platform-secrets
+    volumes: [*edge-ca]
     mem_limit: 256m
     networks: [agent, mediator]
 
@@ -109,6 +115,7 @@ services:
     stop_grace_period: 30s
     environment: *platform-env
     secrets: *platform-secrets
+    volumes: [*edge-ca]
     ports:
       - '127.0.0.1:3500:3500'
     networks: [agent, mediator, biometric]

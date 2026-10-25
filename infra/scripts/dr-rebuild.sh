@@ -8,7 +8,7 @@
 #
 #   prep      /opt/12id from REPO, a new host age key, every sops file re-keyed to it with the offline key, the
 #             genesis from the backup. REHEARSAL=1 (no public DNS/ACME on the host): the environment's hostnames
-#             point at 127.0.0.1 and Caddy issues its own certificates (local_certs).
+#             point at 127.0.0.1 and Caddy issues its own certificates (EDGE_TLS=internal).
 #   restore   the two Postgres instances, roles, every dump of the newest backup, roles again
 #   deploy    every stack in the bring-up order (the host needs a GHCR read login first)
 #   check     health, row counts, edge probes
@@ -46,8 +46,8 @@ stage_prep() {
     for h in CONSOLE_HOST API_HOST AGENT_HOST MEDIATOR_HOST GENESIS_HOST VDR_HOST; do hosts+=" $(setting $h)"; done
     for h in $hosts; do sed -i "/[[:space:]]$h\([[:space:]]\|$\)/d" /etc/hosts; done
     echo "127.0.0.1$hosts" >> /etc/hosts
-    sed -i 's/^\temail {\$ACME_EMAIL}$/\temail {$ACME_EMAIL}\n\tlocal_certs/' "$R/infra/compose/caddy/Caddyfile"
-    echo "rehearsal: hostnames on 127.0.0.1, Caddy local_certs"
+    sed -i '/^EDGE_TLS=/d' "$R/infra/env/$ENV.env" && echo 'EDGE_TLS=internal' >> "$R/infra/env/$ENV.env"
+    echo "rehearsal: hostnames on 127.0.0.1, Caddy's own CA (EDGE_TLS=internal)"
   fi
 }
 

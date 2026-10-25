@@ -30,8 +30,8 @@ KEEP_DAYS="${KEEP_DAYS:-7}"
 GENESIS_DIR="${GENESIS_DIR:-$ROOT/genesis}"
 DEPLOY="$ROOT/infra/scripts/deploy.sh"
 OFFLINE_RECIPIENTS="$ROOT/infra/env/$ENV/backup-recipients.txt"
-# Only for reading the validators' volumes; pinned like every base image (Phase 9 M17).
-ALPINE=alpine:3.22@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8
+# Only for reading the validators' volumes; from release.env, pinned like every image (implement/28 Q1.1).
+ALPINE="$(sed -n 's/^ALPINE_IMAGE=//p' "${RELEASE_FILE:-$ROOT/infra/compose/release.env}" | tail -1)"
 export ENV
 
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -74,6 +74,7 @@ fi
 for n in 1 2 3 4; do
   volume="12id-ledger-node$n-data"
   docker volume inspect "$volume" > /dev/null 2>&1 || continue
+  [ -n "$ALPINE" ] || { echo "ALPINE_IMAGE is missing from release.env; cannot back up $volume" >&2; exit 1; }
   docker run --rm --network none -v "$volume:/data:ro" "$ALPINE" tar -C /data -czf - . | encrypt "ledger-node$n.tar.gz.age"
   check_size "ledger-node$n.tar.gz.age"
 done

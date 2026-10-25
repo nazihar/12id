@@ -1,5 +1,10 @@
 # Runbook: the ledger ceremony (our own Indy network)
 
+> **Since implement/28 (platform 0.11.0): `infra/scripts/init.sh ledger new` runs the steps below** (and
+> `init.sh endorser` the trustee bootstrap), stopping where a person must act. This runbook stays the
+> reference for what the ceremony creates and why. The validators' subnet is `LEDGER_SUBNET_PREFIX` (default
+> `192.168.97`), not a fixed one.
+
 **Applies to:** production (`compose.ledger-nodes.yml`, owner decision 2026-09-28, `18-phase-9-production.md` W2.5).
 Staging keeps von-network (`17-phase-7.md` L16). Rehearsed locally on 2026-09-29 (`19-phase-9-production-findings.md` W2).
 

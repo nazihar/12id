@@ -19,7 +19,10 @@ services:
     restart: unless-stopped
     mem_limit: 128m
     environment:
-      ACME_EMAIL: ${ACME_EMAIL:?env file}
+      # Certificates (caddy/Caddyfile, implement/28 Q1.2): acme (Let's Encrypt, ACME_EMAIL is its account
+      # mail), files (the operator's own, from EDGE_TLS_DIR) or internal (rehearsals only).
+      EDGE_TLS: ${EDGE_TLS:-acme}
+      ACME_EMAIL: ${ACME_EMAIL:-}
       EDGE_RATE_LIMIT_EXEMPT: ${EDGE_RATE_LIMIT_EXEMPT:?env file}
       # Requests per 10 s from one address to the mediator and to the agent's DIDComm endpoint; an
       # environment overrides them in its env file (template.env).
@@ -39,6 +42,8 @@ services:
       - ${ENV_DIR:?run through deploy.sh}/caddy:/etc/caddy-sites:ro
       # Published genesis versions, outside the code tree so a tree sync never touches them.
       - ${GENESIS_DIR:?run through deploy.sh}:/srv/genesis:ro
+      # EDGE_TLS=files: fullchain.pem and privkey.pem (one certificate for every hostname). Unused otherwise.
+      - ${EDGE_TLS_DIR:-/opt/12id/tls}:/etc/12id-tls:ro
       - caddy-data:/data
       - caddy-config:/config
 

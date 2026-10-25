@@ -31,7 +31,13 @@ x-secret-reader: &secret-reader
   labels:
     io.12id.secrets-rev: ${SECRETS_REV:?run through deploy.sh}
 
+# A private CA behind the edge (EDGE_CA_FILE, implement/28 Q1.2): these services call the environment's own
+# hostnames (the genesis, the mediator's endpoint), so they must trust the CA the edge's certificate comes from.
+# Unset, /dev/null is mounted and Node is not told about it.
+x-edge-ca: &edge-ca ${EDGE_CA_FILE:-/dev/null}:/etc/12id-ca/ca.pem:ro
+
 x-ledger-env: &ledger-env
+  NODE_EXTRA_CA_CERTS: ${EDGE_CA_FILE:+/etc/12id-ca/ca.pem}
   INDY_NAMESPACE: ${INDY_NAMESPACE:?env file}
   GENESIS_URL: https://${GENESIS_HOST:?env file}/${GENESIS_VERSION:?env file}/pool_transactions_genesis
   GENESIS_SHA256: ${GENESIS_SHA256:?env file}
@@ -88,8 +94,8 @@ x-endorser-secrets: &endorser-secrets [ENDORSER_ASKAR_STORE_KEY, ENDORSER_DB_PAS
 
 services:
   agent-postgres:
-    # Pinned by digest (Phase 9 M17): the digest staging ran on 2026-09-29.
-    image: postgres:15-alpine@sha256:fe0737ba566a2c5b2a28f34433c0a423261900ec17b9bf7ad115e1aae7e57f1b
+    # From release.env (third-party.images, implement/28 Q1.1), pinned by digest.
+    image: ${POSTGRES_IMAGE:?release.env}
     restart: unless-stopped
     mem_limit: 1g
     environment:
@@ -120,6 +126,7 @@ services:
       POSTGRES_ADMIN_USER: postgres
       POSTGRES_ADMIN_PASSWORD_FILE: /run/secrets/AGENT_POSTGRES_PASSWORD
     secrets: [PLATFORM_AGENT_TOKEN, AGENT_ASKAR_STORE_KEY, AGENT_SERVICE_DB_PASSWORD, AGENT_ENDORSER_TOKEN, AGENT_POSTGRES_PASSWORD]
+    volumes: [*edge-ca]
     mem_limit: 512m
     depends_on:
       agent-postgres:
@@ -132,6 +139,7 @@ services:
     command: ['endorser-service/src/provision.ts']
     environment: *endorser-env
     secrets: *endorser-secrets
+    volumes: [*edge-ca]
     mem_limit: 256m
     networks: [endorser]
     depends_on:
@@ -146,6 +154,7 @@ services:
     mem_limit: 384m
     environment: *endorser-env
     secrets: *endorser-secrets
+    volumes: [*edge-ca]
     # Not published anywhere. Only on 12id-endorser, shared with agent-service and agent-postgres:
     # platform-api, the console and the mediator cannot resolve it (Phase 7 H2).
     networks: [endorser]
@@ -169,6 +178,7 @@ services:
     stop_grace_period: 30s
     environment: *agent-env
     secrets: *agent-secrets
+    volumes: [*edge-ca]
     networks: [default, endorser]
     ports:
       - '127.0.0.1:3400:3400'

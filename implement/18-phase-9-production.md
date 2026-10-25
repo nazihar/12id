@@ -360,6 +360,10 @@ The plan as written:
 - Publish the API docs (`services/platform-api/docs/api.md`, `openapi.json` at `api.12id.com`) and the SDK integration guides.
 
 ### Later phase — Self-host packaging (§12.15; not in the go-live gate)
+> **Started 2026-10-25 as [`28-on-prem-delivery.md`](28-on-prem-delivery.md) (MTB theme Q).** Changed from the
+> text below: `init` is a host script (`infra/scripts/init.sh`), not a command in the `ledger-tools` image; it
+> also scripts W5 (`runbooks/production-bringup.md`). Image access: per-customer pull tokens, or a signed offline kit.
+
 - An `init` command in the `ledger-tools` image does first-time setup in one guided run:
   - generate every secret into the run-secrets layout;
   - run the ledger ceremony, or take an existing genesis plus a trustee or endorser;
