@@ -81,6 +81,34 @@ the SDK and the AWS add-on. A first version listed test libraries (`mockwebserve
 applies only to the task before it, so `:sdk:dependencies` had printed every configuration. Fixed; the published
 POMs never had them.
 
+## Q4: a customer's pull token (2026-10-27)
+The owner created the test machine account `Rahman-Sohanur`, gave it **Read on `12id-caddy` only** (Package settings →
+Manage access) and a classic `read:packages` token. On the `12id-init` host, in a throwaway Docker config:
+`Login Succeeded`; `12id-caddy@sha256:fed1e6bf…` (rc.1) **pulled**; `12id-services@sha256:becb2cbc…`
+**refused** (`permission_denied: read_package`). So a personal account's packages do take a collaborator with
+Read, per package; no organisation is needed. Owed: the pull fails after the access is removed.
+
+## Q5: SDK 0.3.0 (2026-10-27)
+The release key for kits exists (owner, key id `831CF2B84B3533FA`, `infra/12id-release.pub`).
+
+**Found on the phone, fixed: a proof request over several credential definitions matched only the last one (fork
+change F11).** `smoke:sdk-biometric-android` (mock) failed twice at step 5: the face check passed, then the sample
+logged `no selection` and the proof never finished. The smoke reused `CRED_DEF_ID` `…:CL:2415`, and its template
+accepts every version of `smoke-sdk-biometric` (eight definitions, oldest first); the runs that passed before had
+each used the newest one. The fork's `queryFromRestrictions` wrote every restriction into one tag map, so each
+overwrote the one before and only the last was searched; AnonCreds restrictions are alternatives. Upstream code,
+in every SDK release so far, and it defeats schema versioning (4-init §5.1): a holder of an older version could
+not answer. Fixed with one clause per restriction joined by Askar's `$or` (`AnoncredsService.credentialQuery`,
+`CredentialQueryTest` 4 new tests).
+
+| Check (Xiaomi, Android 14, staging on `0.11.0-rc.1`, sample on `master`) | Result |
+|---|---|
+| Fork / SDK unit tests, `apiCheck` | 20/20 / 86/86, clean |
+| `smoke:sdk-android`, before the fix | **PASSED** (all steps; genesis signature with staging's key) |
+| `smoke:sdk-biometric-android` (mock), before the fix | FAILED 10/10 at step 5, twice (above) |
+| `smoke:sdk-biometric-android` (mock), with F11 | **PASSED 12/12**: the proof answered with the credential of the older definition |
+| `smoke:sdk-android`, with F11 | **PASSED** (all steps) |
+
 ## Q2: `init.sh` (2026-10-25, in progress)
 
 ### Test host

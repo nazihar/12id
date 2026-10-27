@@ -46,8 +46,10 @@ infra/scripts/offline-kit.sh build --release-env release-X.Y.Z.env --bundle 12id
   --maven <maven part, see the SDK section of self-host.md> --sign-key <12iD release minisign key> \
   --out 12id-offline-X.Y.Z
 ```
-- The release key is the owner's, kept offline; its public key goes to the customer **separately from the kit**
-  (plan "Owner actions").
+- The release key is the owner's, kept offline (key id `831CF2B84B3533FA`, generated 2026-10-27). Its public key
+  is `infra/12id-release.pub`. It goes to the customer **separately from the kit** (a kit could carry a forged
+  one): read the key id and the `RW…` line to them on a call, or send it through another channel than the kit,
+  and they compare it with what they hold before `verify`.
 - The kit holds every image of the release for every platform it was published for. It is too large for a
   GitHub release asset; hand it over on a drive or through the customer's file transfer.
 - The customer checks it (`offline-kit.sh verify <kit> --pub <key>`) and loads it (`offline-kit.sh load <kit>`,

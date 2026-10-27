@@ -34,7 +34,7 @@ dependencyResolutionManagement {
 
 // app/build.gradle.kts
 dependencies {
-    implementation("com.12id:holder-sdk-android:0.2.2")
+    implementation("com.12id:holder-sdk-android:0.3.0")
 }
 android {
     splits { abi { isEnable = true; reset(); include("arm64-v8a", "armeabi-v7a", "x86_64"); isUniversalApk = false } }  // or an App Bundle
@@ -54,6 +54,7 @@ class MyApp : Application() {
                 apiBaseUrl = "https://api.12id.example",
                 walletTokenProvider = { myBackend.walletToken(installationId) },
                 label = "Acme Wallet",                       // what organisations see; fixed at first launch
+                genesisPublicKeys = listOf("RWQ…"),          // your 12id environment's genesis key; see below
                 logSink = { level, message, error -> Log.println(level.priority(), "12id", message) },
                 // minLogLevel = LogLevel.Debug,                // diagnosing only; see below
             ))
@@ -69,7 +70,8 @@ class MyApp : Application() {
   diagnosing, and never in a release build: framework debug lines carry proof-request contents,
   connection records and DID documents, and a sink usually ends up in a crash reporter.
 - `initialize` is idempotent and safe to call from anywhere; it opens the wallet, and on the first
-  launch creates it, fetches the ledger genesis (verified by checksum) and connects to the mediator.
+  launch creates it, fetches the ledger genesis (accepted only with a valid signature, below) and
+  connects to the mediator.
 - **Wallet token.** Your backend creates one wallet per app installation with `POST /v1/wallets`,
   sending the app's installation id (a UUID you generate once and keep) as `Idempotency-Key`, and
   returns `walletToken` to the app. **Keep the wallet id and the token on your backend** and return the
@@ -84,6 +86,59 @@ class MyApp : Application() {
   onboards again. A wallet *you* revoke loses its mediator connection 30 days later. After that the
   app can no longer receive messages, so call `reset()` and have its credentials issued again.
 - Observe `OneTwoId.state` (`Uninitialized`, `Initializing`, `Ready`, `Failed(error)`).
+
+## Genesis trust
+
+The genesis file tells the wallet which ledger nodes to trust. A wallet given a forged one would read a
+forged ledger, so the SDK accepts the file only when it is signed with a key your app names:
+
+- **`genesisPublicKeys` is required.** It takes one or more minisign public keys (the `RW…` line of a
+  `.pub` file); a genesis signed by any one of them is accepted. `initialize` refuses an empty or
+  malformed list with `InvalidConfiguration`.
+- Pass the keys of the 12id environment your app uses. 12iD gives you its environment's primary and
+  backup keys; a self-hosted platform's operator gives you theirs (`GENESIS_SIGNING_PUBLIC_KEY`, and a
+  backup key if they keep one). Name the backup key too: the platform can then sign with it at once if
+  the primary key is ever lost, without an app update.
+- The signature is checked on every start, also for a file cached earlier. The key and URL the platform
+  announces (`/v1/ledger`) are never trusted on their own.
+- A wrong or missing key shows as `Failed(LedgerUnavailable)`: "the genesis signature is not from a
+  trusted key".
+
+**A self-hosted platform with its own certificate authority.** If the platform's hostnames use
+certificates from the organisation's own CA (not a public one), the app must trust that CA, or no
+connection succeeds. Add it to your app's network security config, scoped to those hostnames:
+
+```xml
+<!-- res/xml/network_security_config.xml -->
+<network-security-config>
+    <domain-config>
+        <domain includeSubdomains="true">bank.example</domain>
+        <trust-anchors>
+            <certificates src="@raw/bank_root_ca" />
+            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
+</network-security-config>
+```
+
+The SDK's connections (platform API, genesis, mediator, organisations' agents) use the app's
+configuration.
+
+## Upgrading from 0.2.x
+
+0.3.0 changes one thing you must act on, and one behaviour:
+
+- **Pass `genesisPublicKeys`** (above). Without it `initialize` fails. Wallets already on the phone keep
+  their data; the cached genesis file is downloaded again and checked with the new keys on the first
+  start.
+- **A refused request is sent again.** When the platform's edge answers `429 Too Many Requests`, the SDK
+  waits the time it names (`Retry-After`, up to 10 s) and sends the request again, twice at most; before,
+  the accepted offer or proof answer could be lost. A refused DIDComm message is now reported as a failed
+  send instead of passing silently.
+- **Proof requests that accept several credential versions work.** When an organisation's proof
+  template accepts every version of a schema, 0.2.x offered only credentials of the newest version, so a
+  user holding an older one could not answer ("no selection"). 0.3.0 offers a credential of any accepted
+  version.
 
 ## Everyday calls
 
@@ -268,8 +323,8 @@ requests need it; the camera screen comes from a **capture add-on** for the orga
 
 ```groovy
 dependencies {
-    implementation "com.12id:holder-sdk-android:0.2.2"
-    implementation "com.12id:holder-sdk-android-biometrics-aws:0.2.2"   // AWS Rekognition Face Liveness
+    implementation "com.12id:holder-sdk-android:0.3.0"
+    implementation "com.12id:holder-sdk-android-biometrics-aws:0.3.0"   // AWS Rekognition Face Liveness
 }
 
 android {
