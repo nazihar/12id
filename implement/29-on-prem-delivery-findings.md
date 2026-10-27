@@ -34,6 +34,53 @@ points the code review changed before work started.
   | blackbox with `/dev/null`, a public site | 1: the placeholder keeps the system roots |
 - `infra/ledger` `tsc --noEmit` clean after the TAA check.
 
+## Staging on `v0.11.0-rc.1` (2026-10-25 to 27)
+Commit `0aa0260` (everything above and Q2–Q6, except the SDK guide, which publishes with the SDK tag), tag
+`v0.11.0-rc.1`; CI built the nine images in about 20 minutes. Installed with the earlier releases' recipe: the
+tag's bundle (`git -c core.autocrlf=false archive`) plus `infra/env/staging/caddy/staging.caddy`, `release.env`
+built on the VM from the rc's digests and `third-party.images`, the old tree kept as
+`/opt/12id/infra.prev-20261025-v0110` and `release.env.prev-0.10.0-rc.2`. Owner's go-ahead: "do these yourself".
+
+| Check | Result |
+|---|---|
+| `check-secrets-list.sh` on the VM, `compose config` of the seven stacks | ok |
+| Deploy | images pulled in 171 s, seven stacks up in 76 s, no failed step; the mediator tables check ok |
+| Containers | every one with a health check healthy, no job exited non-zero |
+| `check-inspect-clean.sh` | **0 of 33** secret values in 36 containers |
+| New settings live | agent-service `NODE_EXTRA_CA_CERTS` empty with `/dev/null` at `/etc/12id-ca/ca.pem`; Caddy `EDGE_TLS=acme`, 6 sites import `tls_acme`; Postgres and Prometheus run the `third-party.images` digests |
+| Monitoring | 22/22 targets up, no alert firing; the new `LedgerBelowConsensusReachability` rule loaded and healthy |
+| Edge | genesis 200, mediator `/health` 202, agent `/readyz` 200, API `/v1/health` and `/v1/ledger` 200, console 200, vdr 200, `/admin/*` and `/invite` 404, ledger browser 200, Grafana 302, demo `/healthz` 200. The certificate is still Let's Encrypt's (YE1): moving the ACME mail from the global option into each site changed nothing |
+| `console-feedback-check` / `approvals-check` / `conditional-gate-check` | **36/36** / **19/19** / **7/7** |
+| `e2e:staging` | **4/4** |
+| `smoke:platform-credo` | **PASSED** (connection, credential, proof `verified=true`, one wake-up, all signatures valid) |
+| `smoke:biometric-credo` | **PASSED 30/30** |
+
+- The `-R 3200` tunnel was opened by Claude this time. Closing it left the VM's end listening (the half-open session of earlier runs); ending that `sshd: ubuntu` process freed the port.
+- Rollback: `release.env.prev-0.10.0-rc.2` and the previous tree.
+
+## Q3: the offline kit, spike with the third-party images (2026-10-25 to 27)
+On the `12id-init` host, a kit of the 12 third-party images (a `release.env` with only their lines; ours need the
+GHCR token), signed with a throwaway minisign key.
+
+| Check | Result |
+|---|---|
+| `build` | 12 images, every platform, each manifest re-hashed to its digest after the copy; 3.7 GB (registry storage 3.6 GB, tool images 120 MB, binaries 50 MB), 1,077 files; 17 min (the storage on `/mnt/e`, which is slow for small files) |
+| `verify` | signature and every sum ok; one byte appended to `bin/age` → `bin/age: FAILED`, "do not use this kit", exit 1 |
+| `load`, no `--registry`, on a host holding only the kit's two tool images | 12 images in the local registry with unchanged digests (240 s); `release.env` rewritten (`REGISTRY=127.0.0.1:<port>`, e.g. `POSTGRES_IMAGE=127.0.0.1:5100/postgres:15-alpine@sha256:fe07…`); **Docker pulled all 12 pinned references**; a second load (an upgrade) ok; the registry is back after `systemctl restart docker` |
+| `load --registry 127.0.0.1:5097/bank/12id` (a second registry standing in for Harbor) | every image pushed and re-hashed; the rewritten `POSTGRES_IMAGE` pulled from it |
+
+Found and fixed (after the rc.1 tag; in the next one):
+- **The tool images came from the internet at `load`.** Saved by digest alone, an image cannot be found by that digest after `docker load` (the classic image store keeps no repository digest), so Docker pulled `registry` and `skopeo` again; an air-gapped host would have stopped there. The kit now saves them under tags (`12id-kit/registry:2.8.3`, `12id-kit/skopeo:v1.16.1`) and `load` uses those.
+- **Another program on 127.0.0.1:5000 answered instead of the kit's registry** (on this PC, WSL forwards it to an old Docker Desktop registry from the W2 rehearsal: `manifest unknown`). `load` refuses a busy port it does not own and takes `LOCAL_PORT`.
+- **A stopped `12id-registry` container left by a failed attempt was trusted.** `load` now always replaces the container; the images live in the volume.
+
+## Q5: the kit's Maven part (2026-10-25)
+`sdk-android/ci/kit-maven.sh`, rehearsed against 0.2.2 (`SDK_VERSION=0.2.2`, 0.3.0 is not published): the four
+artifacts from `nazihar/12id-maven` (75 files) and `DEPENDENCIES.md` with **261** release-runtime coordinates of
+the SDK and the AWS add-on. A first version listed test libraries (`mockwebserver`, `junit`): a Gradle task option
+applies only to the task before it, so `:sdk:dependencies` had printed every configuration. Fixed; the published
+POMs never had them.
+
 ## Q2: `init.sh` (2026-10-25, in progress)
 
 ### Test host

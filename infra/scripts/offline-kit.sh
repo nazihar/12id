@@ -30,6 +30,13 @@ set -euo pipefail
 
 REGISTRY_IMAGE=registry:2.8.3@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373
 SKOPEO_IMAGE=quay.io/skopeo/stable:v1.16.1@sha256:94f5c5e26997e2e78c234ec9abf19a391c234b39eb22e6d1210d0b527c97dcc8
+# The names the two tool images carry inside the kit. An image saved by digest alone cannot be found by that
+# digest after `docker load` (the classic image store keeps no repository digest), and Docker would then
+# fetch it from the internet; a tag survives the save and load.
+KIT_REGISTRY_IMAGE=12id-kit/registry:2.8.3
+KIT_SKOPEO_IMAGE=12id-kit/skopeo:v1.16.1
+# Where `load` serves the images without --registry.
+LOCAL_PORT="${LOCAL_PORT:-5000}"
 # Static linux-amd64 tools for the host (sops's sum matches its published checksums file).
 SOPS_URL=https://github.com/getsops/sops/releases/download/v3.9.4/sops-v3.9.4.linux.amd64
 SOPS_SHA256=5488e32bc471de7982ad895dd054bbab3ab91c417a118426134551e9626e4e85
@@ -139,8 +146,10 @@ cmd_build() {
   docker rm -f 12id-kit-build > /dev/null; trap - EXIT
 
   say "tool images and binaries"
-  docker save -o "$out/tools/registry.tar" "$REGISTRY_IMAGE"
-  docker save -o "$out/tools/skopeo.tar" "$SKOPEO_IMAGE"
+  docker tag "$REGISTRY_IMAGE" "$KIT_REGISTRY_IMAGE"
+  docker tag "$SKOPEO_IMAGE" "$KIT_SKOPEO_IMAGE"
+  docker save -o "$out/tools/registry.tar" "$KIT_REGISTRY_IMAGE"
+  docker save -o "$out/tools/skopeo.tar" "$KIT_SKOPEO_IMAGE"
   local tmp; tmp="$(mktemp -d)"
   fetch() { curl -fsSL -o "$tmp/$1" "$2"; [ "$(sha256sum < "$tmp/$1" | cut -c1-64)" = "$3" ] || die "$2: checksum differs from the pin"; }
   fetch sops "$SOPS_URL" "$SOPS_SHA256" && install -m 0755 "$tmp/sops" "$out/bin/sops"
@@ -195,25 +204,33 @@ cmd_load() {
   for t in sops age age-keygen minisign; do
     command -v "$t" > /dev/null || { sudo install -m 0755 "$dir/bin/$t" /usr/local/bin/; say "installed $t from the kit"; }
   done
+  # From here on the tool images come from the kit, never from the internet.
   docker load -q -i "$dir/tools/registry.tar" > /dev/null
   docker load -q -i "$dir/tools/skopeo.tar" > /dev/null
+  REGISTRY_IMAGE="$KIT_REGISTRY_IMAGE"
+  SKOPEO_IMAGE="$KIT_SKOPEO_IMAGE"
 
   if [ -z "$registry" ]; then
-    target=127.0.0.1:5000
+    target="127.0.0.1:$LOCAL_PORT"
+    # Another program on the port would answer instead of ours (found in the rehearsal: an old registry).
+    if ! docker ps -q --filter name='^12id-registry$' | grep -q . && curl -s -o /dev/null -m 3 "http://$target/" 2> /dev/null; then
+      die "something already listens on $target; stop it, or choose another port with LOCAL_PORT"
+    fi
     # The kit's storage into the volume (content-addressed, so a later kit adds to it), then the registry.
     docker volume create 12id-registry > /dev/null
     docker run --rm -v 12id-registry:/var/lib/registry -v "$dir/registry:/src:ro" --entrypoint sh "$REGISTRY_IMAGE" \
       -c 'cp -a /src/. /var/lib/registry/ && chown -R root:root /var/lib/registry'
-    if ! docker inspect 12id-registry > /dev/null 2>&1; then
-      docker run -d --name 12id-registry --restart always -p 127.0.0.1:5000:5000 \
-        -v 12id-registry:/var/lib/registry "$REGISTRY_IMAGE" > /dev/null
-    fi
+    # Always a fresh container (the images live in the volume): one left over from an earlier attempt may be
+    # stopped or bound to another port (found in the rehearsal).
+    docker rm -f 12id-registry > /dev/null 2>&1 || true
+    docker run -d --name 12id-registry --restart always -p "$target:5000" \
+      -v 12id-registry:/var/lib/registry "$REGISTRY_IMAGE" > /dev/null
     t=0
-    until curl -fsS -o /dev/null http://127.0.0.1:5000/v2/ 2> /dev/null; do t=$((t + 1)); [ "$t" -lt 30 ] || die "12id-registry does not start"; sleep 1; done
+    until curl -fsS -o /dev/null "http://$target/v2/" 2> /dev/null; do t=$((t + 1)); [ "$t" -lt 30 ] || die "12id-registry does not start"; sleep 1; done
     while read -r var path tag digest; do
       check_digest "$target" "$path" "$digest" --tls-verify=false
     done < "$dir/images.list"
-    say "local registry 127.0.0.1:5000 holds $(wc -l < "$dir/images.list") images, digests unchanged"
+    say "local registry $target holds $(wc -l < "$dir/images.list") images, digests unchanged"
   else
     target="$registry"
     start_registry 12id-kit-push "$PUSH_PORT" "$dir/registry" ro
