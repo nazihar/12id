@@ -1,6 +1,6 @@
 # On-premises delivery (MTB theme Q, self-host packaging): plan
 
-**Status (2026-10-25):** planned 2026-10-15; reviewed against the code 2026-10-25 (section "Review" below, which amends Q1–Q3 and the verification); Q1 started. Evidence will go in [`29-on-prem-delivery-findings.md`](29-on-prem-delivery-findings.md).
+**Status (2026-10-27):** done. Released as platform `v0.11.0` and SDK 0.3.0 on 2026-10-27 after the staging regression and the air-gapped rehearsal passed. Planned 2026-10-15; reviewed against the code 2026-10-25 (section "Review" below, which amends Q1–Q3 and the verification). Evidence will go in [`29-on-prem-delivery-findings.md`](29-on-prem-delivery-findings.md).
 
 ## Context
 MTB's only Mandatory row, 6.30 ("everything on the bank's premises"), depends on this work. So do rows 2.7, 2.12 and 4.1.
@@ -62,11 +62,13 @@ Built locally, uncommitted (evidence in `29`):
 - The release key exists (`infra/12id-release.pub`, key id `831CF2B84B3533FA`).
 - SDK 0.3.0: both phone smokes passed after fork change F11 (proof requests over several credential definitions); **tagged, not published**: GitHub Actions refuses every job (billing).
 
+**Released 2026-10-27:** SDK 0.3.0 on maven.12id.com; platform `v0.11.0` (on `2a08226`, the rc.2 digests; staging runs
+`0.11.0-rc.2`, every check and smoke passed). Q4 revocation checked. The reference app moves to SDK 0.3.0 with
+staging's key (built by CI; a phone run and its release `reference-app-v4` are left).
+
 Left:
-1. **Owner: GitHub billing** (Actions). Then: re-run `release-sdk-android` for `sdk-android-v0.3.0`; tag `v0.11.0-rc.2`, deploy it on staging, tag `v0.11.0`.
-2. **Owner: remove `Rahman-Sohanur`'s access** to `12id-caddy`, so the refused pull can be checked (Q4); then delete the test token.
-3. The reference app on 0.3.0 with the staging key, once 0.3.0 is on maven.12id.com.
-4. MTB gap analysis theme Q rows and the 4-init / 18 status notes at the release.
+- The MTB gap analysis's theme Q rows (outside the repo, `mtb/Gap_Analysis_Sections_2-6.md`).
+- Not run against the rehearsal host: the Credo smokes and the console e2e (staging ran them on the same images).
 
 ## What exists and is reused
 - `infra/scripts/deploy.sh`: SOPS decryption into `/opt/12id/run-secrets`.

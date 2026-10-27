@@ -143,6 +143,32 @@ Test-host quirks, not product findings: WSL stops an idle distro a few seconds a
 
 Not run against the rehearsal: the Credo smokes and the console e2e from the PC (they need a tenant, an API key and a public webhook receiver in the rehearsal environment); staging ran them on the same images.
 
+## `v0.11.0-rc.2`, SDK 0.3.0 published, `v0.11.0` (2026-10-27)
+GitHub Actions' included minutes for the month were used up (2,000 of 2,000, shared by the owner's private
+repositories). **The owner chose to make the repository public for the CI runs** (public repositories' Actions are
+free) and private again afterwards; before that, a scan found no plain-text secret in the tree (`*.key`, `*.pem`,
+`.env*` and `console/.staging/` ignored; secrets only as age-encrypted sops files).
+- Reruns: `release-sdk-android` for `sdk-android-v0.3.0` **succeeded**: `com.12id:holder-sdk-android:0.3.0` and both
+  add-ons on maven.12id.com (`latest` = `release` = 0.3.0); `docs` succeeded: docs.12id.com serves the 0.3.0 guide.
+- `v0.11.0-rc.2` (commit `2a08226`: the rehearsal fixes and the kit fixes) built by CI in about 11 minutes.
+
+**Staging on `0.11.0-rc.2`** (installed like rc.1; rollback `release.env.prev-0.11.0-rc.1`, `/opt/12id/infra.prev-20261027-v0110rc2`):
+
+| Check | Result |
+|---|---|
+| Deploy | pulled in 173 s, up in 86 s; mediator tables ok |
+| The write probe as the metrics directory's owner | `12id-ledger-probe.service` result success, `ledger_write_probe_success 1` |
+| Containers / `check-inspect-clean.sh` | all healthy / **0 of 33** |
+| Monitoring | 22/22 targets up; firing: `Watchdog` only |
+| Edge | as on rc.1 (Let's Encrypt certificate unchanged) |
+| `console-feedback-check` / `approvals-check` / `conditional-gate-check` | 36/36 / 19/19 / 7/7 |
+| `e2e:staging` | **4/4** |
+| `smoke:platform-credo` | **PASSED** (a first run started before the tunnel was up and failed; the rerun passed) |
+| `smoke:biometric-credo` | **PASSED 30/30** |
+
+**Released as `v0.11.0`**, tagged on `2a08226` (the rc.2 commit); CI adds `0.11.0` to the rc.2 digests. Staging keeps
+running `0.11.0-rc.2`. Production (W5) and self-hosters deploy `release-0.11.0.env` with the 0.11.0 bundle.
+
 ## CI blocked by GitHub billing (2026-10-27)
 Every workflow on `74660ad` and the tag `sdk-android-v0.3.0` failed without starting: "The job was not started because
 recent account payments have failed or your spending limit needs to be increased." So SDK 0.3.0 is **tagged but not

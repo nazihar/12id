@@ -13,11 +13,14 @@ android {
         minSdk 24
         targetSdk 36
         versionCode((project.findProperty('appVersionCode') ?: '1') as int)
-        versionName project.findProperty('appVersionName') ?: '3'
+        versionName project.findProperty('appVersionName') ?: '4'
 
         // The 12id platform the SDK talks to, and this app's own backend (reference/backend).
         buildConfigField 'String', 'PLATFORM_API_URL', "\"${project.findProperty('platformApiUrl') ?: 'https://api.12id.naziharitsolution.com'}\""
         buildConfigField 'String', 'BACKEND_URL', "\"${project.findProperty('backendUrl') ?: 'https://demo.12id.naziharitsolution.com'}\""
+        // The minisign key the platform's genesis file must be signed with (SDK 0.3.0, genesisPublicKeys):
+        // staging's (infra/env/staging/genesis-signing.pub). Another environment passes its own.
+        buildConfigField 'String', 'GENESIS_PUBLIC_KEY', "\"${project.findProperty('genesisPublicKey') ?: 'RWQcw6JLDHFMuOVVvjNl887FZ2kqxSzBxotXAiQmvIYZCqb+10Dvu/s9'}\""
     }
 
     // A release needs one stable signing key, or an update will not install over the previous build.
