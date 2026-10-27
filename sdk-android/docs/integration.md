@@ -54,6 +54,7 @@ class MyApp : Application() {
                 apiBaseUrl = "https://api.12id.example",
                 walletTokenProvider = { myBackend.walletToken(installationId) },
                 label = "Acme Wallet",                       // what organisations see; fixed at first launch
+                idlePollInterval = null,                     // the default (see Delivery); name it with genesisPublicKeys
                 genesisPublicKeys = listOf("RWQ…"),          // your 12id environment's genesis key; see below
                 logSink = { level, message, error -> Log.println(level.priority(), "12id", message) },
                 // minLogLevel = LogLevel.Debug,                // diagnosing only; see below
@@ -95,6 +96,9 @@ forged ledger, so the SDK accepts the file only when it is signed with a key you
 - **`genesisPublicKeys` is required.** It takes one or more minisign public keys (the `RW…` line of a
   `.pub` file); a genesis signed by any one of them is accepted. `initialize` refuses an empty or
   malformed list with `InvalidConfiguration`.
+- In 0.3.0, name `idlePollInterval` (usually `null`) whenever you name `genesisPublicKeys`, as in the
+  example above. Without it Kotlin picks another constructor and reports a misleading error about
+  suspend functions on the token provider.
 - Pass the keys of the 12id environment your app uses. 12iD gives you its environment's primary and
   backup keys; a self-hosted platform's operator gives you theirs (`GENESIS_SIGNING_PUBLIC_KEY`, and a
   backup key if they keep one). Name the backup key too: the platform can then sign with it at once if

@@ -45,7 +45,9 @@ class Wallet(private val context: Context, private val backend: Backend) {
                 apiBaseUrl = BuildConfig.PLATFORM_API_URL,
                 walletTokenProvider = { backend.walletToken(refresh = tokenAsked).also { tokenAsked = true } },
                 label = "Reference app",
-                // The genesis file is accepted only when signed with this environment's key (SDK 0.3.0).
+                // The genesis file is accepted only when signed with this environment's key (SDK 0.3.0). In 0.3.0
+                // the constructor that takes it also needs idlePollInterval named (null: no polling while idle).
+                idlePollInterval = null,
                 genesisPublicKeys = listOf(BuildConfig.GENESIS_PUBLIC_KEY),
                 logSink = LogSink { level, message, error ->
                     when (level) {
