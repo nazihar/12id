@@ -109,6 +109,44 @@ not answer. Fixed with one clause per restriction joined by Askar's `$or` (`Anon
 | `smoke:sdk-biometric-android` (mock), with F11 | **PASSED 12/12**: the proof answered with the credential of the older definition |
 | `smoke:sdk-android`, with F11 | **PASSED** (all steps) |
 
+## The air-gapped rehearsal (Verification 3, 2026-10-27)
+On `12id-init` (WSL, Ubuntu 24.04, Docker 29.9.2, 14 vCPU, 16 GB): a kit of `0.11.0-rc.1` (all 21 images, 4.8 GB,
+built in 18 min while the host still had its GHCR login, signed with a throwaway key), then a fresh host: no
+container, volume, image or state, `docker logout`, and **every connection outside loopback and private ranges
+rejected for the host (iptables `OUTPUT`) and for containers (`DOCKER-USER`)**: `https://ghcr.io` unreachable, a
+Docker Hub pull refused. The bundle came from the kit, with `infra/scripts` from the working tree (what rc.2
+carries). Environment `rehearsal`: `*.bank.test` in `/etc/hosts`, `EDGE_TLS=files` with a self-made "bank" CA,
+`EDGE_CA_FILE`, the containers given the host's address by environment overlays (review point 2), the custody
+key on `E:` standing in for offline media.
+
+| Step | Result |
+|---|---|
+| `offline-kit.sh verify` + `load` | verified; 21 images into 127.0.0.1:5100 (`LOCAL_PORT`, 5000 is taken on this PC), `release.env` rewritten, digests unchanged |
+| `init.sh keys`, then `set-secret.sh console SMTP_URL` (the person's value) | as before |
+| `init.sh all --ledger new` (1st) | `check` 0 failed (the registry pull from the kit), `secrets`, the ceremony (4 validators, 3 trustees, 4 stewards, `client_ip` the host); **stops, exit 3**, listing the 7 custody files |
+| The custody hand-over | each file copied to "offline media" and decrypted there to 64 bytes, then deleted from the host |
+| `init.sh all` (2nd) | validators healthy, genesis `v1` signed (sha256 `92afba20…`), the edge served it over the bank CA, both Postgres instances with their roles; **stops, exit 3**, at the endorser with the pipe command (223 s) |
+| `age -d … trustee-1.seed.age \| init.sh endorser` | endorser `did:indy:rehearsal:PDNCPtyH6oJBhDfFHw4fXY` and the probe DID created (34 s) |
+| `init.sh all` (3rd) | every stack pulled from the kit and deployed, roles again, `check-inspect-clean` 0; timers installed; `verify`: every service healthy, the nine edge probes right, `/v1/ledger` names the genesis, **a ledger write reached consensus**, inspect 0 of 31 |
+| `init.sh operator` | `ops@bank.test` created, one-time password printed once |
+| `init.sh all` again | exit 0 in 26 s; `.sops.yaml`, the env file, every sops file and every container id unchanged |
+| What runs | 28 containers, **0 images whose digest is not in `release.env`**, every image from the kit's registry; Prometheus 21/21 targets up; firing: `Watchdog` only |
+
+Found and fixed (in rc.2):
+- **The ledger write probe could not write its metrics** (`EACCES` on `/metrics`): the container runs as the image's `node` (uid 1000) and the directory belongs to the deploy user, uid 1001 here. On staging `ubuntu` is uid 1000, so it worked by chance; a bank's host would not have matched. `deploy.sh` exports the metrics directory's owner (`METRICS_UID`/`METRICS_GID`) and the probe runs as it.
+- **The validators' health check killed them while they started.** It counted failures inside the start period, so when every container started at once (here: WSL stopping the idle distro and Docker starting everything again) the four validators, catching up under a load of 16, were ended twice before they settled. Failures now count only once PID 1 is older than the start period (300 s). The same happens to a production host after a reboot.
+- `init.sh all` with no terminal and nothing on stdin ran the endorser bootstrap with an empty stdin; it now stops unless the seed arrives through a pipe or a file. Each stop prints the command the operator ran; the ceremony image is pulled quietly.
+
+Test-host quirks, not product findings: WSL stops an idle distro a few seconds after the last command (kept alive with a background `sleep`); its root mount is private, so node-exporter's `rslave` mount failed (`mount --make-rshared /`, which systemd does on a normal host); `wsl.exe` gives stdout and stderr to a Windows file as two handles that overwrite each other (logs are written inside WSL).
+
+Not run against the rehearsal: the Credo smokes and the console e2e from the PC (they need a tenant, an API key and a public webhook receiver in the rehearsal environment); staging ran them on the same images.
+
+## CI blocked by GitHub billing (2026-10-27)
+Every workflow on `74660ad` and the tag `sdk-android-v0.3.0` failed without starting: "The job was not started because
+recent account payments have failed or your spending limit needs to be increased." So SDK 0.3.0 is **tagged but not
+published**, and docs.12id.com still serves the 0.2.2 guide. Owner action: Billing & plans; then re-run
+`release-sdk-android` for the tag.
+
 ## Q2: `init.sh` (2026-10-25, in progress)
 
 ### Test host

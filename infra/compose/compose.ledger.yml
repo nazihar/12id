@@ -62,6 +62,8 @@ services:
   # Consensus probe (src/write-probe.ts): one attribute write on the probe's own DID, read back.
   write-probe:
     image: *image
+    # Writes into METRICS_DIR, so it runs as that directory's owner (deploy.sh), whatever the host's uids.
+    user: '${METRICS_UID:?run through deploy.sh}:${METRICS_GID:?run through deploy.sh}'
     group_add: ['${SECRETS_GID}']
     mem_limit: 256m
     command: ['src/write-probe.ts']

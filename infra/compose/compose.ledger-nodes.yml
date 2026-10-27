@@ -31,6 +31,9 @@ x-node: &node
   # it: on staging two of four hung for 21 h and writes stopped (19-phase-9-production-findings W2).
   # Three failed checks in a row (after the start period, which covers a catch-up) end PID 1. The
   # failure count lives on a tmpfs, so a restarted node starts from zero (the vdr-proxy pattern).
+  # Failures are not counted while the node is younger than the start period (implement/29): after a host
+  # restart every container starts at once, a catch-up under that load took minutes, and the check killed
+  # all four validators twice before they settled.
   tmpfs: [/healthstate]
   healthcheck:
     test:
@@ -38,6 +41,7 @@ x-node: &node
       - >-
         if python3 -c 'import os, socket; socket.create_connection(("127.0.0.1", int(os.environ["INDY_CLIENT_PORT"])), 5).close()';
         then rm -f /healthstate/failures; exit 0; fi;
+        [ $$(( $$(date +%s) - $$(stat -c %Y /proc/1) )) -lt 300 ] && exit 1;
         n=$$(( $$(cat /healthstate/failures 2>/dev/null || echo 0) + 1 )); echo $$n > /healthstate/failures;
         [ $$n -ge 3 ] && kill 1; exit 1
     interval: 60s

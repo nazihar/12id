@@ -39,6 +39,8 @@ jobs:
           ENV_DIR: /opt/12id/infra/env/staging
           GENESIS_DIR: /opt/12id/genesis
           METRICS_DIR: /opt/12id/metrics
+          METRICS_UID: '1000'
+          METRICS_GID: '1000'
           # compose.ledger-nodes.yml is production-only; staging.env has no network name.
           LEDGER_NETWORK_NAME: ci
         run: |

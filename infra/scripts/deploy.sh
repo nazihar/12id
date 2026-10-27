@@ -112,6 +112,11 @@ case "$1" in
 esac
 
 mkdir -p "$METRICS_DIR"
+# Who owns the metrics directory: one-off jobs that write into it (the ledger write probe) run as that user, so
+# the image's own user id need not match the host's deploy user (implement/29: uid 1000 only on staging).
+METRICS_UID="$(stat -c %u "$METRICS_DIR")"
+METRICS_GID="$(stat -c %g "$METRICS_DIR")"
+export METRICS_UID METRICS_GID
 
 docker compose --project-directory "$BUNDLE" "${files[@]}" \
   --env-file "$ENV_FILE" --env-file "$RELEASE_FILE" "$@"

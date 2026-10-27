@@ -394,11 +394,12 @@ ledger_new() {
 Each holder runs age-keygen on an offline machine and hands over the public key (age1…). Then:
   echo age1…  | sudo tee $CEREMONY/recipients/default.txt     # one or more lines: each can decrypt
   echo age1…  | sudo tee $CEREMONY/recipients/trustee-2.txt   # optional: another holder for one seed
-and run: ENV=$ENV $0 ledger new"
+and run again: $CONTINUE"
     fi
     [ -z "$(sudo ls -A "$out")" ] || die "$out is not empty; a ceremony needs an empty output directory"
     say "  ceremony (no network, keys into the validators' volumes); its public summary:"
-    deploy ledger-nodes run --rm ceremony | sed 's/^/    /'
+    quiet deploy ledger-nodes pull ceremony
+    deploy ledger-nodes run --rm ceremony 2>> "$LOG" | sed 's/^/    /'
     # The custody files are encrypted; the deploy user copies them off and deletes them.
     sudo chown -R "$(id -un):$(id -gn)" "$out/custody"
     mark_done ledger-ceremony
@@ -410,7 +411,7 @@ $(ls -1 "$out/custody/" | sed 's/^/  /')
 Copy each to its holder's offline media (scp from $out/custody/), have the holder check it decrypts there
 (age -d -i <key> <file> | wc -c: 64), then delete them here:
   rm $out/custody/*.seed.age
-and run: ENV=$ENV $0 ledger new"
+and run again: $CONTINUE"
     fi
     mark_done ledger-custody
   fi
@@ -535,7 +536,8 @@ wait_healthy() {
 step_endorser() {
   step_title "endorser ($ENV)"
   is_done postgres || die "run postgres first"
-  if [ -t 0 ]; then
+  # The seed comes through a pipe (or a file): a terminal or nothing at all means no one is handing it over.
+  if [ ! -p /dev/stdin ] && [ ! -f /dev/stdin ]; then
     wait_for_person "endorser: a trustee writes the endorser DID; its seed arrives on stdin, never on disk.
 The trustee holder, with the offline media mounted on this host, runs:
   age -d -i /media/offline/trustee.key /media/offline/trustee-1.seed.age | ENV=$ENV $0 endorser
@@ -699,6 +701,8 @@ step_all() {
 
 # -----------------------------------------------------------------------------------------------------------
 [ "$(id -u)" -ne 0 ] || die "run as the deploy user, not root"
+# What the operator ran, for the stops that say how to continue.
+CONTINUE="ENV=$ENV $0 $*"
 cmd="${1:?usage: [ENV=production] init.sh check|keys|secrets|ledger|postgres|endorser|deploy|timers|verify|operator|all [options]}"
 shift
 case "$cmd" in

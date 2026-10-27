@@ -55,11 +55,18 @@ Built locally, uncommitted (evidence in `29`):
 - **Q5** the SDK guide ("Genesis trust", "Upgrading from 0.2.x", 0.3.0) and `sdk-android/ci/kit-maven.sh` written.
 - **Q6** `infra/self-host.md` written; `production-bringup.md` now runs `init.sh`.
 
-Left, each needing the owner:
-1. **A GHCR read token on the rehearsal host** (WSL `12id-init`; `docker login ghcr.io` by the owner, as for the W4 DR rehearsal). Then the air-gapped rehearsal (Verification 3) with a kit of a release candidate.
-2. **The release key for kits** (owner action below), before a kit goes to a customer.
-3. **A test machine account** for the GHCR collaborator check (Q4).
-4. **Tags:** `v0.11.0-rc.1` (staging), then `v0.11.0`; `sdk-android-v0.3.0`. Commit `sdk-android/docs/integration.md` with the SDK tag, not before: it publishes to docs.12id.com on every push. The reference app moves to 0.3.0 and passes the staging key (`genesisPublicKeys`) once 0.3.0 is on maven.12id.com.
+**Update 2026-10-27** (evidence in `29`):
+- `v0.11.0-rc.1` on staging: every check and both Credo smokes passed.
+- The air-gapped rehearsal (Verification 3) passed with a full kit of rc.1; it found three fixes (write probe uid, validator health check at start, endorser stdin), committed for rc.2.
+- Q4: a per-package Read collaborator on the personal account works (pull allowed, other package refused).
+- The release key exists (`infra/12id-release.pub`, key id `831CF2B84B3533FA`).
+- SDK 0.3.0: both phone smokes passed after fork change F11 (proof requests over several credential definitions); **tagged, not published**: GitHub Actions refuses every job (billing).
+
+Left:
+1. **Owner: GitHub billing** (Actions). Then: re-run `release-sdk-android` for `sdk-android-v0.3.0`; tag `v0.11.0-rc.2`, deploy it on staging, tag `v0.11.0`.
+2. **Owner: remove `Rahman-Sohanur`'s access** to `12id-caddy`, so the refused pull can be checked (Q4); then delete the test token.
+3. The reference app on 0.3.0 with the staging key, once 0.3.0 is on maven.12id.com.
+4. MTB gap analysis theme Q rows and the 4-init / 18 status notes at the release.
 
 ## What exists and is reused
 - `infra/scripts/deploy.sh`: SOPS decryption into `/opt/12id/run-secrets`.
