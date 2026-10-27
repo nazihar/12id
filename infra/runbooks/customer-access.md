@@ -31,12 +31,10 @@ docker login ghcr.io -u 12id-<customer>        # the token at the password promp
 - **Revoke:** remove the machine account from each package's access (Manage access → Remove), or delete its
   tokens. Pulls fail at once; containers already running keep running.
 
-## Check (once, before the first customer)
-Personal-account packages accept collaborators with roles (GitHub's package access control). Confirm it on one
-package with a test machine account: with Read it can `docker pull ghcr.io/nazihar/12id-caddy@<digest>`; after
-removal the same pull answers `unauthorized`. If personal-account packages turn out not to take collaborators,
-the fallback is moving the packages to a GitHub organisation (owner decision, plan Q4). Evidence goes in
-`implement/29-on-prem-delivery-findings.md`.
+## Checked (2026-10-27)
+Personal-account packages take a collaborator per package: a test machine account with Read on `12id-caddy`
+pulled it and was refused `12id-services`; after its access was removed, its still-valid token was refused
+`12id-caddy` too (`permission_denied: read_package`). Evidence: `implement/29-on-prem-delivery-findings.md` Q4.
 
 ## A customer without internet: the offline kit
 On our side, from a machine logged in to GHCR (plain `auths` in `~/.docker/config.json`, not a credential helper)

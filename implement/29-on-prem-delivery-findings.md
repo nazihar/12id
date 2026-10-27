@@ -86,7 +86,9 @@ The owner created the test machine account `Rahman-Sohanur`, gave it **Read on `
 Manage access) and a classic `read:packages` token. On the `12id-init` host, in a throwaway Docker config:
 `Login Succeeded`; `12id-caddy@sha256:fed1e6bf…` (rc.1) **pulled**; `12id-services@sha256:becb2cbc…`
 **refused** (`permission_denied: read_package`). So a personal account's packages do take a collaborator with
-Read, per package; no organisation is needed. Owed: the pull fails after the access is removed.
+Read, per package; no organisation is needed. **After the owner removed the account's access** (same page,
+2026-10-27): the token still logs in, and the pull of `12id-caddy` is refused (`permission_denied: read_package`).
+Revocation is immediate. The test token was deleted from the PC.
 
 ## Q5: SDK 0.3.0 (2026-10-27)
 The release key for kits exists (owner, key id `831CF2B84B3533FA`, `infra/12id-release.pub`).
